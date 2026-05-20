@@ -1,0 +1,68 @@
+{
+  "name": "@pipemd-core/pipemd",
+  "version": "1.0.0",
+  "description": "The Dynamic Context Harness for AI Coding Agents",
+  "type": "module",
+  "bin": {
+    "pmd": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/copy-plugins.mjs && node scripts/copy-templates.mjs",
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "dev": "tsup --watch",
+    "test:e2e": "bash tests/e2e.sh",
+    "test:bidir": "bash tests/e2e-bidirectional.sh",
+    "test:scripts": "bash tests/e2e-scripts.sh",
+    "test:arch": "bash tests/e2e-architecture.sh",
+    "test:compose": "bash tests/e2e-compose.sh",
+    "test:crew": "bash tests/e2e-crew.sh",
+    "test:inject": "bash tests/e2e-inject.sh",
+    "test:unit": "node tests/test-reverse-inject.mjs",
+    "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "AI_SETUP_PIPEMD.md",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "author": "PipeMD Contributors",
+  "license": "ISC",
+  "homepage": "https://github.com/pipemd-core/pipemd#readme",
+  "bugs": { "url": "https://github.com/pipemd-core/pipemd/issues" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pipemd-core/pipemd.git"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "claude",
+    "cursor",
+    "aider",
+    "context",
+    "pipe",
+    "named-pipe",
+    "prompt-context"
+  ],
+  "packageManager": "pnpm@10.33.2",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "prompts": "^2.4.2",
+    "yaml": "^2.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/prompts": "^2.4.9",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

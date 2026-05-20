@@ -1,0 +1,198 @@
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  readdirSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { computePayloadHash } from "./injection-types.js";
+import { atomicWrite } from "./fs-utils.js";
+
+export interface CacheEntry {
+  key: string;
+  data: string;
+  hash: string;
+  timestamp: number;
+  ttl: number;
+  metadata?: Record<string, string>;
+}
+
+export interface CacheManifest {
+  lastRender: number;
+  hashes: Record<string, string>;
+}
+
+export const CACHE_DIR = ".pipemd/cache/sources";
+export const VALIDATION_DIR = ".pipemd/cache/validation";
+export const CACHE_MANIFEST = ".pipemd/cache/manifest.json";
+
+export const DEFAULT_TTLS: Record<string, number> = {
+  crew: 5000,
+  lint: 30000,
+  "type-check": 30000,
+  "git-status": 10000,
+  "git-delta": 10000,
+  validation: 60000,
+  tree: 120000,
+  deps: 120000,
+  arch: 300000,
+  todos: 60000,
+};
+
+function keyToFilename(key: string): string {
+  return key.replace(/[/\\]/g, "%2F") + ".json";
+}
+
+function entryPath(key: string): string {
+  const filename = keyToFilename(key);
+  if (key.startsWith("validation:")) {
+    return resolve(VALIDATION_DIR, filename);
+  }
+  return resolve(CACHE_DIR, filename);
+}
+
+export function ensureCacheDir(): void {
+  if (!existsSync(CACHE_DIR)) {
+    mkdirSync(CACHE_DIR, { recursive: true });
+  }
+  if (!existsSync(VALIDATION_DIR)) {
+    mkdirSync(VALIDATION_DIR, { recursive: true });
+  }
+  const manifestDir = resolve(CACHE_MANIFEST, "..");
+  if (!existsSync(manifestDir)) {
+    mkdirSync(manifestDir, { recursive: true });
+  }
+}
+
+export function readCache(key: string): CacheEntry | null {
+  const path = entryPath(key);
+  if (!existsSync(path)) {
+    return null;
+  }
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const entry: CacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      return null;
+    }
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCache(
+  key: string,
+  data: string,
+  ttl: number,
+  metadata?: Record<string, string>,
+): CacheEntry {
+  ensureCacheDir();
+  const hash = computePayloadHash(data);
+  const entry: CacheEntry = {
+    key,
+    data,
+    hash,
+    timestamp: Date.now(),
+    ttl,
+    ...(metadata ? { metadata } : {}),
+  };
+  const path = entryPath(key);
+  atomicWrite(path, JSON.stringify(entry));
+  return entry;
+}
+
+export function isFresh(key: string): boolean {
+  return readCache(key) !== null;
+}
+
+export function invalidate(key: string): void {
+  const path = entryPath(key);
+  if (existsSync(path)) {
+    unlinkSync(path);
+  }
+}
+
+function collectEntryFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => resolve(dir, f));
+}
+
+function loadEntriesFromFiles(
+  files: string[],
+): Array<{ file: string; entry: CacheEntry }> {
+  const results: Array<{ file: string; entry: CacheEntry }> = [];
+  for (const file of files) {
+    try {
+      const raw = readFileSync(file, "utf-8");
+      const entry: CacheEntry = JSON.parse(raw);
+      results.push({ file, entry });
+    } catch {
+      continue;
+    }
+  }
+  return results;
+}
+
+function invalidatePrefix(prefix: string): void {
+  const allFiles = [
+    ...collectEntryFiles(CACHE_DIR),
+    ...collectEntryFiles(VALIDATION_DIR),
+  ];
+  const entries = loadEntriesFromFiles(allFiles);
+  for (const { file, entry } of entries) {
+    if (entry.key.startsWith(prefix)) {
+      try {
+        unlinkSync(file);
+      } catch {
+        continue;
+      }
+    }
+  }
+}
+
+function invalidateByMetadata(filter: Record<string, string>): void {
+  const allFiles = [
+    ...collectEntryFiles(CACHE_DIR),
+    ...collectEntryFiles(VALIDATION_DIR),
+  ];
+  const entries = loadEntriesFromFiles(allFiles);
+  for (const { file, entry } of entries) {
+    if (!entry.metadata) continue;
+    const matches = Object.entries(filter).every(
+      ([k, v]) => entry.metadata![k] === v,
+    );
+    if (matches) {
+      try {
+        unlinkSync(file);
+      } catch {
+        continue;
+      }
+    }
+  }
+}
+
+function readManifest(): CacheManifest {
+  if (!existsSync(CACHE_MANIFEST)) {
+    return { lastRender: 0, hashes: {} };
+  }
+  try {
+    const raw = readFileSync(CACHE_MANIFEST, "utf-8");
+    return JSON.parse(raw) as CacheManifest;
+  } catch {
+    return { lastRender: 0, hashes: {} };
+  }
+}
+
+function writeManifest(manifest: CacheManifest): void {
+  const dir = resolve(CACHE_MANIFEST, "..");
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  atomicWrite(CACHE_MANIFEST, JSON.stringify(manifest));
+}

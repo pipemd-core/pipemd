@@ -1,0 +1,6 @@
+# PipeMD ephemeral context files
+.pipemd/live/
+.pipemd/.daemon.pid
+AGENTS.md
+CLAUDE.md
+AI_CONTEXT.md

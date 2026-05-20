@@ -1,0 +1,13 @@
+{
+  "name": "prisma-fixture-project",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "prisma": "^5.22.0",
+    "@prisma/client": "^5.22.0"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  }
+}

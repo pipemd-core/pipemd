@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# pnpm
+.pnpm-store/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Runtime / daemon
+.pipemd/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# AI harness configs (created by pmd crew install-hooks)
+.claude/
+.gemini/
+.opencode/
+
+# Coverage
+coverage/
+
+# Debug
+node_modules/.cache/
+
+# PipeMD ephemeral context files
+AGENTS.md
+CLAUDE.md
+AI_CONTEXT.md
