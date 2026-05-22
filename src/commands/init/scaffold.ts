@@ -288,6 +288,7 @@ export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], pro
   mkdirp(path.join(SCRIPTS_DIR, "api"));
   mkdirp(path.join(SCRIPTS_DIR, "frontend"));
   mkdirp(path.join(SCRIPTS_DIR, "devops"));
+  mkdirp(path.join(SCRIPTS_DIR, "crew"));
 
   const ecoEnv = `PMD_ECOSYSTEM=${ecosystem.replace(/\//g, "-")}`;
   const profileEnv = `PMD_TOKEN_PROFILE=${profile}`;
