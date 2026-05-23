@@ -120,17 +120,21 @@ const inject = new Command("inject")
     } catch (err: unknown) { log.debug(`write injection log failed: ${err instanceof Error ? err.message : String(err)}`); }
 
     if (format === "claude-hook") {
-      const obj = {
-        hookSpecificOutput: {
-          hookEventName: trigger === "before-read" || trigger === "before-edit"
-            ? "PreToolUse"
-            : trigger === "after-edit"
-              ? "PostToolUse"
-              : "Stop",
-          additionalContext: plain,
-        },
-      };
-      process.stdout.write(JSON.stringify(obj) + "\n");
+      const isStop = trigger === "on-idle" || trigger === "on-start";
+      if (isStop) {
+        process.stdout.write("{}\n");
+      } else {
+        const hookEventName = trigger === "before-read" || trigger === "before-edit"
+          ? "PreToolUse"
+          : "PostToolUse";
+        const obj = {
+          hookSpecificOutput: {
+            hookEventName,
+            additionalContext: plain,
+          },
+        };
+        process.stdout.write(JSON.stringify(obj) + "\n");
+      }
     } else if (format === "gemini-json") {
       const obj = { context: plain };
       process.stdout.write(JSON.stringify(obj) + "\n");
