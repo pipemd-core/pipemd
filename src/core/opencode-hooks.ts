@@ -50,6 +50,7 @@ function storePayload(trigger, payload) {
       try {
         const tool = (input && input.tool) || "";
         const args = (output && output.args) || {};
+        if (tool === "read") resolveFifoRead(args);
         const trigger = isEditTool(tool) ? "before-edit" : "before-read";
         const filePath = extractFilePath(args);
         join(); heartbeat();
@@ -73,6 +74,7 @@ function storePayload(trigger, payload) {
       try {
         const tool = (input && input.tool) || "";
         const args = (output && output.args) || {};
+        if (tool === "read") resolveFifoRead(args);
         join(); heartbeat();
         pushEvent("before", tool, extractFilePath(args), "ok", 0);
       } catch (e) { logPluginError("tool.execute.before", e); }
@@ -81,6 +83,7 @@ function storePayload(trigger, payload) {
   const afterHandler = withInjection
     ? `"tool.execute.after": async (input, output) => {
       try {
+        cleanupFifoTemp();
         const tool = (input && input.tool) || "";
         const isEdit = isEditTool(tool);
         if (isEdit) {
@@ -105,6 +108,7 @@ function storePayload(trigger, payload) {
     },`
     : `"tool.execute.after": async (input, output) => {
       try {
+        cleanupFifoTemp();
         const tool = (input && input.tool) || "";
         if (!isEditTool(tool)) return;
         const args = (output && output.args) || (input && input.args) || {};

@@ -281,6 +281,35 @@ Crew hooks are available for Claude Code, OpenCode, and Gemini CLI — agents au
 
 ---
 
+## Known Limitations
+
+### FIFO (Named Pipe) Read Errors with Some Agents
+
+Agents backed by Effect.js (e.g. OpenCode) may fail to read pipe-mode context files with errors like:
+
+```
+Unknown: FileSystem.readAlloc (30)
+```
+
+**Root cause:** These agents use Effect.js's `FileSystem.readAlloc`, which expects regular file semantics (seekable, known size). PipeMD's named pipes are FIFOs — stream-oriented, unseekable, and `stat()` reports size 0. When the agent passes `limit`/`offset`, Effect.js tries to `seek()` on the FIFO and fails.
+
+**Mitigation:** The PipeMD OpenCode plugin automatically detects FIFO reads and redirects them to a regular temp file rendered by `pmd run`. This should resolve the error for most setups. Make sure your plugin is up to date (`pmd crew install-hooks` or `pmd init`).
+
+**Fallback workaround:** If the plugin fix doesn't cover your case, switch the affected pipe to legacy mode in `.pipemd/config.yml`:
+
+```yaml
+pipes:
+  - file: AGENTS.md
+    render: .pipemd/template.md
+    mode: legacy   # writes a regular file instead of a FIFO
+```
+
+Legacy mode writes a real file to disk, so agents read it normally. You lose zero-disk-write semantics, but context stays live.
+
+**Tracking:** If you hit this, please comment on or open an issue so we can track which agents are affected.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for build instructions, source layout, and architecture details.
