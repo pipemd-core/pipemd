@@ -30,7 +30,8 @@
     "AI_SETUP_PIPEMD.md",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "CONTRIBUTING.md"
   ],
   "author": "PipeMD Contributors",
   "license": "ISC",

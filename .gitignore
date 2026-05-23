@@ -15,8 +15,8 @@ dist/
 npm-debug.log*
 pnpm-debug.log*
 
-# Runtime / daemon
-.pipemd/
+# Runtime / daemon (only ephemeral — committed .pipemd/ files are tracked)
+# .pipemd/.gitignore handles: live/, crew/, .daemon.pid, daemon.log
 
 # Environment
 .env
@@ -49,3 +49,5 @@ node_modules/.cache/
 AGENTS.md
 CLAUDE.md
 AI_CONTEXT.md
+.pipemd/live/
+.pipemd/.daemon.pid

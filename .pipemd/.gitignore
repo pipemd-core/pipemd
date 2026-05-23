@@ -1,0 +1,12 @@
+live/
+crew/
+cache/
+pipes/
+.injection-log/
+.daemon.pid
+daemon.log
+.inject-stats.json
+.status.json
+.tui-stats.json
+.dashboard.json
+.plugin-errors.log

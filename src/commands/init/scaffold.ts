@@ -150,8 +150,6 @@ function generateConfigYml(config: PipeConfig): string {
 }
 
 function generateTemplate(agent: AiAgent, selectedScripts: ScriptDef[]): string {
-  const agentLabel = agent === "Generic" ? "AI assistant" : agent;
-
   const sorted = [...selectedScripts].sort((a, b) => a.volatile - b.volatile);
   const stableScripts = sorted.filter((s) => s.volatile <= 2);
   const volatileScripts = sorted.filter((s) => s.volatile > 2);
@@ -160,7 +158,7 @@ function generateTemplate(agent: AiAgent, selectedScripts: ScriptDef[]): string 
 
   const sections: string[] = [];
 
-  sections.push(`# 🏴‍☠️ ${agentLabel} Context — powered by PipeMD
+  sections.push(`# 🏴‍☠️ Context — powered by PipeMD
 
 > **🤖 PipeMD Context File**
 >

@@ -1,0 +1,45 @@
+# PipeMD Injection Configuration
+#
+# delivery: passive | active | expert
+#   passive = render to file/pipe, no hooks
+#   active  = hooks installed, sensible defaults
+#   expert  = full customization of injection rules
+#
+# triggers: before-read | before-edit | after-edit | on-idle | on-start
+# sources:  crew-status | crew-locks | file-errors | validate-file
+#           git-context | git-delta | git-staged | git-diff-stat | custom
+# scope:    target-file | global
+delivery: active
+rules:
+  before-read:
+    - source: crew-status
+      scope: global
+      max-lines: 3
+  before-edit:
+    - source: crew-locks
+      scope: target-file
+    - source: file-errors
+      scope: target-file
+      max-lines: 5
+    - source: git-context
+      scope: target-file
+      max-lines: 2
+  after-edit:
+    - source: validate-file
+      scope: target-file
+      async: true
+      max-lines: 5
+  on-start:
+    - source: git-delta
+      scope: global
+      max-lines: 3
+  on-idle:
+    - source: crew-status
+      scope: global
+      max-lines: 5
+    - source: git-delta
+      scope: global
+      max-lines: 3
+    - source: git-staged
+      scope: global
+      max-lines: 10
