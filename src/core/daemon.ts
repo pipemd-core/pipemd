@@ -4,7 +4,7 @@ import { execSync, execFileSync } from "node:child_process";
 import chokidar from "chokidar";
 import YAML from "yaml";
 import { injectFile, renderContentAsync, reverseInject } from "./injector.js";
-import { reapStaleSessions, DEFAULT_STALE_MS } from "./crew.js";
+import { reapStaleSessions, DEFAULT_STALE_MS, listSessions as listLocalSessions } from "./crew.js";
 import { writeDashboard, resetDaemonStart } from "./dashboard.js";
 import { ensureCacheDir } from "./cache.js";
 import { purgeOldRecords } from "./dedup.js";
@@ -12,6 +12,7 @@ import { log } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, PMD_CONTEXT_SEPARATOR } from "../config.js";
 import type { PipeConfig, PipeMode } from "../config.js";
 import { PIPEMD_DIR, LIVE_DIR, PID_FILE, STATUS_FILE, CONFIG_PATH, INJECTION_LOG_DIR } from "./paths.js";
+import { startRelayClient, stopRelayClient } from "./net/daemon-client.js";
 
 const WRITE_BUFFER_DEBOUNCE_MS = 1000;
 const INJECTION_LOG_MAX_AGE_MS = 3_600_000;
@@ -709,9 +710,19 @@ export function runDaemon() {
     startLegacyWatcher(config);
   }
 
-  process.on("SIGTERM", () => shutdown(allPipePaths));
-  process.on("SIGINT", () => shutdown(allPipePaths));
+  process.on("SIGTERM", () => { stopRelayClient(); shutdown(allPipePaths); });
+  process.on("SIGINT", () => { stopRelayClient(); shutdown(allPipePaths); });
   process.on("SIGHUP", () => {});
+
+  const relayUrl = config.link?.relay || process.env.PMD_RELAY;
+  if (relayUrl) {
+    const groupName = config.link?.group || path.basename(process.cwd());
+    startRelayClient(groupName, () => {
+      const all = listLocalSessions();
+      return all.filter((s) => !s._remote);
+    });
+    log.info(`Relay client started: ${relayUrl} (group: ${groupName})`);
+  }
 
   process.on("uncaughtException", (err) => {
     log.error(`Uncaught exception: ${err.message}`);

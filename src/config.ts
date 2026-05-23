@@ -15,6 +15,10 @@ export interface PipeConfig {
   commands: Record<string, string>;
   injected: { file: string; watch: boolean }[];
   pipes: { file: string; command?: string; render?: string; mode?: PipeMode }[];
+  link?: {
+    group?: string;
+    relay?: string;
+  };
   settings: {
     debounceMs: number;
     reServeDelayMs: number;

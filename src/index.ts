@@ -13,7 +13,9 @@ import { crewCommand } from "./commands/crew.js";
 import { injectCommand } from "./commands/inject.js";
 import { statuslineCommand } from "./commands/statusline.js";
 import { traceCommand } from "./commands/trace.js";
+import { linkCommand } from "./commands/link.js";
 import { runDaemon } from "./core/daemon.js";
+import { runRelay } from "./core/net/relay.js";
 
 declare const PKG_VERSION: string;
 
@@ -57,6 +59,10 @@ const GROUPS: { title: string; commands: { name: string; desc: string }[] }[] =
         {
           name: "trace",
           desc: "Live resolution tree — debug crew coordination",
+        },
+        {
+          name: "link",
+          desc: "Connect daemons across machines and Docker containers",
         },
       ],
     },
@@ -118,6 +124,7 @@ program.addCommand(doctorCommand);
 program.addCommand(uninstallCommand);
 program.addCommand(crewCommand);
 program.addCommand(traceCommand);
+program.addCommand(linkCommand);
 program.addCommand(injectCommand, { hidden: true });
 program.addCommand(statuslineCommand, { hidden: true });
 
@@ -126,6 +133,13 @@ program
   .description("(internal) Run the daemon process")
   .action(() => {
     runDaemon();
+  });
+
+program
+  .command("_linkd", { hidden: true })
+  .description("(internal) Run the link relay process")
+  .action(() => {
+    runRelay();
   });
 
 program.parse();

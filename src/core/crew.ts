@@ -35,6 +35,8 @@ export interface CrewSession {
   startedAt: string;
   lastHeartbeat: string;
   cwd: string;
+  _remote?: boolean;
+  _origin?: string;
 }
 
 export const CREW_SCHEMA = 1;
@@ -95,13 +97,13 @@ export function writeSessionAtomic(session: CrewSession): void {
   atomicWrite(target, JSON.stringify(session, null, 2) + "\n");
 }
 
-/** Read every session file, silently skipping malformed ones. */
+/** Read every session file, silently skipping malformed ones. Merges remote. */
 export function listSessions(): CrewSession[] {
   let files: string[];
   try {
     files = fs.readdirSync(CREW_DIR);
   } catch {
-    return [];
+    files = [];
   }
   const out: CrewSession[] = [];
   for (const f of files) {
@@ -113,6 +115,7 @@ export function listSessions(): CrewSession[] {
       /* malformed file — ignore, not throw */
     }
   }
+  out.push(...remoteSessionsCache);
   return out;
 }
 
@@ -122,6 +125,24 @@ export function deleteSession(id: string): void {
   } catch {
     /* already gone */
   }
+}
+
+// ---------------------------------------------------------------------------
+// Remote session cache — populated by the relay client (net/daemon-client).
+// ---------------------------------------------------------------------------
+
+let remoteSessionsCache: CrewSession[] = [];
+
+export function setRemoteSessions(sessions: CrewSession[]): void {
+  remoteSessionsCache = sessions;
+}
+
+export function getRemoteSessions(): CrewSession[] {
+  return remoteSessionsCache;
+}
+
+export function clearRemoteSessions(): void {
+  remoteSessionsCache = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -603,8 +624,9 @@ export function renderCrewBlock(opts: { maxLines?: number; reap?: boolean } = {}
   }
 
   for (const coord of coordinators) {
+    const remoteTag = coord._remote && coord._origin ? ` · remote: ${coord._origin}` : "";
     lines.push("");
-    lines.push(`▸ ${coord.harness}  (coordinator ${coord.id} · pid ${coord.pid})`);
+    lines.push(`▸ ${coord.harness}  (coordinator ${coord.id} · pid ${coord.pid}${remoteTag})`);
     if (coord.note) lines.push(`    · note: ${coord.note}`);
     const cc = claimList(coord);
     if (cc) lines.push(`    · claimed: ${cc}`);
@@ -616,7 +638,8 @@ export function renderCrewBlock(opts: { maxLines?: number; reap?: boolean } = {}
       const claimStr = claimed ? `claimed: ${claimed}` : "no claim";
       const noteStr = w.note ? `  "${w.note}"` : "";
       const flag = w.claimedFiles.some((c) => conflictPaths.has(c.path)) ? "  ⚠️" : "";
-      lines.push(`    ${branch} ${w.label || w.id}  ${claimStr}${noteStr}${flag}`);
+      const rmt = w._remote && w._origin ? ` · remote: ${w._origin}` : "";
+      lines.push(`    ${branch} ${w.label || w.id}  ${claimStr}${noteStr}${flag}${rmt}`);
     });
   }
 

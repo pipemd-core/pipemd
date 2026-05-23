@@ -2,6 +2,31 @@
 
 All notable changes to PipeMD.
 
+## [1.1.0] — 2026-05-23
+
+### Added
+
+- **`pmd link` — Cross-machine crew federation** — connects PipeMD daemons across machines and Docker containers so crew sessions (agent coordination data) are shared in real time
+  - `pmd-linkd` relay server — one per machine, aggregates crew sessions from all local daemons, syncs with remote relays
+  - `POST /crew` endpoint — daemons push local sessions, receive merged remote sessions for their group
+  - `POST /sync` endpoint — relay-to-relay bidirectional sync of all groups, bearer token auth
+  - `GET /status` endpoint — monitoring: group counts, peer connection status
+  - `GET /health` endpoint — liveness check
+  - Named groups — coordination scopes that route sessions to the right project daemon (default: repo directory name, configurable via `link.group` or `PMD_GROUP` env var)
+  - Daemon relay client — embedded in each daemon, auto-starts when `PMD_RELAY` or `link.relay` is configured
+  - Remote session merge — `listSessions()` returns local + remote sessions; `renderCrewBlock()` tags remote agents with `· remote: <hostname>`
+  - Cross-machine conflict detection — `findConflicts()` detects file claim conflicts across machines
+  - Session expiry — remote sessions not refreshed within 15s are evicted from the relay's in-memory store
+  - Docker support — container daemons connect to relay via `PMD_RELAY=http://relay:9741` (Docker DNS)
+  - Zero new dependencies — pure Node.js `http` module
+
+### Test Suite
+
+- 121 assertions, 0 failures across 10 suites
+- `test:unit` (19) — reverseInject + link relay unit tests
+- `test:link` (17) — relay lifecycle, cross-origin exchange, group isolation, conflict detection, token auth
+- All existing suites unchanged: e2e (36), bidir (27), arch (63), compose (17), crew (92), scripts (79), inject (47)
+
 ## [1.0.0] — 2026-05-21
 
 ### Added

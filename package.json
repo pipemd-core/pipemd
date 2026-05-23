@@ -1,6 +1,6 @@
 {
   "name": "@pipemd-core/pipemd",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The Dynamic Context Harness for AI Coding Agents",
   "type": "module",
   "bin": {
@@ -18,8 +18,9 @@
     "test:compose": "bash tests/e2e-compose.sh",
     "test:crew": "bash tests/e2e-crew.sh",
     "test:inject": "bash tests/e2e-inject.sh",
-    "test:unit": "node tests/test-reverse-inject.mjs",
-    "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject"
+    "test:unit": "node tests/test-reverse-inject.mjs && node tests/test-link.mjs",
+    "test:link": "bash tests/e2e-link.sh",
+    "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject && pnpm test:link"
   },
   "engines": {
     "node": ">=18.0.0"
