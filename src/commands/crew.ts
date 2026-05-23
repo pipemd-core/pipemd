@@ -40,7 +40,7 @@ function readDeliveryFromConfig(): DeliveryMode {
       const config = YAML.parse(raw) as { delivery?: DeliveryMode };
       const delivery = config.delivery;
       if (delivery === "passive" || delivery === "active" || delivery === "expert") return delivery;
-    } catch {}
+    } catch (err: unknown) { log.debug(`read delivery config: ${err instanceof Error ? err.message : String(err)}`); }
   }
   return "passive";
 }

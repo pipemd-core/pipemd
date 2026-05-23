@@ -18,7 +18,7 @@
     "test:compose": "bash tests/e2e-compose.sh",
     "test:crew": "bash tests/e2e-crew.sh",
     "test:inject": "bash tests/e2e-inject.sh",
-    "test:unit": "node tests/test-reverse-inject.mjs && node tests/test-link.mjs",
+    "test:unit": "npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts",
     "test:link": "bash tests/e2e-link.sh",
     "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject && pnpm test:link"
   },
@@ -37,7 +37,9 @@
   "author": "PipeMD Contributors",
   "license": "ISC",
   "homepage": "https://github.com/pipemd-core/pipemd#readme",
-  "bugs": { "url": "https://github.com/pipemd-core/pipemd/issues" },
+  "bugs": {
+    "url": "https://github.com/pipemd-core/pipemd/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/pipemd-core/pipemd.git"
@@ -65,9 +67,12 @@
     "@types/node": "^25.6.0",
     "@types/prompts": "^2.4.9",
     "tsup": "^8.5.1",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

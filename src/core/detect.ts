@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "__pycache__", "vendor", "target", ".terraform", "cmake-build-", "_deps"]);
+
 export type Ecosystem = "Node/TypeScript" | "Python" | "C-CPP" | "Rust" | "Go" | "DevOps" | "Generic";
 
 export interface DetectionResult {
@@ -19,8 +21,22 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     const dirPath = path.join(cwd, dir);
     if (!fs.existsSync(dirPath)) return false;
     try {
-      const entries = fs.readdirSync(dirPath, { recursive: true });
-      return entries.some((e) => pattern.test(String(e)));
+      const stack: string[] = [dirPath];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        let entries: fs.Dirent[];
+        try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+        for (const entry of entries) {
+          const name = entry.name;
+          if (SKIP_DIRS.has(name)) continue;
+          if (entry.isDirectory()) {
+            stack.push(path.join(current, name));
+          } else if (pattern.test(name)) {
+            return true;
+          }
+        }
+      }
+      return false;
     } catch { return false; }
   };
 
@@ -161,9 +177,8 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     for (const d of srcDirs) {
       if (fs.existsSync(path.join(cwd, d))) {
         try {
-          const jsFiles = fs.readdirSync(path.join(cwd, d), { recursive: true })
-            .map(String)
-            .filter((f) => /\.(ts|js|mjs)$/.test(f));
+          const allFiles = fs.readdirSync(path.join(cwd, d), { recursive: true }).map(String);
+          const jsFiles = allFiles.filter(f => !f.includes("node_modules") && /\.(ts|js|mjs)$/.test(f));
           const content = jsFiles.slice(0, 40).map((f) => {
             try { return fs.readFileSync(path.join(cwd, d, f), "utf-8"); } catch { return ""; }
           }).join("\n");
@@ -221,7 +236,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
         const headerFiles = fs.readdirSync(cwd, { recursive: true })
           .map(String)
           .filter((f) => /\.(h|hpp|hxx)$/.test(f))
-          .filter((f) => !f.includes("build/") && !f.includes("cmake-build-") && !f.includes("_deps/"));
+          .filter((f) => !f.includes("build/") && !f.includes("cmake-build-") && !f.includes("_deps/") && !f.includes(".git/"));
         if (headerFiles.length > 0) {
           let hasVirtual = false;
           let hasInheritance = false;

@@ -15,7 +15,11 @@ import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
 
-const VALIDATION_COOLDOWN_MS = 60_000;
+const VALIDATION_COOLDOWN_MS = 60_000
+const RATE_LIMIT_WINDOW_MS = 10_000
+const MAX_INJECTIONS_PER_WINDOW = 30
+const RESOLVER_TOTAL_BUDGET_MS = 5000
+const injectionTimestamps = new Map<string, number[]>()
 
 export interface ResolverContext {
   trigger: InjectionTrigger;
@@ -25,6 +29,30 @@ export interface ResolverContext {
 }
 
 type SourceResolver = (ctx: ResolverContext) => string;
+
+function isRateLimited(sessionId: string): boolean {
+  const now = Date.now()
+  let timestamps = injectionTimestamps.get(sessionId)
+  if (!timestamps) {
+    timestamps = []
+    injectionTimestamps.set(sessionId, timestamps)
+  }
+  const cutoff = now - RATE_LIMIT_WINDOW_MS
+  while (timestamps.length > 0 && timestamps[0] < cutoff) {
+    timestamps.shift()
+  }
+  return timestamps.length >= MAX_INJECTIONS_PER_WINDOW
+}
+
+function recordInjectionTimestamp(sessionId: string): void {
+  const now = Date.now()
+  let timestamps = injectionTimestamps.get(sessionId)
+  if (!timestamps) {
+    timestamps = []
+    injectionTimestamps.set(sessionId, timestamps)
+  }
+  timestamps.push(now)
+}
 
 function truncateLines(text: string, maxLines: number): string {
   const lines = text.split("\n");
@@ -219,10 +247,19 @@ export function resolveInjections(
 ): InjectionPayload[] {
   const config = loadInjectionConfig();
   const rules = getRulesForTrigger(config, trigger);
-  const effectiveSessionId = sessionId || deriveStableSessionId();
-  const payloads: InjectionPayload[] = [];
+  const effectiveSessionId = sessionId || deriveStableSessionId()
+
+  if (isRateLimited(effectiveSessionId)) {
+    return []
+  }
+
+  const payloads: InjectionPayload[] = []
+  const resolverStart = Date.now()
 
   for (const rule of rules) {
+    if (Date.now() - resolverStart > RESOLVER_TOTAL_BUDGET_MS) {
+      break
+    }
     if (rule.scope === "target-file" && !targetFile) continue;
 
     const ctx: ResolverContext = {
@@ -246,7 +283,8 @@ export function resolveInjections(
 
     if (status === "unchanged") continue;
 
-    recordInjection(effectiveSessionId, rule.source, content);
+    recordInjection(effectiveSessionId, rule.source, content)
+    recordInjectionTimestamp(effectiveSessionId)
 
     payloads.push({
       trigger,
@@ -311,6 +349,12 @@ export function triggerAsyncValidation(filePath: string): void {
   } finally {
     invalidate(guardKey);
   }
+}
+
+export {
+  RATE_LIMIT_WINDOW_MS,
+  MAX_INJECTIONS_PER_WINDOW,
+  RESOLVER_TOTAL_BUDGET_MS,
 }
 
 export function getValidationResult(filePath: string): string {

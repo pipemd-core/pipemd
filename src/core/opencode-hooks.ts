@@ -44,8 +44,8 @@ function storePayload(trigger, payload) {
     const filename = injectLogCounter + ".txt";
     writeFileSync(joinPath(INJECT_LOG_DIR, filename), meta + payload, "utf-8");
     writeFileSync(joinPath(INJECT_LOG_DIR, "last.txt"), meta + payload, "utf-8");
-    stats.lastPayloadFile = filename;
-  } catch {}
+     stats.lastPayloadFile = filename;
+   } catch (e) { logPluginError("storePayload", e); }
 }
 `
     : "";
@@ -98,7 +98,7 @@ function storePayload(trigger, payload) {
           const sid = getActiveCrewSession();
           try {
             execFileSync(getPmdBin(), ["inject", "--trigger", "after-edit", "--file", extractFilePath(args), "--async-validate", "--session", sid], { encoding: "utf-8", timeout: 3000, stdio: "ignore" });
-          } catch {}
+          } catch (e) { logPluginError("after-edit-async", e); }
           pushEvent("after-edit", tool, filePath || "", "claimed", 0);
         }
         if (lastInjection) {

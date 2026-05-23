@@ -10,6 +10,7 @@ import { detectHarnesses } from "../core/detectHarness.js";
 import { installHooks } from "../core/hooks.js";
 import type { DeliveryMode } from "../core/injection-types.js";
 import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE, TEMPLATE_PATH, SCRIPTS_DIR } from "../core/paths.js";
+import { log } from "../core/logger.js";
 
 function findScripts(dir: string): string[] {
   const results: string[] = [];
@@ -53,7 +54,7 @@ export const doctorCommand = new Command("doctor")
     try {
       execSync("which mkfifo", { encoding: "utf-8", stdio: "pipe" });
       mkfifoAvailable = true;
-    } catch {}
+    } catch (err: unknown) { log.debug(`mkfifo check failed: ${err instanceof Error ? err.message : String(err)}`); }
     if (mkfifoAvailable) {
       console.log(chalk.green(`  ✔ mkfifo: available`));
     } else if (process.platform !== "win32") {
@@ -180,7 +181,7 @@ export const doctorCommand = new Command("doctor")
             delivery = cfg.delivery;
             break;
           }
-        } catch {}
+        } catch (err: unknown) { log.debug(`read delivery config: ${err instanceof Error ? err.message : String(err)}`); }
       }
       for (const h of detected) {
         const hookResult = installHooks(h.name, process.cwd(), delivery, true);

@@ -1,5 +1,13 @@
 export type TokenProfile = "low" | "medium" | "high" | "xhigh" | "unlimited";
 
+export const TOKEN_PROFILE_LINES: Record<TokenProfile, number> = {
+  low: 200,
+  medium: 400,
+  high: 800,
+  xhigh: 1500,
+  unlimited: Infinity,
+};
+
 export type PipeMode = "pipe" | "legacy";
 
 export type PmdMode = "agent" | "file";

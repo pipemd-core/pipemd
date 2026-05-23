@@ -52,7 +52,7 @@ function readOrGenerateToken(): string {
     if (fs.existsSync(TOKEN_FILE)) {
       return fs.readFileSync(TOKEN_FILE, "utf-8").trim();
     }
-  } catch {}
+  } catch (err: unknown) { log.debug(`read existing token failed: ${err instanceof Error ? err.message : String(err)}`); }
   const token = crypto.randomBytes(16).toString("hex");
   ensureLinkDir();
   fs.writeFileSync(TOKEN_FILE, token, "utf-8");

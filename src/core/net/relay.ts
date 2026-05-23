@@ -110,7 +110,7 @@ function readToken(): string {
     if (fs.existsSync(tokenFile)) {
       return fs.readFileSync(tokenFile, "utf-8").trim();
     }
-  } catch {}
+  } catch (err: unknown) { log.debug(`read relay token failed: ${err instanceof Error ? err.message : String(err)}`); }
   return "";
 }
 

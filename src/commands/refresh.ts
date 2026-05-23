@@ -15,6 +15,7 @@ import {
   ensurePmdTags,
 } from "./init.js";
 import { PIPEMD_DIR, CONFIG_PATH, SCRIPTS_DIR, TEMPLATE_PATH } from "../core/paths.js";
+import { log } from "../core/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,7 +74,7 @@ function analyzeScripts(config: PipeConfig, ecosystem: Ecosystem): ScriptChange[
     let localContent: string | null = null;
     try {
       localContent = fs.readFileSync(localPath, "utf-8");
-    } catch {}
+    } catch (err: unknown) { log.debug(`read local script: ${err instanceof Error ? err.message : String(err)}`); }
 
     if (!localContent && bundledContent) {
       results.push({ id, label: def.label, kind: "missing", localPath, bundledContent });
@@ -261,7 +262,7 @@ export const refreshCommand = new Command("refresh")
       let local: string | null = null;
       try {
         local = fs.readFileSync(localPath, "utf-8");
-      } catch {}
+      } catch (err: unknown) { log.debug(`read helper script: ${err instanceof Error ? err.message : String(err)}`); }
       if (!local || local.trim() !== bundled.trim()) {
         copyScript(localPath, bundled);
       }
@@ -274,7 +275,7 @@ export const refreshCommand = new Command("refresh")
       let local: string | null = null;
       try {
         local = fs.readFileSync(aiSetupDest, "utf-8");
-      } catch {}
+      } catch (err: unknown) { log.debug(`read AI setup doc: ${err instanceof Error ? err.message : String(err)}`); }
       if (!local || local.trim() !== bundled.trim()) {
         fs.writeFileSync(aiSetupDest, bundled, "utf-8");
         console.log(chalk.dim("  → Updated .pipemd/AI_SETUP_PIPEMD.md"));

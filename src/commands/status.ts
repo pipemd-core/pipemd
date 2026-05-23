@@ -22,7 +22,7 @@ export const statusCommand = new Command("status")
     try {
       process.kill(pid, 0);
       running = true;
-    } catch {}
+    } catch (err: unknown) { log.debug(`daemon pid check failed: ${err instanceof Error ? err.message : String(err)}`); }
 
     if (!running) {
       console.log(chalk.red(`✖ Daemon (PID ${pid}) is not running.`));

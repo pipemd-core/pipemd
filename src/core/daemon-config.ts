@@ -5,27 +5,38 @@ import type { PipeConfig } from "../config.js";
 import { CONFIG_PATH } from "./paths.js";
 import { log } from "./logger.js";
 
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ConfigError"
+  }
+}
+
 export function validateConfig(raw: unknown): PipeConfig {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    log.error("Invalid config.yml: expected a mapping (object), got " + (raw === null ? "null" : typeof raw));
-    process.exit(1);
+    const msg = "Invalid config.yml: expected a mapping (object), got " + (raw === null ? "null" : typeof raw)
+    log.error(msg)
+    throw new ConfigError(msg)
   }
 
   const cfg = raw as Record<string, unknown>;
 
   if (!cfg.commands || typeof cfg.commands !== "object" || Array.isArray(cfg.commands)) {
     if (cfg.commands === undefined || cfg.commands === null) {
-      log.error("Invalid config.yml: missing 'commands' — nothing to render. Run `pmd init` to regenerate.");
-      process.exit(1);
+      const msg = "Invalid config.yml: missing 'commands' — nothing to render. Run `pmd init` to regenerate."
+      log.error(msg)
+      throw new ConfigError(msg)
     }
-    log.error("Invalid config.yml: 'commands' must be a mapping of name → shell command");
-    process.exit(1);
+    const msg = "Invalid config.yml: 'commands' must be a mapping of name → shell command"
+    log.error(msg)
+    throw new ConfigError(msg)
   }
 
   if (cfg.pipes !== undefined && cfg.pipes !== null) {
     if (!Array.isArray(cfg.pipes)) {
-      log.error("Invalid config.yml: 'pipes' must be an array");
-      process.exit(1);
+      const msg = "Invalid config.yml: 'pipes' must be an array"
+      log.error(msg)
+      throw new ConfigError(msg)
     }
   } else {
     cfg.pipes = [];
@@ -33,8 +44,9 @@ export function validateConfig(raw: unknown): PipeConfig {
 
   if (cfg.injected !== undefined && cfg.injected !== null) {
     if (!Array.isArray(cfg.injected)) {
-      log.error("Invalid config.yml: 'injected' must be an array");
-      process.exit(1);
+      const msg = "Invalid config.yml: 'injected' must be an array"
+      log.error(msg)
+      throw new ConfigError(msg)
     }
   } else {
     cfg.injected = [];
@@ -63,11 +75,14 @@ export function loadConfig(): PipeConfig {
     const parsed = YAML.parse(raw);
     return validateConfig(parsed);
   } catch (err: unknown) {
+    if (err instanceof ConfigError) throw err
     if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
       log.error("Config file not found. Run `pmd init` first.");
+      throw new ConfigError("Config file not found. Run `pmd init` first.")
     } else {
-      log.error("Config file invalid. " + (err instanceof Error ? err.message : String(err)));
+      const msg = "Config file invalid. " + (err instanceof Error ? err.message : String(err))
+      log.error(msg)
+      throw new ConfigError(msg)
     }
-    process.exit(1);
   }
 }

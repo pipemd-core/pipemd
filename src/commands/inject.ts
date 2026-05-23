@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -8,6 +8,7 @@ import { loadInjectionConfig } from "../core/injection-types.js";
 import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
 import { bumpInjectStats } from "../core/statusline-data.js";
+import { log } from "../core/logger.js";
 
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
 type InjectFormat = "plain" | "claude-hook" | "gemini-json";
@@ -36,7 +37,9 @@ const inject = new Command("inject")
     if (opts.file) {
       const resolved = path.resolve(opts.file);
       const cwd = process.cwd();
-      if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+      const realPath = realpathSync(resolved);
+      const realCwd = realpathSync(cwd);
+      if (!realPath.startsWith(realCwd + path.sep) && realPath !== realCwd) {
         console.error(chalk.red(`✖ --file must be within the project root`));
         process.exit(1);
       }
@@ -114,7 +117,7 @@ const inject = new Command("inject")
     try {
       mkdirSync(logDir, { recursive: true });
       writeFileSync(path.join(logDir, "last.txt"), plain, "utf-8");
-    } catch {}
+    } catch (err: unknown) { log.debug(`write injection log failed: ${err instanceof Error ? err.message : String(err)}`); }
 
     if (format === "claude-hook") {
       const obj = {

@@ -42,7 +42,7 @@ export function injectContent(content: string, config: PipeConfig): string | nul
   return changed ? result : null;
 }
 
-export async function renderContentAsync(template: string, config: PipeConfig): Promise<string> {
+export async function renderContentAsync(template: string, config: PipeConfig, maxLines?: number): Promise<string> {
   const commands = new Map<string, string>();
   const tagRe = /<!--\s*pmd:\s*([\w-]+)\s*-->/g;
   let match: RegExpExecArray | null;
@@ -81,7 +81,18 @@ export async function renderContentAsync(template: string, config: PipeConfig): 
     return replacement;
   });
 
-  return rendered.trim();
+  const trimmed = rendered.trim();
+
+  if (maxLines && maxLines !== Infinity) {
+    const lines = trimmed.split("\n");
+    if (lines.length > maxLines) {
+      const truncated = lines.slice(0, maxLines);
+      truncated.push(`\n... (truncated from ${lines.length} to ${maxLines} lines by token profile)`);
+      return truncated.join("\n");
+    }
+  }
+
+  return trimmed;
 }
 
 function runCommandSync(commandName: string, cmd: string): string {

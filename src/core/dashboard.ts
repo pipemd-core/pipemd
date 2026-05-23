@@ -4,6 +4,7 @@ import { getStatusJson } from "./crew.js";
 import { atomicWrite } from "./fs-utils.js";
 import { PIPEMD_DIR, STATUS_FILE, PID_FILE, INJECT_STATS_FILE, TUI_STATS_FILE, CONTEXT_FILES } from "./paths.js";
 import { tryReadJson, isPidAlive, readInjectStats } from "./json-utils.js";
+import { log } from "./logger.js";
 
 export const DASHBOARD_FILE = path.join(PIPEMD_DIR, ".dashboard.json");
 
@@ -69,7 +70,7 @@ function readDaemonPid(): number | null {
   try {
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
     if (pid > 0 && isPidAlive(pid)) return pid;
-  } catch {}
+  } catch (err: unknown) { log.debug(`read daemon pid: ${err instanceof Error ? err.message : String(err)}`); }
   return null;
 }
 
@@ -77,7 +78,7 @@ function readContextBytes(): number {
   const st = tryReadJson(STATUS_FILE);
   if (st && typeof st.renderedBytes === "number" && st.renderedBytes > 0) return st.renderedBytes;
   for (const f of CONTEXT_FILES) {
-    try { const s = fs.statSync(f); if (s.isFile() && s.size > 0) return s.size; } catch {}
+    try { const s = fs.statSync(f); if (s.isFile() && s.size > 0) return s.size; } catch (err: unknown) { log.debug(`stat context file: ${err instanceof Error ? err.message : String(err)}`); }
   }
   return 0;
 }
@@ -88,7 +89,7 @@ function readLastError(): { ts: number; handler: string; error: string } | undef
     if (raw.length === 0) return undefined;
     const last = JSON.parse(raw[raw.length - 1]);
     if (last && typeof last.ts === "number" && Date.now() - last.ts < PLUGIN_ERROR_STALE_MS) return last;
-  } catch {}
+  } catch (err: unknown) { log.debug(`read plugin error log: ${err instanceof Error ? err.message : String(err)}`); }
   return undefined;
 }
 

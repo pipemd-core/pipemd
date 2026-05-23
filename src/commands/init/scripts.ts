@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import chalk from "chalk";
+import { log } from "../../core/logger.js";
 import type { Ecosystem } from "../../core/detect.js";
 import type { TokenProfile } from "../../config.js";
 import {
@@ -122,7 +123,7 @@ export async function testRunScripts(
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
+    } catch (err: unknown) { log.debug(`cleanup tmpdir failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
 
   return results;
@@ -163,7 +164,7 @@ export async function aiValidateScripts(
         if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === "string")) {
           return parsed as string[];
         }
-      } catch {}
+      } catch (err: unknown) { log.debug(`parse AI response failed: ${err instanceof Error ? err.message : String(err)}`); }
     }
     console.log(chalk.yellow("  ⚠ Could not parse AI response. Keeping successful scripts only."));
     return Object.keys(results).filter((id) => results[id].status === "success");
