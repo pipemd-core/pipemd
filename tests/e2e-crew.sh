@@ -226,7 +226,7 @@ assert_contains "$OP_PLUGIN" "getActiveCrewSession" "opencode active crew sessio
 assert_contains "$OP_PLUGIN" "workerSessions" "opencode worker session tracking"
 assert_contains "$OP_PLUGIN" "leaveWorker" "opencode worker cleanup"
 assert_contains "$OP_PLUGIN" "session.status" "opencode session.status event handling"
-assert_contains "$OP_PLUGIN" "@pmd-plugin-version 14" "opencode plugin version 14"
+assert_contains "$OP_PLUGIN" "@pmd-plugin-version 101" "opencode plugin version derived from pkg"
 
 # ── opencode TUI plugin installer ──
 echo -e "${YELLOW}Test: install-hooks (OpenCode TUI)${NC}"

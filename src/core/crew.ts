@@ -11,6 +11,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 import { atomicWrite } from "./fs-utils.js";
+import { isPidAlive } from "./json-utils.js";
 import { PIPEMD_DIR as _PIPEMD_DIR, CREW_DIR as _CREW_DIR } from "./paths.js";
 
 export type CrewRole = "coordinator" | "worker";
@@ -149,16 +150,8 @@ export function clearRemoteSessions(): void {
 // Liveness & staleness.
 // ---------------------------------------------------------------------------
 
-export function isPidAlive(pid: number): boolean {
-  if (!pid || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: any) {
-    // EPERM => process exists but is owned by another user.
-    return err?.code === "EPERM";
-  }
-}
+// Re-exported for consumers that import isPidAlive from crew.ts.
+export { isPidAlive } from "./json-utils.js";
 
 /**
  * A session is stale when its heartbeat is older than `staleMs`, or when its

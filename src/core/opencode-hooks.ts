@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import type { DeliveryMode } from "./injection-types.js";
 import type { HookInstallResult } from "./hooks.js";
 
-const OPENCODE_PLUGIN_VERSION = 14;
+declare const PKG_VERSION: string;
+
+const OPENCODE_PLUGIN_VERSION = (() => {
+  const parts = PKG_VERSION.split(".").map(Number);
+  return (parts[0] || 1) * 100 + (parts[1] || 0);
+})();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_DIR = path.join(__dirname, "plugins");

@@ -19,16 +19,33 @@ type OriginMap = Map<string, { sessions: CrewSession[]; lastSeen: number }>;
 const store = new Map<string, OriginMap>();
 const peerLastSync = new Map<string, number>();
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let server: http.Server | null = null;
 
 function hostname(): string {
   return os.hostname();
 }
 
+const MAX_BODY_BYTES = 1024 * 1024;
+
+function isLocalhost(req: http.IncomingMessage): boolean {
+  const remote = req.socket.remoteAddress ?? "";
+  return remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+}
+
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let received = 0;
+    req.on("data", (c: Buffer) => {
+      received += c.length;
+      if (received > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("body too large"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
@@ -154,6 +171,11 @@ function syncWithPeers() {
 }
 
 function handleCrew(req: http.IncomingMessage, res: http.ServerResponse) {
+  if (!isLocalhost(req)) {
+    jsonResponse(res, 403, { error: "forbidden: /crew is localhost-only" });
+    return;
+  }
+
   readBody(req)
     .then((raw) => {
       const msg = JSON.parse(raw) as CrewMessage;
@@ -266,7 +288,7 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       log.info(`Relay listening on port ${actualPort}`);
 
       syncTimer = setInterval(syncWithPeers, POLL_INTERVAL_MS);
-      setInterval(expireStaleGroups, POLL_INTERVAL_MS * 3);
+      expiryTimer = setInterval(expireStaleGroups, POLL_INTERVAL_MS * 3);
 
       resolve(actualPort);
     });
@@ -277,6 +299,10 @@ export function stopRelay() {
   if (syncTimer) {
     clearInterval(syncTimer);
     syncTimer = null;
+  }
+  if (expiryTimer) {
+    clearInterval(expiryTimer);
+    expiryTimer = null;
   }
   if (server) {
     server.close();

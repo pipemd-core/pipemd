@@ -3,7 +3,6 @@ import {
   mkdirSync,
   readFileSync,
   unlinkSync,
-  readdirSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import { computePayloadHash } from "./injection-types.js";
@@ -112,87 +111,4 @@ export function invalidate(key: string): void {
   if (existsSync(path)) {
     unlinkSync(path);
   }
-}
-
-function collectEntryFiles(dir: string): string[] {
-  if (!existsSync(dir)) {
-    return [];
-  }
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => resolve(dir, f));
-}
-
-function loadEntriesFromFiles(
-  files: string[],
-): Array<{ file: string; entry: CacheEntry }> {
-  const results: Array<{ file: string; entry: CacheEntry }> = [];
-  for (const file of files) {
-    try {
-      const raw = readFileSync(file, "utf-8");
-      const entry: CacheEntry = JSON.parse(raw);
-      results.push({ file, entry });
-    } catch {
-      continue;
-    }
-  }
-  return results;
-}
-
-function invalidatePrefix(prefix: string): void {
-  const allFiles = [
-    ...collectEntryFiles(CACHE_DIR),
-    ...collectEntryFiles(VALIDATION_DIR),
-  ];
-  const entries = loadEntriesFromFiles(allFiles);
-  for (const { file, entry } of entries) {
-    if (entry.key.startsWith(prefix)) {
-      try {
-        unlinkSync(file);
-      } catch {
-        continue;
-      }
-    }
-  }
-}
-
-function invalidateByMetadata(filter: Record<string, string>): void {
-  const allFiles = [
-    ...collectEntryFiles(CACHE_DIR),
-    ...collectEntryFiles(VALIDATION_DIR),
-  ];
-  const entries = loadEntriesFromFiles(allFiles);
-  for (const { file, entry } of entries) {
-    if (!entry.metadata) continue;
-    const matches = Object.entries(filter).every(
-      ([k, v]) => entry.metadata![k] === v,
-    );
-    if (matches) {
-      try {
-        unlinkSync(file);
-      } catch {
-        continue;
-      }
-    }
-  }
-}
-
-function readManifest(): CacheManifest {
-  if (!existsSync(CACHE_MANIFEST)) {
-    return { lastRender: 0, hashes: {} };
-  }
-  try {
-    const raw = readFileSync(CACHE_MANIFEST, "utf-8");
-    return JSON.parse(raw) as CacheManifest;
-  } catch {
-    return { lastRender: 0, hashes: {} };
-  }
-}
-
-function writeManifest(manifest: CacheManifest): void {
-  const dir = resolve(CACHE_MANIFEST, "..");
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  atomicWrite(CACHE_MANIFEST, JSON.stringify(manifest));
 }

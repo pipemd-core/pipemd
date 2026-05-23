@@ -34,6 +34,8 @@ export const PMD_CONTEXT_SEPARATOR = "\n\n---\n\n<!-- pmd-context -->\n";
 
 export const COMMAND_TIMEOUT_MS = 10_000;
 
+export const DEFAULT_RESERVE_DELAY_MS = 1000;
+
 export const DEFAULT_CONFIG: PipeConfig = {
   version: "1.0",
   commands: {
@@ -50,6 +52,6 @@ export const DEFAULT_CONFIG: PipeConfig = {
   ],
   settings: {
     debounceMs: 3000,
-    reServeDelayMs: 500,
+    reServeDelayMs: DEFAULT_RESERVE_DELAY_MS,
   },
 };

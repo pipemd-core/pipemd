@@ -110,12 +110,21 @@ export function startRelayClient(
   if (pollTimer) return;
   if (!relayUrl()) return;
 
+  let consecutiveErrors = 0;
+
   const poll = async () => {
     try {
       const local = getLocalSessions();
       const remote = await syncWithRelay(group, local);
       setRemoteSessions(remote);
-    } catch {}
+      consecutiveErrors = 0;
+    } catch (e) {
+      consecutiveErrors++;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
+        log.warn(`Relay client poll error (${consecutiveErrors}): ${msg}`);
+      }
+    }
   };
 
   poll();

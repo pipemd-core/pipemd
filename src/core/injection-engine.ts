@@ -13,6 +13,7 @@ import type {
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
+import { formatTimeAgo } from "./json-utils.js";
 
 const VALIDATION_COOLDOWN_MS = 60_000;
 
@@ -42,19 +43,6 @@ function runGit(args: string[], fallback: string = ""): string {
   } catch {
     return fallback;
   }
-}
-
-function formatTimeAgo(isoString: string): string {
-  const then = new Date(isoString).getTime();
-  const diff = Date.now() - then;
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
 }
 
 function resolveCrewStatus(ctx: ResolverContext): string {

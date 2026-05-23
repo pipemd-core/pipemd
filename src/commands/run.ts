@@ -3,7 +3,7 @@ import fs from "node:fs";
 import chalk from "chalk";
 import YAML from "yaml";
 import { renderContentAsync } from "../core/injector.js";
-import { PMD_CONTEXT_SEPARATOR } from "../config.js";
+import { PMD_CONTEXT_SEPARATOR, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { CONFIG_PATH, TEMPLATE_PATH } from "../core/paths.js";
 
@@ -23,9 +23,9 @@ export const runCommand = new Command("run")
 
     const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
     const config = YAML.parse(raw) as PipeConfig;
-    if (!config.settings || typeof config.settings !== "object") config.settings = { debounceMs: 3000, reServeDelayMs: 2000 };
+    if (!config.settings || typeof config.settings !== "object") config.settings = { debounceMs: 3000, reServeDelayMs: DEFAULT_RESERVE_DELAY_MS };
     if (typeof config.settings.debounceMs !== "number") config.settings.debounceMs = 3000;
-    if (typeof config.settings.reServeDelayMs !== "number") config.settings.reServeDelayMs = 2000;
+    if (typeof config.settings.reServeDelayMs !== "number") config.settings.reServeDelayMs = DEFAULT_RESERVE_DELAY_MS;
 
     const template = fs.readFileSync(TEMPLATE_PATH, "utf-8");
     const rendered = await renderContentAsync(template, config);

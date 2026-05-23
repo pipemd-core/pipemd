@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import YAML from "yaml";
 import type { PipeConfig, PipeMode, TokenProfile } from "../../config.js";
+import { DEFAULT_RESERVE_DELAY_MS } from "../../config.js";
 import { installHooks } from "../../core/hooks.js";
 import {
   generateInjectionYml,
@@ -440,7 +441,7 @@ export function runInit(
     commands,
     injected: [{ file: ".pipemd/template.md", watch: true }],
     pipes,
-    settings: { debounceMs: 3000, reServeDelayMs: 500, tokenProfile: profile },
+    settings: { debounceMs: 3000, reServeDelayMs: DEFAULT_RESERVE_DELAY_MS, tokenProfile: profile },
   };
 
   const configYml = generateConfigYml(config);
@@ -559,7 +560,7 @@ export function runInitFile(
     commands,
     injected: [{ file: ".pipemd/template.md", watch: true }],
     pipes: [],
-    settings: { debounceMs: 3000, reServeDelayMs: 500, tokenProfile: profile },
+    settings: { debounceMs: 3000, reServeDelayMs: DEFAULT_RESERVE_DELAY_MS, tokenProfile: profile },
   };
 
   const configYml = generateConfigYml(config);

@@ -9,6 +9,7 @@ export function tryReadJson(p: string): any | null {
 }
 
 export function isPidAlive(pid: number): boolean {
+  if (!pid || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -30,11 +31,11 @@ export function formatTimeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   if (diff < 0) return "just now";
   const secs = Math.floor(diff / 1000);
-  if (secs < 60) return `${secs}s ago`;
+  if (secs < 60) return `${secs}s`;
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return `${hrs}h`;
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${days}d`;
 }
