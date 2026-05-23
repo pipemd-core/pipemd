@@ -89,14 +89,14 @@ function shortId(id: string): string {
 
 function readDedupStore(sessionId: string): Record<string, { hash: string; timestamp: number }> {
   const p = path.join(INJECTED_DIR, `${sessionId}.json`);
-  const data = tryReadJson(p);
+  const data = tryReadJson<Record<string, { hash: string; timestamp: number }>>(p);
   if (data && typeof data === "object" && !Array.isArray(data)) return data;
   return {};
 }
 
-function readTuiEvents(): any[] {
-  const stats = tryReadJson(TUI_STATS_FILE);
-  if (stats && Array.isArray(stats.events)) return stats.events;
+function readTuiEvents(): Record<string, unknown>[] {
+  const stats = tryReadJson<{ events?: Record<string, unknown>[] }>(TUI_STATS_FILE);
+  if (stats?.events && Array.isArray(stats.events)) return stats.events;
   return [];
 }
 
@@ -171,7 +171,7 @@ function readOrphanedDedup(crewIds: Set<string>): string[] {
 
 function enrichSession(
   raw: CrewSession,
-  events: any[],
+  events: Record<string, unknown>[],
   crewMap: Map<string, CrewSession>,
 ): TraceSession {
   const alive = isPidAlive(raw.pid);
@@ -197,12 +197,12 @@ function enrichSession(
   if (sessionEvents.length > 0) {
     const ev = sessionEvents[sessionEvents.length - 1];
     lastEvent = {
-      trigger: ev.trigger || "",
-      tool: ev.tool || "",
-      file: ev.file || "",
-      result: ev.result || "",
-      tokens: ev.tokens || 0,
-      ts: ev.ts || "",
+      trigger: String(ev.trigger || ""),
+      tool: String(ev.tool || ""),
+      file: String(ev.file || ""),
+      result: String(ev.result || ""),
+      tokens: Number(ev.tokens || 0),
+      ts: String(ev.ts || ""),
     };
   }
 
@@ -290,14 +290,14 @@ export function resolveTraceData(opts?: { maxPayloads?: number }): TraceData {
     sessions: roots,
     conflicts,
     events: events.map(e => ({
-      ts: e.ts || "",
-      trigger: e.trigger || "",
-      tool: e.tool || "",
-      file: e.file || "",
-      result: e.result || "",
-      tokens: e.tokens || 0,
-      sessionId: e.session,
-      payload: e.payload,
+      ts: String(e.ts || ""),
+      trigger: String(e.trigger || ""),
+      tool: String(e.tool || ""),
+      file: String(e.file || ""),
+      result: String(e.result || ""),
+      tokens: Number(e.tokens || 0),
+      sessionId: typeof e.session === "string" ? e.session : undefined,
+      payload: typeof e.payload === "string" ? e.payload : undefined,
     })),
     payloads,
     orphanedDedup,

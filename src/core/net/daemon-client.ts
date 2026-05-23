@@ -1,6 +1,7 @@
 import http from "node:http";
 import os from "node:os";
 import type { CrewSession } from "../crew.js";
+import { setRemoteSessions as setCrewRemoteSessions } from "../crew.js";
 import { log } from "../logger.js";
 import { type CrewMessage, POLL_INTERVAL_MS } from "./protocol.js";
 
@@ -9,20 +10,7 @@ export interface RemoteSession extends CrewSession {
   _origin: string;
 }
 
-let remoteCache: RemoteSession[] = [];
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-export function setRemoteSessions(sessions: RemoteSession[]) {
-  remoteCache = sessions;
-}
-
-export function getRemoteSessions(): RemoteSession[] {
-  return remoteCache;
-}
-
-export function clearRemoteSessions() {
-  remoteCache = [];
-}
 
 function relayUrl(): string | null {
   return process.env.PMD_RELAY || null;
@@ -56,7 +44,7 @@ function postToRelay(
           }
           try {
             const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-            const sessions = (parsed.sessions || []).map((s: any) => ({
+            const sessions = ((parsed.sessions || []) as RemoteSession[]).map((s) => ({
               ...s,
               _remote: true as const,
               _origin: s._origin || "remote",
@@ -116,7 +104,7 @@ export function startRelayClient(
     try {
       const local = getLocalSessions();
       const remote = await syncWithRelay(group, local);
-      setRemoteSessions(remote);
+      setCrewRemoteSessions(remote);
       consecutiveErrors = 0;
     } catch (e) {
       consecutiveErrors++;
@@ -136,5 +124,5 @@ export function stopRelayClient() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  clearRemoteSessions();
+  setCrewRemoteSessions([]);
 }

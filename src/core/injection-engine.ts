@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from "node:child_process";
+import { execSync, execFileSync, execFile } from "node:child_process";
 import { readCache, writeCache, isFresh, invalidate, DEFAULT_TTLS } from "./cache.js";
 import {
   loadInjectionConfig,
@@ -313,7 +313,7 @@ export function resolveInjections(
   return payloads;
 }
 
-export function triggerAsyncValidation(filePath: string): void {
+export async function triggerAsyncValidation(filePath: string): Promise<void> {
   const cacheKey = `validation:${filePath}`;
   if (isFresh(cacheKey)) return;
 
@@ -325,38 +325,47 @@ export function triggerAsyncValidation(filePath: string): void {
     const errors: string[] = [];
 
     try {
-      const eslintResult = execFileSync("npx", ["eslint", filePath, "--format", "compact"], {
-        encoding: "utf-8",
-        timeout: 10000,
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      const eslintResult = await new Promise<string>((resolve, reject) => {
+        execFile("npx", ["eslint", filePath, "--format", "compact"], {
+          timeout: 10000,
+        }, (err, stdout) => {
+          if (err) {
+            if (stdout && typeof stdout === "string") {
+              const out = stdout.trim();
+              if (out) errors.push(out);
+            }
+            resolve("");
+          } else {
+            resolve(typeof stdout === "string" ? stdout.trim() : "");
+          }
+        });
+      });
       if (eslintResult) errors.push(eslintResult);
-    } catch (err: unknown) {
-      if (err && typeof err === "object" && "stdout" in err && typeof (err as { stdout: string }).stdout === "string") {
-        const out = (err as { stdout: string }).stdout.trim();
-        if (out) errors.push(out);
-      }
-    }
+    } catch { /* eslint not available */ }
 
     try {
-      const tscResult = execFileSync("npx", ["tsc", "--noEmit"], {
-        encoding: "utf-8",
-        timeout: 30000,
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      const tscResult = await new Promise<string>((resolve) => {
+        execFile("npx", ["tsc", "--noEmit"], {
+          timeout: 30000,
+        }, (err, stdout) => {
+          if (err) {
+            if (stdout && typeof stdout === "string") {
+              const out = stdout.trim();
+              const relevant = out.split("\n").filter((l) => l.includes(filePath));
+              resolve(relevant.length > 0 ? relevant.join("\n") : "");
+            } else {
+              resolve("");
+            }
+          } else {
+            resolve(typeof stdout === "string" ? stdout.trim() : "");
+          }
+        });
+      });
       if (tscResult) {
         const relevant = tscResult.split("\n").filter((l) => l.includes(filePath));
         if (relevant.length > 0) errors.push(...relevant);
       }
-    } catch (err: unknown) {
-      if (err && typeof err === "object" && "stdout" in err && typeof (err as { stdout: string }).stdout === "string") {
-        const out = (err as { stdout: string }).stdout.trim();
-        if (out) {
-          const relevant = out.split("\n").filter((l) => l.includes(filePath));
-          if (relevant.length > 0) errors.push(...relevant);
-        }
-      }
-    }
+    } catch { /* tsc not available */ }
 
     const content = errors.length > 0 ? errors.join("\n") : "No errors found";
     writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000);

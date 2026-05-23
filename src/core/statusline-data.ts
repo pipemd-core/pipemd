@@ -7,7 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { tryReadJson } from "./json-utils.js";
+import { tryReadJson, readInjectStats as readInjectStatsFromUtils } from "./json-utils.js";
+import { atomicWrite } from "./fs-utils.js";
 import { DEFAULT_STALE_MS } from "./crew.js";
 import {
   INJECT_STATS_FILE as INJECT_STATS_PATH,
@@ -34,7 +35,6 @@ export interface InjectStats {
   lastEvent?: InjectEvent;
 }
 
-/** ~4 chars per token — the same rough estimate the OpenCode TUI panel uses. */
 export function estimateTokens(bytes: number): number {
   return Math.round(bytes / 4);
 }
@@ -44,13 +44,8 @@ export function formatTokenCount(n: number): string {
   return String(n);
 }
 
-/**
- * Rendered context size in bytes. In pipe mode the context files are FIFOs
- * (statSync reports size 0), so the daemon records the real byte count in
- * .status.json — prefer that, fall back to a real on-disk file stat (legacy mode).
- */
 export function findContextBytes(pipemdDir: string, cwd: string): number {
-  const st = tryReadJson(path.join(pipemdDir, STATUS_FILE));
+  const st = tryReadJson<{ renderedBytes?: number }>(path.join(pipemdDir, STATUS_FILE));
   if (st && typeof st.renderedBytes === "number" && st.renderedBytes > 0) {
     return st.renderedBytes;
   }
@@ -58,28 +53,15 @@ export function findContextBytes(pipemdDir: string, cwd: string): number {
     try {
       const s = fs.statSync(path.join(cwd, f));
       if (s.isFile() && s.size > 0) return s.size;
-    } catch {
-      /* not present */
-    }
+    } catch { /* not present */ }
   }
   return 0;
 }
 
 export function readInjectStats(pipemdDir: string): InjectStats {
-  const s = tryReadJson(path.join(pipemdDir, INJECT_STATS_FILE));
-  return {
-    delivered: typeof s?.delivered === "number" ? s.delivered : 0,
-    dedup: typeof s?.dedup === "number" ? s.dedup : 0,
-    lastEvent: s?.lastEvent,
-  };
+  return readInjectStatsFromUtils(path.join(pipemdDir, INJECT_STATS_FILE)) as InjectStats;
 }
 
-/**
- * Atomically bump the injection counters. Called from the `pmd inject` hook path
- * so the statusline has injection data — Claude Code's inject hooks call `pmd
- * inject` directly and would otherwise record nothing. Best-effort: failures are
- * swallowed so a stats hiccup never breaks an injection.
- */
 export function bumpInjectStats(
   pipemdDir: string,
   result: "delivered" | "dedup",
@@ -95,12 +77,8 @@ export function bumpInjectStats(
       ts: Date.now(),
     };
     const target = path.join(pipemdDir, INJECT_STATS_FILE);
-    const tmp = target + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify(cur), "utf-8");
-    fs.renameSync(tmp, target);
-  } catch {
-    /* stats are best-effort — never let a write failure break injection */
-  }
+    atomicWrite(target, JSON.stringify(cur));
+  } catch { /* stats are best-effort */ }
 }
 
 /**
@@ -129,12 +107,8 @@ export function shouldSuppressGeminiStatusline(
     return true;
   }
   try {
-    const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ ts: now, line }), "utf-8");
-    fs.renameSync(tmp, file);
-  } catch {
-    /* best-effort — a debounce miss is fine, a thrown hook is not */
-  }
+    atomicWrite(file, JSON.stringify({ ts: now, line }));
+  } catch { /* best-effort */ }
   return false;
 }
 
@@ -166,8 +140,8 @@ export function readCrewSnapshot(pipemdDir: string): CrewSnapshot | null {
         ? cs.sessions.length
         : 0;
   const conflictPaths = Array.isArray(cs.conflicts)
-    ? cs.conflicts
-        .map((c: any) => (typeof c?.path === "string" ? c.path : null))
+    ? (cs.conflicts as Record<string, unknown>[])
+        .map((c) => (typeof c.path === "string" ? c.path : null))
         .filter((p: string | null): p is string => p !== null)
     : [];
   const passiveCount = Array.isArray(cs.passiveAgents)

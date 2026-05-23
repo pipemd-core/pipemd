@@ -283,9 +283,11 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
       } finally {
         closeSafe(fd);
       }
-    } catch (err: any) {
-      if (err.code !== 'ENXIO') {
-        log.warn(`Write failed: ${err.message}`);
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENXIO') {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`Write failed: ${msg}`);
       }
     }
 

@@ -15,6 +15,13 @@ type SessionStore = Record<string, { hash: string; timestamp: number }>;
 
 export const INJECTED_DIR = ".pipemd/cache/injected";
 
+const memCache = new Map<string, { ts: number; store: SessionStore }>();
+const MEM_CACHE_TTL = 2_000;
+
+export function clearMemCache(): void {
+  memCache.clear();
+}
+
 export function ensureInjectedDir(): void {
   mkdirSync(INJECTED_DIR, { recursive: true });
 }
@@ -24,18 +31,26 @@ function sessionPath(sessionId: string): string {
 }
 
 function loadSession(sessionId: string): SessionStore {
+  const now = Date.now();
+  const cached = memCache.get(sessionId);
+  if (cached && now - cached.ts < MEM_CACHE_TTL) return cached.store;
   const p = sessionPath(sessionId);
-  if (!existsSync(p)) return {};
-  try {
-    return JSON.parse(readFileSync(p, "utf8"));
-  } catch {
-    return {};
+  let store: SessionStore = {};
+  if (existsSync(p)) {
+    try {
+      store = JSON.parse(readFileSync(p, "utf8"));
+    } catch {
+      store = {};
+    }
   }
+  memCache.set(sessionId, { ts: now, store });
+  return store;
 }
 
 function saveSession(sessionId: string, store: SessionStore): void {
   ensureInjectedDir();
   atomicWrite(sessionPath(sessionId), JSON.stringify(store));
+  memCache.set(sessionId, { ts: Date.now(), store });
 }
 
 export function recordInjection(sessionId: string, source: string, content: string): void {

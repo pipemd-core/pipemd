@@ -23,7 +23,7 @@ const inject = new Command("inject")
   .option("--run-validation", "internal: execute validation synchronously (called by self-spawn)")
   .option("--format <format>", "output format: plain | claude-hook | gemini-json")
   .option("--show-last", "output the most recent injection payload without re-running")
-  .action((opts: {
+  .action(async (opts: {
     trigger?: string;
     file?: string;
     session?: string;
@@ -74,7 +74,7 @@ const inject = new Command("inject")
     if (!trigger || !VALID_TRIGGERS.includes(trigger)) return;
 
     if (opts.runValidation && opts.file) {
-      triggerAsyncValidation(opts.file);
+      await triggerAsyncValidation(opts.file);
       return;
     }
 

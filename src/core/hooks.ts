@@ -33,8 +33,9 @@ export function installHooks(
       };
     }
     return { harness, installed: false, mechanism: "unknown", detail: "unrecognized harness" };
-  } catch (err: any) {
-    return { harness, installed: false, mechanism: "error", detail: String(err?.message ?? err) };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { harness, installed: false, mechanism: "error", detail: msg };
   }
 }
 
@@ -44,7 +45,8 @@ export function removeHooks(harness: string, cwd: string = process.cwd()): HookI
     if (harness === "OpenCode") return removeOpenCodeHooks(cwd);
     if (harness === "Gemini") return removeGeminiHooks(cwd);
     return { harness, installed: false, mechanism: "none", detail: "no hooks to remove" };
-  } catch (err: any) {
-    return { harness, installed: false, mechanism: "error", detail: String(err?.message ?? err) };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { harness, installed: false, mechanism: "error", detail: msg };
   }
 }

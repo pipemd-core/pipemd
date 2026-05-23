@@ -231,6 +231,42 @@ async function runYesMode(options: InitOptions, detection: { ecosystem: Ecosyste
   await runHarness(harness, agent, ecosystem, selectedIds, profile, tokenEstimates);
 }
 
+async function runRecommendedSetup(options: InitOptions, detection: { ecosystem: Ecosystem; signals: string[]; recommendedScripts: string[] }, detectedHarnessNames: HarnessName[]) {
+  const ecosystem = detection.ecosystem;
+  const profile: TokenProfile = "medium";
+  const selectedIds = detection.recommendedScripts;
+  const harnesses = detectedHarnessNames.length > 0 ? detectedHarnessNames : ["OS Agent"] as HarnessName[];
+  const agent = resolveAgent(harnesses);
+  const delivery: DeliveryMode = "active";
+
+  console.log();
+  console.log(chalk.cyan("📋 Recommended setup:"));
+  console.log(chalk.dim(`  Mode: agent`));
+  console.log(chalk.dim(`  Ecosystem: ${ecosystem}`));
+  console.log(chalk.dim(`  Harnesses: ${harnesses.join(", ")}`));
+  console.log(chalk.dim(`  Profile: ${profile}`));
+  console.log(chalk.dim(`  Delivery: ${delivery}`));
+  console.log(chalk.dim(`  Scripts: ${selectedIds.join(", ")}`));
+  console.log();
+
+  const confirm = await prompts({
+    type: "confirm",
+    name: "ok",
+    message: "Apply this setup?",
+    initial: true,
+  });
+  if (!confirm.ok) {
+    console.log(chalk.yellow("Switching to custom setup..."));
+    return;
+  }
+
+  runInit(agent, ecosystem, selectedIds, profile, harnesses, delivery);
+  installHooksForHarnesses(harnesses, delivery);
+  if (harnesses.length > 0) printHarnessRouting(harnesses);
+  console.log();
+  console.log(chalk.green("✔ PipeMD configured! Run `pmd start` to launch the daemon."));
+}
+
 async function runInteractive(options: InitOptions, detection: { ecosystem: Ecosystem; signals: string[]; recommendedScripts: string[] }, detectedHarnessNames: HarnessName[]) {
   console.log();
   console.log(chalk.cyan("🔍 Scanning workspace for AI agents..."));
@@ -258,6 +294,23 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
   `;
 
   console.log(chalk.yellow(PipeMD_ASCII));
+
+  const setupAnswer = await prompts({
+    type: "select",
+    name: "setup",
+    message: "Choose setup experience",
+    choices: [
+      { title: "Recommended", description: "Auto-detected defaults, one confirmation, done in seconds", value: "recommended" },
+      { title: "Custom", description: "Full control: pick every script, harness, and profile manually", value: "custom" },
+    ],
+    initial: 0,
+  });
+  if (!setupAnswer.setup) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+
+  if (setupAnswer.setup === "recommended") {
+    await runRecommendedSetup(options, detection, detectedHarnessNames);
+    return;
+  }
 
   const modeAnswer = await prompts({
     type: "select",

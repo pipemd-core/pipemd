@@ -81,10 +81,10 @@ function startRelayProcess(): number {
     stdio: "ignore",
   });
   child.unref();
-  return child.pid!;
+  return child.pid ?? 0;
 }
 
-function httpGet(urlStr: string): Promise<{ ok: boolean; data: any }> {
+function httpGet(urlStr: string): Promise<{ ok: boolean; data: Record<string, unknown> | null }> {
   return new Promise((resolve) => {
     try {
       const url = new URL(urlStr);
@@ -110,7 +110,7 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: any }> {
   });
 }
 
-function httpGetStatus(host: string, token?: string): Promise<any> {
+function httpGetStatus(host: string, token?: string): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
     try {
       const lastColon = host.lastIndexOf(":");
@@ -177,7 +177,7 @@ function formatLinkHelp(): string {
 }
 
 const link = new Command("link")
-  .description("Connect PipeMD daemons across machines and Docker containers")
+  .description("[Beta] Connect PipeMD daemons across machines and Docker containers (experimental)")
   .configureHelp({ visibleCommands: () => [] })
   .addHelpText("after", formatLinkHelp());
 

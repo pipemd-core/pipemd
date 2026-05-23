@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getStatusJson } from "./crew.js";
+import { getStatusJson } from "./crew-render.js";
 import { atomicWrite } from "./fs-utils.js";
 import { PIPEMD_DIR, STATUS_FILE, PID_FILE, INJECT_STATS_FILE, TUI_STATS_FILE, CONTEXT_FILES } from "./paths.js";
-import { tryReadJson, isPidAlive, readInjectStats } from "./json-utils.js";
+import { tryReadJson, isPidAlive } from "./json-utils.js";
+import { findContextBytes, readInjectStats } from "./statusline-data.js";
 import { log } from "./logger.js";
 
 export const DASHBOARD_FILE = path.join(PIPEMD_DIR, ".dashboard.json");
@@ -74,13 +75,8 @@ function readDaemonPid(): number | null {
   return null;
 }
 
-function readContextBytes(): number {
-  const st = tryReadJson(STATUS_FILE);
-  if (st && typeof st.renderedBytes === "number" && st.renderedBytes > 0) return st.renderedBytes;
-  for (const f of CONTEXT_FILES) {
-    try { const s = fs.statSync(f); if (s.isFile() && s.size > 0) return s.size; } catch (err: unknown) { log.debug(`stat context file: ${err instanceof Error ? err.message : String(err)}`); }
-  }
-  return 0;
+function readContextBytesFromDashboard(): number {
+  return findContextBytes(PIPEMD_DIR, process.cwd());
 }
 
 function readLastError(): { ts: number; handler: string; error: string } | undefined {
@@ -98,9 +94,13 @@ let daemonStartTime = Date.now();
 export function writeDashboard(): void {
   const pid = readDaemonPid();
   const crew = getStatusJson();
-  const bytes = readContextBytes();
-  const stats = readInjectStats(INJECT_STATS_FILE);
-  const tuiStats = tryReadJson(TUI_STATS_FILE);
+  const bytes = readContextBytesFromDashboard();
+  const stats = readInjectStats(PIPEMD_DIR);
+  const tuiStats = tryReadJson<{
+    events?: unknown[];
+    hooksFired?: number;
+    deliveryMode?: string;
+  }>(TUI_STATS_FILE);
   const pluginError = readLastError();
 
   const dashboard: DashboardData = {
@@ -115,7 +115,7 @@ export function writeDashboard(): void {
       tokens: Math.round(bytes / 4),
     },
     injection: stats,
-    events: tuiStats?.events || [],
+    events: (tuiStats?.events || []) as DashboardData["events"],
     hooksFired: tuiStats?.hooksFired || 0,
     deliveryMode: tuiStats?.deliveryMode || "passive",
     pluginError,
@@ -125,7 +125,7 @@ export function writeDashboard(): void {
 }
 
 export function readDashboard(): DashboardData | null {
-  return tryReadJson(DASHBOARD_FILE);
+  return tryReadJson<DashboardData>(DASHBOARD_FILE);
 }
 
 export function resetDaemonStart(): void {

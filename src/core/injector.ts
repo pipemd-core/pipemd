@@ -65,8 +65,9 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         const { stdout } = await execAsync(cmd, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd() });
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
-      } catch (err: any) {
-        const detail = err.stderr?.trimEnd() || err.message || "Unknown error";
+      } catch (err: unknown) {
+        const execErr = err as { stderr?: string; message?: string } | null;
+        const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
         results.set(name, buildBlock(name, ERROR_BLOCK(name, cmd, detail)));
       }
     })
@@ -99,8 +100,9 @@ function runCommandSync(commandName: string, cmd: string): string {
   try {
     const out = execSync(cmd, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd() });
     return out.trimEnd();
-  } catch (err: any) {
-    const detail = err.stderr?.trimEnd() || err.message || "Unknown error";
+  } catch (err: unknown) {
+    const execErr = err as { stderr?: string; message?: string } | null;
+    const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
     return ERROR_BLOCK(commandName, cmd, detail);
   }
 }

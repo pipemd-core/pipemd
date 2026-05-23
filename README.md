@@ -187,7 +187,7 @@ All injection is deduplicated — unchanged data is skipped, saving tokens.
 | `pmd refresh` | Pull newer bundled scripts. Add newly available blocks without re-init. |
 | `pmd doctor` | Diagnose: `mkfifo`, stale PIDs, missing scripts, config drift. |
 | `pmd crew` | Multi-agent coordination: join, claim files, surface conflicts. See below. |
-| `pmd link` | Cross-machine federation: connect daemons across machines and Docker. See below. |
+| `pmd link` | *(Beta)* Cross-machine federation: connect daemons across machines and Docker. |
 | `pmd trace` | Live resolution tree — debug crew coordination, locks, injection timeline. |
 | `pmd uninstall` | Clean removal. Restores original context file. |
 
@@ -303,7 +303,9 @@ pmd trace --snapshot   # One-shot output (no watch)
 
 ---
 
-## Link: Cross-Machine Federation
+## Link: Cross-Machine Federation *(Beta)*
+
+> **Note:** `pmd link` is in beta. The API, security model, and behavior may change. Not recommended for production use.
 
 `pmd link` connects PipeMD daemons across machines and Docker containers so agents running on different hosts share crew state in real time. This enables:
 
