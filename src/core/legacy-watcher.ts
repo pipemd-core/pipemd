@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
 import chokidar from "chokidar";
 import { injectFile } from "./injector.js";
 import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-back.js";
@@ -34,9 +36,10 @@ export function startLegacyWatcher(config: PipeConfig, writeBackGuard: { value: 
           const base = loadBase(config);
           const composed = composeContent(base, template.trim());
           for (const pipe of pipes) {
-            try { fs.chmodSync(pipe.file, 0o666); } catch {}
-            fs.writeFileSync(pipe.file, composed, "utf-8");
-            fs.chmodSync(pipe.file, 0o444);
+            const tmp = pipe.file + `.tmp-${randomBytes(4).toString("hex")}`;
+            fs.writeFileSync(tmp, composed, "utf-8");
+            fs.chmodSync(tmp, 0o444);
+            fs.renameSync(tmp, pipe.file);
             log.info(`Rendered: ${templatePath} → ${pipe.file}`);
           }
         }
@@ -118,9 +121,10 @@ export function startLegacyWatcher(config: PipeConfig, writeBackGuard: { value: 
               const base = loadBase(config);
               const composed = composeContent(base, template.trim());
               for (const pipe of matchedPipes) {
-                try { fs.chmodSync(pipe.file, 0o666); } catch {}
-                fs.writeFileSync(pipe.file, composed, "utf-8");
-                fs.chmodSync(pipe.file, 0o444);
+                const tmp = pipe.file + `.tmp-${randomBytes(4).toString("hex")}`;
+                fs.writeFileSync(tmp, composed, "utf-8");
+                fs.chmodSync(tmp, 0o444);
+                fs.renameSync(tmp, pipe.file);
                 log.info(`Rendered: ${file} → ${pipe.file}`);
               }
             }

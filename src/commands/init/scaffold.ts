@@ -273,10 +273,7 @@ interface ScaffoldResult {
   addFile: (filepath: string, content: string) => void;
 }
 
-export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: TokenProfile): ScaffoldResult {
-  const allScripts = getAllScripts();
-  const selectedScripts = allScripts.filter((s) => selectedIds.includes(s.id));
-
+function createDirectoryStructure(): void {
   mkdirp(PIPES_DIR);
   mkdirp(LIVE_DIR);
   mkdirp(path.join(SCRIPTS_DIR, "architecture"));
@@ -288,6 +285,52 @@ export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], pro
   mkdirp(path.join(SCRIPTS_DIR, "frontend"));
   mkdirp(path.join(SCRIPTS_DIR, "devops"));
   mkdirp(path.join(SCRIPTS_DIR, "crew"));
+}
+
+function writeScripts(
+  ecosystem: Ecosystem,
+  selectedScripts: ScriptDef[],
+  addFile: (filepath: string, content: string) => void,
+): void {
+  const ecosystemKey = ecosystem;
+  for (const script of selectedScripts) {
+    const scriptContent = loadScriptContent(ecosystemKey, script.file);
+    if (scriptContent) {
+      const scriptPath = path.join(SCRIPTS_DIR, script.file);
+      addFile(scriptPath, scriptContent);
+      try { fs.chmodSync(scriptPath, 0o755); } catch {}
+    }
+  }
+}
+
+function writeLibraryFiles(
+  ecosystem: Ecosystem,
+  addFile: (filepath: string, content: string) => void,
+): void {
+  const libDir = path.join(SCRIPTS_DIR, "lib");
+  const libContent = loadScriptContent(ecosystem, "lib/limit.sh");
+  if (libContent) {
+    mkdirp(libDir);
+    const libPath = path.join(libDir, "limit.sh");
+    addFile(libPath, libContent);
+    try { fs.chmodSync(libPath, 0o755); } catch {}
+  }
+
+  const archDir = path.join(SCRIPTS_DIR, "architecture");
+  const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
+  if (normContent) {
+    mkdirp(archDir);
+    const normPath = path.join(archDir, "normalize.sh");
+    addFile(normPath, normContent);
+    try { fs.chmodSync(normPath, 0o755); } catch {}
+  }
+}
+
+export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: TokenProfile): ScaffoldResult {
+  const allScripts = getAllScripts();
+  const selectedScripts = allScripts.filter((s) => selectedIds.includes(s.id));
+
+  createDirectoryStructure();
 
   const ecoEnv = `PMD_ECOSYSTEM=${ecosystem.replace(/\//g, "-")}`;
   const profileEnv = `PMD_TOKEN_PROFILE=${profile}`;
@@ -302,33 +345,8 @@ export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], pro
     createdFiles.push({ path: filepath, status: created ? "created" : "skipped" });
   };
 
-  const ecosystemKey = ecosystem;
-  for (const script of selectedScripts) {
-    const scriptContent = loadScriptContent(ecosystemKey, script.file);
-    if (scriptContent) {
-      const scriptPath = path.join(SCRIPTS_DIR, script.file);
-      addFile(scriptPath, scriptContent);
-      try { fs.chmodSync(scriptPath, 0o755); } catch {}
-    }
-  }
-
-  const libDir = path.join(SCRIPTS_DIR, "lib");
-  const libContent = loadScriptContent(ecosystemKey, "lib/limit.sh");
-  if (libContent) {
-    mkdirp(libDir);
-    const libPath = path.join(libDir, "limit.sh");
-    addFile(libPath, libContent);
-    try { fs.chmodSync(libPath, 0o755); } catch {}
-  }
-
-  const archDir = path.join(SCRIPTS_DIR, "architecture");
-  const normContent = loadScriptContent(ecosystemKey, "architecture/normalize.sh");
-  if (normContent) {
-    mkdirp(archDir);
-    const normPath = path.join(archDir, "normalize.sh");
-    addFile(normPath, normContent);
-    try { fs.chmodSync(normPath, 0o755); } catch {}
-  }
+  writeScripts(ecosystem, selectedScripts, addFile);
+  writeLibraryFiles(ecosystem, addFile);
 
   addFile(path.join(PIPEMD_DIR, ".gitignore"), "live/\ncrew/\n.daemon.pid\ndaemon.log\n");
 

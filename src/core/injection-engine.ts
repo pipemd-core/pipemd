@@ -14,11 +14,13 @@ import type {
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
+import { log } from "./logger.js";
 
 const VALIDATION_COOLDOWN_MS = 60_000
 const RATE_LIMIT_WINDOW_MS = 10_000
 const MAX_INJECTIONS_PER_WINDOW = 30
 const RESOLVER_TOTAL_BUDGET_MS = 5000
+const MAX_SESSION_TRACKS = 256
 const injectionTimestamps = new Map<string, number[]>()
 
 export interface ResolverContext {
@@ -52,6 +54,13 @@ function recordInjectionTimestamp(sessionId: string): void {
     injectionTimestamps.set(sessionId, timestamps)
   }
   timestamps.push(now)
+  if (injectionTimestamps.size > MAX_SESSION_TRACKS) {
+    const cutoff = now - RATE_LIMIT_WINDOW_MS
+    for (const [key, ts] of injectionTimestamps) {
+      while (ts.length > 0 && ts[0] < cutoff) ts.shift()
+      if (ts.length === 0) injectionTimestamps.delete(key)
+    }
+  }
 }
 
 function truncateLines(text: string, maxLines: number): string {
@@ -166,7 +175,7 @@ function resolveGitDelta(ctx: ResolverContext): string {
   if (!status.trim()) return "No changes since last check";
 
   const lines = status.trim().split("\n");
-  const modified = lines.filter((l) => l.startsWith(" M") || l.startsWith("M ")).length;
+  const modified = lines.filter((l) => l.startsWith(" M")).length;
   const staged = lines.filter((l) => l.startsWith("M ") || l.startsWith("A ") || l.startsWith("R ")).length;
   const untracked = lines.filter((l) => l.startsWith("??")).length;
 
@@ -183,6 +192,11 @@ function resolveCustom(ctx: ResolverContext): string {
   const rules = getRulesForTrigger(config, ctx.trigger);
   const customRule = rules.find((r) => r.source === "custom" && r.command);
   if (!customRule || !customRule.command) return "";
+
+  if (!config.customCommandsAllowed) {
+    log.warn(`Custom command blocked: "${customRule.command}". Set customCommandsAllowed: true in injection.yml to enable.`);
+    return "";
+  }
 
   try {
     return execSync(customRule.command, {

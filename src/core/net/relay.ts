@@ -114,6 +114,18 @@ function readToken(): string {
   return "";
 }
 
+let cachedRelayToken: string | null = null;
+
+function enforceToken(): string {
+  if (cachedRelayToken) return cachedRelayToken;
+  const token = readToken();
+  if (!token) {
+    throw new Error("Relay token not found — refusing to start without authentication. Delete .pipemd/link/ and run `pmd link` to regenerate.");
+  }
+  cachedRelayToken = token;
+  return token;
+}
+
 function syncWithPeers() {
   expireStaleGroups();
 
@@ -133,7 +145,9 @@ function syncWithPeers() {
   const myHostname = hostname();
 
   for (const peer of peers) {
-    const [host, portStr] = peer.host.split(":");
+    const lastColon = peer.host.lastIndexOf(":");
+    const host = peer.host.slice(0, lastColon);
+    const portStr = peer.host.slice(lastColon + 1);
     const port = parseInt(portStr || "9741", 10);
     const payload: SyncMessage = { hostname: myHostname, groups: allGroups };
 
@@ -196,9 +210,9 @@ function handleCrew(req: http.IncomingMessage, res: http.ServerResponse) {
 }
 
 function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
-  const token = readToken();
+  const token = cachedRelayToken || readToken();
   const auth = req.headers.authorization;
-  if (token && auth !== `Bearer ${token}`) {
+  if (!token || auth !== `Bearer ${token}`) {
     jsonResponse(res, 403, { error: "unauthorized" });
     return;
   }
@@ -315,6 +329,14 @@ export function runRelay() {
   const homeDir = os.homedir();
   const linkDir = path.join(homeDir, ".pipemd", "link");
   fs.mkdirSync(linkDir, { recursive: true });
+
+  try {
+    enforceToken();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error(`Relay auth error: ${msg}`);
+    process.exit(1);
+  }
 
   const pidFile = path.join(linkDir, "relay.pid");
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");

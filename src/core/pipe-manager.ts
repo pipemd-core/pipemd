@@ -196,30 +196,34 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
   log.info(`Serving pipe: ${pipePath} (${command})`);
 }
 
-export let cachedRenderedContent: string = "";
-export let isRendering = false;
+let _cachedRenderedContent: string = "";
+let _isRendering = false;
+
+export function getCachedRenderedContent(): string { return _cachedRenderedContent; }
+export function setIsRendering(value: boolean): void { _isRendering = value; }
+export function getIsRendering(): boolean { return _isRendering; }
 
 async function updateCache(templatePath: string, config: PipeConfig) {
-  if (isRendering) return;
-  isRendering = true;
+  if (_isRendering) return;
+  _isRendering = true;
   try {
     const start = Date.now();
     const template = fs.readFileSync(templatePath, "utf-8");
     const rendered = await renderContentAsync(template, config);
     const base = loadBase(config);
-    cachedRenderedContent = composeContent(base, rendered);
+    _cachedRenderedContent = composeContent(base, rendered);
     log.info("Cache updated");
     updateStatus({
       lastRun: new Date().toISOString(),
       durationMs: Date.now() - start,
-      renderedBytes: Buffer.byteLength(cachedRenderedContent, "utf-8"),
+      renderedBytes: Buffer.byteLength(_cachedRenderedContent, "utf-8"),
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error(`Error rendering context: ${msg}`);
     updateStatus({ lastRun: new Date().toISOString(), durationMs: 0, error: msg });
   } finally {
-    isRendering = false;
+    _isRendering = false;
   }
 }
 
@@ -273,8 +277,8 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
     try {
       const fd = fs.openSync(pipePath, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK);
       try {
-        if (cachedRenderedContent) {
-          writeSafe(fd, cachedRenderedContent);
+        if (_cachedRenderedContent) {
+          writeSafe(fd, _cachedRenderedContent);
         }
       } finally {
         closeSafe(fd);

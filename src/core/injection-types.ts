@@ -32,6 +32,7 @@ export interface InjectionRule {
 export interface InjectionConfig {
   delivery: DeliveryMode;
   rules: Partial<Record<InjectionTrigger, InjectionRule[]>>;
+  customCommandsAllowed?: boolean;
 }
 
 export interface InjectionPayload {
@@ -163,7 +164,9 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
     return { ...DEFAULT_ACTIVE_RULES };
   }
 
-  return { delivery, rules };
+  const customCommandsAllowed = obj.customCommandsAllowed === true;
+
+  return { delivery, rules, customCommandsAllowed: customCommandsAllowed || undefined };
 }
 
 export function loadInjectionConfig(configDir?: string): InjectionConfig {

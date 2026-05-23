@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawn, execSync as sleepExec } from "node:child_process";
+import { spawn } from "node:child_process";
 import { DEFAULT_PORT } from "../core/net/protocol.js";
 import { log } from "../core/logger.js";
 
@@ -113,7 +113,9 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: any }> {
 function httpGetStatus(host: string, token?: string): Promise<any> {
   return new Promise((resolve) => {
     try {
-      const [h, portStr] = host.split(":");
+      const lastColon = host.lastIndexOf(":");
+      const h = host.slice(0, lastColon);
+      const portStr = host.slice(lastColon + 1);
       const port = parseInt(portStr || "9741", 10);
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -136,7 +138,7 @@ function httpGetStatus(host: string, token?: string): Promise<any> {
   });
 }
 
-function doStart(): string | null {
+async function doStart(): Promise<string | null> {
   if (isRelayRunning()) {
     return chalk.dim(`Relay already running (PID ${readRelayPid()}, port ${readRelayPort()})`);
   }
@@ -150,7 +152,7 @@ function doStart(): string | null {
       const port = readRelayPort();
       return chalk.green(`✔ Relay started (PID ${check}, port ${port})`);
     }
-    sleepExec("sleep 0.25", { stdio: "ignore" });
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   return chalk.yellow("⚠ Relay may not have started. Check with `pmd link --list`");
@@ -181,8 +183,8 @@ const link = new Command("link")
 
 link
   .command("start", { hidden: true })
-  .action(() => {
-    const msg = doStart();
+  .action(async () => {
+    const msg = await doStart();
     if (msg) console.log(msg);
   });
 
@@ -272,7 +274,7 @@ link
       }
 
       if (!isRelayRunning()) {
-        doStart();
+        await doStart();
       }
 
       console.log(chalk.green(`✔ Connected to ${host}`));
@@ -281,7 +283,7 @@ link
     }
 
     if (!isRelayRunning()) {
-      doStart();
+      await doStart();
     }
 
     const token = readOrGenerateToken();

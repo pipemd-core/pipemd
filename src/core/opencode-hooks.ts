@@ -7,8 +7,9 @@ import type { HookInstallResult } from "./hooks.js";
 declare const PKG_VERSION: string;
 
 const OPENCODE_PLUGIN_VERSION = (() => {
-  const parts = PKG_VERSION.split(".").map(Number);
-  return (parts[0] || 1) * 100 + (parts[1] || 0);
+  const numeric = PKG_VERSION.split(".")[0] || "1";
+  const minor = PKG_VERSION.split(".")[1] || "0";
+  return (Number(numeric) || 1) * 100 + (Number(minor) || 0);
 })();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -176,18 +177,18 @@ function storePayload(trigger, payload) {
   },`;
 
   return template
-    .replace(/\$\{PLUGIN_VERSION\}/g, String(OPENCODE_PLUGIN_VERSION))
-    .replace(/\$\{DELIVERY_MODE\}/g, deliveryMode)
-    .replace(/\$\{INJECTION_HELPERS\}/g, injectionHelpers)
-    .replace(/\$\{BEFORE_HANDLER\}/g, beforeHandler)
-    .replace(/\$\{AFTER_HANDLER\}/g, afterHandler)
-    .replace(/\$\{SYSTEM_TRANSFORM\}/g, systemTransform)
-    .replace(/\$\{EVENT_HANDLER\}/g, eventHandler);
+    .replace(/\$\{PLUGIN_VERSION\}/g, () => String(OPENCODE_PLUGIN_VERSION))
+    .replace(/\$\{DELIVERY_MODE\}/g, () => deliveryMode)
+    .replace(/\$\{INJECTION_HELPERS\}/g, () => injectionHelpers)
+    .replace(/\$\{BEFORE_HANDLER\}/g, () => beforeHandler)
+    .replace(/\$\{AFTER_HANDLER\}/g, () => afterHandler)
+    .replace(/\$\{SYSTEM_TRANSFORM\}/g, () => systemTransform)
+    .replace(/\$\{EVENT_HANDLER\}/g, () => eventHandler);
 }
 
 function buildOpenCodeTuiPlugin(): string {
   const template = loadTemplate("opencode-tui.js");
-  return template.replace(/\$\{PLUGIN_VERSION\}/g, String(OPENCODE_PLUGIN_VERSION));
+  return template.replace(/\$\{PLUGIN_VERSION\}/g, () => String(OPENCODE_PLUGIN_VERSION));
 }
 
 function buildOpenCodeTuiConfig(pluginRelPath: string): string {

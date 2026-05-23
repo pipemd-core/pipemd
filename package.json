@@ -18,7 +18,7 @@
     "test:compose": "bash tests/e2e-compose.sh",
     "test:crew": "bash tests/e2e-crew.sh",
     "test:inject": "bash tests/e2e-inject.sh",
-    "test:unit": "npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts",
+    "test:unit": "npx tsx tests/test-daemon-core.ts && npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts",
     "test:link": "bash tests/e2e-link.sh",
     "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject && pnpm test:link"
   },

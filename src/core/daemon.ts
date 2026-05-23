@@ -72,7 +72,7 @@ function runPipeMode(config: PipeConfig) {
   return allPipePaths;
 }
 
-function shutdown(allPipePaths: string[]) {
+function shutdown(allPipePaths: string[], exitCode: number = 0) {
   setShuttingDown(true);
   log.info("Daemon shutting down...");
 
@@ -82,7 +82,7 @@ function shutdown(allPipePaths: string[]) {
     try { fs.unlinkSync(p); } catch {}
   }
   try { fs.unlinkSync(PID_FILE); } catch {}
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 export function runDaemon() {
@@ -158,8 +158,8 @@ export function runDaemon() {
     startLegacyWatcher(config, writeBackGuard);
   }
 
-  process.on("SIGTERM", () => { stopRelayClient(); shutdown(allPipePaths); });
-  process.on("SIGINT", () => { stopRelayClient(); shutdown(allPipePaths); });
+  process.on("SIGTERM", () => { stopRelayClient(); shutdown(allPipePaths, 0); });
+  process.on("SIGINT", () => { stopRelayClient(); shutdown(allPipePaths, 0); });
   process.on("SIGHUP", () => {});
 
   const relayUrl = config.link?.relay || process.env.PMD_RELAY;
@@ -174,13 +174,13 @@ export function runDaemon() {
 
   process.on("uncaughtException", (err) => {
     log.error(`Uncaught exception: ${err.message}`);
-    shutdown(allPipePaths);
+    shutdown(allPipePaths, 1);
   });
 
   process.on("unhandledRejection", (reason) => {
     const msg = reason instanceof Error ? reason.message : String(reason);
     log.error(`Unhandled rejection: ${msg}`);
-    shutdown(allPipePaths);
+    shutdown(allPipePaths, 1);
   });
 
   log.info("Daemon running.");

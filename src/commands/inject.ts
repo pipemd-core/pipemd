@@ -37,8 +37,22 @@ const inject = new Command("inject")
     if (opts.file) {
       const resolved = path.resolve(opts.file);
       const cwd = process.cwd();
-      const realPath = realpathSync(resolved);
-      const realCwd = realpathSync(cwd);
+      let realPath: string;
+      let realCwd: string;
+      try {
+        realPath = realpathSync(resolved);
+      } catch {
+        console.error(chalk.red(`✖ --file path does not resolve: ${resolved}`));
+        process.exit(1);
+        return;
+      }
+      try {
+        realCwd = realpathSync(cwd);
+      } catch {
+        console.error(chalk.red(`✖ Cannot resolve cwd: ${cwd}`));
+        process.exit(1);
+        return;
+      }
       if (!realPath.startsWith(realCwd + path.sep) && realPath !== realCwd) {
         console.error(chalk.red(`✖ --file must be within the project root`));
         process.exit(1);

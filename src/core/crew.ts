@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { atomicWrite } from "./fs-utils.js";
 import { isPidAlive } from "./json-utils.js";
 import { PIPEMD_DIR as _PIPEMD_DIR, CREW_DIR as _CREW_DIR } from "./paths.js";
@@ -515,8 +515,9 @@ function resolvePassiveAgents(
 
 function resolveUncommittedFiles(): string[] {
   try {
-    const out = execSync("git status --porcelain", {
+    const out = execFileSync("git", ["status", "--porcelain"], {
       encoding: "utf-8",
+      timeout: 5000,
       stdio: ["ignore", "pipe", "ignore"],
     });
     return out.split("\n").filter(Boolean).map((l) => l.slice(3));
