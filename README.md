@@ -84,6 +84,16 @@ graph TD
 <!-- pmd: type-check -->
 No type errors
 <!-- /pmd -->
+
+## Crew Activity
+<!-- pmd: crew -->
+👥 Crew — 2 harness(es), 3 active session(s) · updated 14:23:01
+
+▸ OpenCode  (coordinator cr_63d3 · pid 451693)
+    ├─ agent-1  claimed: src/auth.ts
+    └─ agent-2  no claim
+▸ Claude Code  (coordinator cr_d9b7 · pid 436566)  · remote: docker-host
+<!-- /pmd -->
 ```
 
 Every block is live. The AI reads up-to-the-millisecond data — no stale context, no hallucinations.
@@ -156,6 +166,7 @@ All injection is deduplicated — unchanged data is skipped, saving tokens.
 - **Architecture maps** — Live Mermaid dependency graphs for 7 ecosystems. The AI gets an instant mental model of your project.
 - **Smart Context Injection** — Hooks deliver scoped, file-specific context on every tool call, not just at session start.
 - **Crew coordination** — Multiple agents working the same repo see each other's file claims and get conflict warnings in real time.
+- **Cross-machine federation** — `pmd link` connects daemons across machines and Docker containers so distributed agents share crew state.
 - **Bidirectional write-back** — AI edits outside `<!-- pmd: -->` blocks persist to disk. The agent can tune its own context.
 - **Prompt cache optimized** — Static rules at the top, volatile data at the bottom. Your LLM prefix cache stays warm.
 - **Non-destructive setup** — Existing `AGENTS.md` content is preserved to `.pipemd/base.md`. Nothing gets overwritten.
@@ -176,6 +187,8 @@ All injection is deduplicated — unchanged data is skipped, saving tokens.
 | `pmd refresh` | Pull newer bundled scripts. Add newly available blocks without re-init. |
 | `pmd doctor` | Diagnose: `mkfifo`, stale PIDs, missing scripts, config drift. |
 | `pmd crew` | Multi-agent coordination: join, claim files, surface conflicts. See below. |
+| `pmd link` | Cross-machine federation: connect daemons across machines and Docker. See below. |
+| `pmd trace` | Live resolution tree — debug crew coordination, locks, injection timeline. |
 | `pmd uninstall` | Clean removal. Restores original context file. |
 
 ---
@@ -278,6 +291,103 @@ pmd crew leave
 | `pmd crew install-hooks` | Auto-wire harness hooks for self-reporting |
 
 Crew hooks are available for Claude Code, OpenCode, and Gemini CLI — agents automatically report their activity without manual commands.
+
+### Tracing Crew Activity
+
+```bash
+pmd trace              # Live TUI — session tree, locks, injection timeline
+pmd trace --locks      # File lock map only
+pmd trace --timeline   # Injection event timeline
+pmd trace --snapshot   # One-shot output (no watch)
+```
+
+---
+
+## Link: Cross-Machine Federation
+
+`pmd link` connects PipeMD daemons across machines and Docker containers so agents running on different hosts share crew state in real time. This enables:
+
+- **Distributed teams** — your laptop + a cloud dev box + a Docker container, all in one crew
+- **Docker fleets** — containers connect to the host relay via `PMD_RELAY=http://host.docker.internal:9741`
+- **Mixed harnesses** — Claude Code on your Mac, OpenCode in a container, Gemini on a remote server
+
+### Architecture
+
+```
+Machine A                          Machine B
+┌───────────────────┐              ┌───────────────────┐
+│  pmd-linkd relay  │◄─── sync ───►│  pmd-linkd relay  │
+│  (port 9741)      │              │  (port 9741)      │
+│  ▲        ▲       │              │  ▲        ▲       │
+│  │poll    │poll   │              │  │poll    │poll   │
+│  │        │       │              │  │        │       │
+│ daemon   daemon   │              │ daemon   daemon   │
+│ (OpenCode)(Claude) │              │ (Gemini) (Aider)  │
+└───────────────────┘              └───────────────────┘
+```
+
+- Each machine runs one relay (`pmd-linkd`)
+- Each daemon polls its local relay every 5 seconds
+- Relays sync with each other, exchanging all crew sessions
+- Sessions are scoped by **group** (default: repo directory name)
+
+### Usage
+
+**Machine A** — start the relay:
+
+```bash
+pmd link
+# Output: Relay running on port 9741
+#         Connect from another machine:
+#         pmd link 192.168.1.42:9741 --token abc123
+```
+
+**Machine B** — connect to Machine A:
+
+```bash
+pmd link 192.168.1.42:9741 --token abc123
+```
+
+**Docker container** — point to host relay:
+
+```bash
+docker run -e PMD_RELAY=http://host.docker.internal:9741 ...
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `pmd link` | Start relay on this machine and show invite command |
+| `pmd link <host:port>` | Connect to a remote relay |
+| `pmd link --list` | Show relay status and connected peers |
+| `pmd link --disconnect <host>` | Remove a peer connection |
+| `pmd link --stop` | Stop the relay process |
+
+### Configuration
+
+In `.pipemd/config.yml`:
+
+```yaml
+link:
+  group: "my-project"    # Named group for crew session routing
+  relay: "http://localhost:9741"  # Auto-start relay client when daemon boots
+```
+
+Or via environment variables (ideal for Docker):
+
+```bash
+PMD_RELAY=http://relay:9741    # Relay URL
+PMD_GROUP=my-project           # Group name
+PMD_LINK_PORT=9741             # Override relay listen port
+```
+
+### Security
+
+- `/crew` endpoint (daemon → relay) is **localhost-only** — rejects non-loopback connections
+- `/sync` endpoint (relay → relay) requires a **bearer token** — auto-generated on relay start
+- `/status` and `/health` are read-only — no sensitive data exposed
+- All session data is **ephemeral** — stored in-memory only, expires after 15 seconds without refresh
 
 ---
 
