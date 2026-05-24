@@ -1,4 +1,5 @@
-import { execSync, execFileSync, execFile } from "node:child_process";
+import { exec, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readCache, writeCache, isFresh, invalidate, DEFAULT_TTLS } from "./cache.js";
 import {
   loadInjectionConfig,
@@ -15,7 +16,9 @@ import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
-import { snapshotProcessesAsync } from "./crew-process.js";
+
+const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const VALIDATION_COOLDOWN_MS = 60_000
 const RATE_LIMIT_WINDOW_MS = 10_000
@@ -31,7 +34,7 @@ export interface ResolverContext {
   config: InjectionConfig;
 }
 
-type SourceResolver = (ctx: ResolverContext) => string;
+type SourceResolver = (ctx: ResolverContext) => Promise<string>;
 
 function isRateLimited(sessionId: string): boolean {
   const now = Date.now()
@@ -70,35 +73,20 @@ function truncateLines(text: string, maxLines: number): string {
   return lines.slice(0, maxLines).join("\n") + `\n... (+${extra} more)`;
 }
 
-function runGit(args: string[], fallback: string = ""): string {
-  try {
-    return execFileSync("git", args, {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-  } catch (err: unknown) {
-    log.debug(`runGit failed: ${errMsg(err)}`);
-    return fallback;
-  }
-}
-
 async function runGitAsync(args: string[], fallback: string = ""): Promise<string> {
   try {
-    const out = await new Promise<string>((resolve, reject) => {
-      execFile("git", args, { encoding: "utf-8", timeout: 5000 }, (err, stdout) => {
-        if (err) reject(err);
-        else resolve(stdout ?? "");
-      });
+    const { stdout } = await execFileAsync("git", args, {
+      encoding: "utf-8",
+      timeout: 5000,
     });
-    return out.trim();
+    return stdout.trim();
   } catch (err: unknown) {
     log.debug(`runGitAsync failed: ${errMsg(err)}`);
     return fallback;
   }
 }
 
-function resolveCrewStatus(ctx: ResolverContext): string {
+async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
   const sessions = listSessions();
   const lines: string[] = [];
 
@@ -119,7 +107,7 @@ function resolveCrewStatus(ctx: ResolverContext): string {
   return lines.slice(0, 5).join("\n");
 }
 
-function resolveCrewLocks(ctx: ResolverContext): string {
+async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "No target file specified";
 
@@ -143,7 +131,7 @@ function resolveCrewLocks(ctx: ResolverContext): string {
   return `⚠️ CONFLICT on ${file}: ${ids}`;
 }
 
-function resolveValidation(ctx: ResolverContext): string {
+async function resolveValidation(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
   const entry = readCache(`validation:${file}`);
@@ -151,16 +139,16 @@ function resolveValidation(ctx: ResolverContext): string {
   return "";
 }
 
-function resolveFileErrors(ctx: ResolverContext): string {
-  const result = resolveValidation(ctx);
+async function resolveFileErrors(ctx: ResolverContext): Promise<string> {
+  const result = await resolveValidation(ctx);
   return result || `No known errors in ${ctx.targetFile ?? "file"}`;
 }
 
-function resolveValidateFile(ctx: ResolverContext): string {
+async function resolveValidateFile(ctx: ResolverContext): Promise<string> {
   return resolveValidation(ctx);
 }
 
-function resolveGitContext(ctx: ResolverContext): string {
+async function resolveGitContext(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "No target file specified";
 
@@ -168,7 +156,7 @@ function resolveGitContext(ctx: ResolverContext): string {
   const cached = readCache(cacheKey);
   if (cached && cached.data) return cached.data;
 
-  const result = runGit(["log", "-1", "--format=%an, %ar", "--", file]);
+  const result = await runGitAsync(["log", "-1", "--format=%an, %ar", "--", file]);
   if (!result) return "No git history for this file";
 
   const content = `Last edit: ${result}`;
@@ -176,194 +164,7 @@ function resolveGitContext(ctx: ResolverContext): string {
   return content;
 }
 
-function resolveGitDelta(ctx: ResolverContext): string {
-  const cached = readCache("git-status");
-  let status: string;
-
-  if (cached && cached.data) {
-    status = cached.data;
-  } else {
-    status = runGit(["status", "--porcelain"]);
-    if (!status) return "Not a git repo";
-    writeCache("git-status", status, DEFAULT_TTLS["git-status"] ?? 10000);
-  }
-
-  if (!status.trim()) return "No changes since last check";
-
-  const lines = status.trim().split("\n");
-  const modified = lines.filter((l) => l.startsWith(" M")).length;
-  const staged = lines.filter((l) => l.startsWith("M ") || l.startsWith("A ") || l.startsWith("R ")).length;
-  const untracked = lines.filter((l) => l.startsWith("??")).length;
-
-  const parts: string[] = [];
-  if (modified > 0) parts.push(`${modified} modified`);
-  if (staged > 0) parts.push(`${staged} staged`);
-  if (untracked > 0) parts.push(`${untracked} untracked`);
-
-  return parts.join(", ") || "No changes since last check";
-}
-
-function resolveCustom(ctx: ResolverContext): string {
-  const config = ctx.config;
-  const rules = getRulesForTrigger(config, ctx.trigger);
-  const customRule = rules.find((r) => r.source === "custom" && r.command);
-  if (!customRule || !customRule.command) return "";
-
-  if (!config.customCommandsAllowed) {
-    log.warn(`Custom command blocked: "${customRule.command}". Set customCommandsAllowed: true in injection.yml to enable.`);
-    return "";
-  }
-
-  try {
-    return execSync(customRule.command, {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-  } catch (err: unknown) {
-    log.debug(`resolveCustom command failed: ${errMsg(err)}`);
-    return "";
-  }
-}
-
-function resolveGitStaged(ctx: ResolverContext): string {
-  try {
-    const result = execFileSync("git", ["diff", "--cached", "--stat"], {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-    if (!result) return "No staged changes";
-    return result;
-  } catch (err: unknown) {
-    log.debug(`resolveGitStaged failed: ${errMsg(err)}`);
-    return "No staged changes";
-  }
-}
-
-function resolveGitDiffStat(ctx: ResolverContext): string {
-  try {
-    const result = execFileSync("git", ["diff", "--stat"], {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-    if (!result) return "No unstaged changes";
-    return result;
-  } catch (err: unknown) {
-    log.debug(`resolveGitDiffStat failed: ${errMsg(err)}`);
-    return "No unstaged changes";
-  }
-}
-
-const RESOLVERS: Record<ContextSource, SourceResolver> = {
-  "crew-status": resolveCrewStatus,
-  "crew-locks": resolveCrewLocks,
-  "file-errors": resolveFileErrors,
-  "validate-file": resolveValidateFile,
-  "git-context": resolveGitContext,
-  "git-delta": resolveGitDelta,
-  "git-staged": resolveGitStaged,
-  "git-diff-stat": resolveGitDiffStat,
-  custom: resolveCustom,
-};
-
-function deriveStableSessionId(): string {
-  const { pid, harness } = resolveAgentIdentity();
-  return computePayloadHash(`${process.cwd()}:${pid}:${harness}`);
-}
-
-export function resolveInjections(
-  trigger: InjectionTrigger,
-  targetFile?: string,
-  sessionId?: string,
-): InjectionPayload[] {
-  const config = loadInjectionConfig();
-  const rules = getRulesForTrigger(config, trigger);
-  const effectiveSessionId = sessionId || deriveStableSessionId()
-
-  if (isRateLimited(effectiveSessionId)) {
-    return []
-  }
-
-  const payloads: InjectionPayload[] = []
-  const resolverStart = Date.now()
-
-  for (const rule of rules) {
-    if (Date.now() - resolverStart > RESOLVER_TOTAL_BUDGET_MS) {
-      break
-    }
-    if (rule.scope === "target-file" && !targetFile) continue;
-
-    const ctx: ResolverContext = {
-      trigger,
-      targetFile,
-      sessionId: effectiveSessionId,
-      config,
-    };
-
-    const resolver = RESOLVERS[rule.source];
-    if (!resolver) continue;
-
-    let content = resolver(ctx);
-
-    if (rule["max-lines"]) {
-      content = truncateLines(content, rule["max-lines"]);
-    }
-
-    const hash = computePayloadHash(content);
-    const status = checkInjectionStatus(effectiveSessionId, rule.source, content);
-
-    if (status === "unchanged") continue;
-
-    recordInjection(effectiveSessionId, rule.source, content)
-    recordInjectionTimestamp(effectiveSessionId)
-
-    payloads.push({
-      trigger,
-      source: rule.source,
-      scope: rule.scope,
-      targetFile,
-      content,
-      hash,
-    });
-  }
-
-  return payloads;
-}
-
-async function resolveCrewStatusAsync(_ctx: ResolverContext): Promise<string> {
-  const sessions = listSessions();
-  const lines: string[] = [];
-
-  if (sessions.length === 0) {
-    lines.push("Crew: no active sessions");
-  } else {
-    for (const s of sessions) {
-      const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
-      lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})`);
-    }
-  }
-
-  const conflicts = findConflicts(sessions);
-  for (const c of conflicts) {
-    lines.push(`⚠️ CONFLICT: ${c.path} claimed by ${c.sessionIds.join(", ")}`);
-  }
-
-  return lines.slice(0, 5).join("\n");
-}
-
-async function resolveGitStagedAsync(_ctx: ResolverContext): Promise<string> {
-  const result = await runGitAsync(["diff", "--cached", "--stat"]);
-  return result || "No staged changes";
-}
-
-async function resolveGitDiffStatAsync(_ctx: ResolverContext): Promise<string> {
-  const result = await runGitAsync(["diff", "--stat"]);
-  return result || "No unstaged changes";
-}
-
-async function resolveGitDeltaAsync(ctx: ResolverContext): Promise<string> {
+async function resolveGitDelta(_ctx: ResolverContext): Promise<string> {
   const cached = readCache("git-status");
   let status: string;
 
@@ -390,21 +191,57 @@ async function resolveGitDeltaAsync(ctx: ResolverContext): Promise<string> {
   return parts.join(", ") || "No changes since last check";
 }
 
-type AsyncSourceResolver = (ctx: ResolverContext) => Promise<string>;
+async function resolveCustom(ctx: ResolverContext): Promise<string> {
+  const config = ctx.config;
+  const rules = getRulesForTrigger(config, ctx.trigger);
+  const customRule = rules.find((r) => r.source === "custom" && r.command);
+  if (!customRule || !customRule.command) return "";
 
-const ASYNC_RESOLVERS: Partial<Record<ContextSource, AsyncSourceResolver>> = {
-  "crew-status": resolveCrewStatusAsync,
-  "crew-locks": async (ctx) => resolveCrewLocks(ctx),
-  "file-errors": async (ctx) => resolveFileErrors(ctx),
-  "validate-file": async (ctx) => resolveValidateFile(ctx),
-  "git-context": async (ctx) => resolveGitContext(ctx),
-  "git-delta": resolveGitDeltaAsync,
-  "git-staged": resolveGitStagedAsync,
-  "git-diff-stat": resolveGitDiffStatAsync,
-  custom: async (ctx) => resolveCustom(ctx),
+  if (!config.customCommandsAllowed) {
+    log.warn(`Custom command blocked: "${customRule.command}". Set customCommandsAllowed: true in injection.yml to enable.`);
+    return "";
+  }
+
+  try {
+    const { stdout } = await execAsync(customRule.command, {
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    return stdout.trim();
+  } catch (err: unknown) {
+    log.debug(`resolveCustom command failed: ${errMsg(err)}`);
+    return "";
+  }
+}
+
+async function resolveGitStaged(_ctx: ResolverContext): Promise<string> {
+  const result = await runGitAsync(["diff", "--cached", "--stat"]);
+  return result || "No staged changes";
+}
+
+async function resolveGitDiffStat(_ctx: ResolverContext): Promise<string> {
+  const result = await runGitAsync(["diff", "--stat"]);
+  return result || "No unstaged changes";
+}
+
+const RESOLVERS: Record<ContextSource, SourceResolver> = {
+  "crew-status": resolveCrewStatus,
+  "crew-locks": resolveCrewLocks,
+  "file-errors": resolveFileErrors,
+  "validate-file": resolveValidateFile,
+  "git-context": resolveGitContext,
+  "git-delta": resolveGitDelta,
+  "git-staged": resolveGitStaged,
+  "git-diff-stat": resolveGitDiffStat,
+  custom: resolveCustom,
 };
 
-export async function resolveInjectionsAsync(
+function deriveStableSessionId(): string {
+  const { pid, harness } = resolveAgentIdentity();
+  return computePayloadHash(`${process.cwd()}:${pid}:${harness}`);
+}
+
+export async function resolveInjections(
   trigger: InjectionTrigger,
   targetFile?: string,
   sessionId?: string,
@@ -433,7 +270,7 @@ export async function resolveInjectionsAsync(
       config,
     };
 
-    const resolver = ASYNC_RESOLVERS[rule.source];
+    const resolver = RESOLVERS[rule.source];
     if (!resolver) continue;
 
     const content = await resolver(ctx);
@@ -475,7 +312,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
     const errors: string[] = [];
 
     try {
-      const eslintResult = await new Promise<string>((resolve, reject) => {
+      const eslintResult = await new Promise<string>((resolve) => {
         execFile("npx", ["eslint", filePath, "--format", "compact"], {
           timeout: 10000,
         }, (err, stdout) => {

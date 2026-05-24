@@ -2,7 +2,6 @@ import http from "node:http";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
 import type { CrewSession } from "../crew.js";
 import { log, errMsg } from "../logger.js";
 import {
@@ -101,12 +100,22 @@ function readPeers(): PeerConfig[] {
   } catch (err: unknown) { log.debug(`readPeers failed: ${errMsg(err)}`); return []; }
 }
 
+function enforceFilePermissions(filePath: string): void {
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (err: unknown) {
+    log.debug(`chmod ${filePath} failed: ${errMsg(err)}`);
+  }
+}
+
 function readToken(): string {
   try {
     const homeDir = os.homedir();
     const tokenFile = path.join(homeDir, ".pipemd", "link", "relay.token");
     if (fs.existsSync(tokenFile)) {
-      return fs.readFileSync(tokenFile, "utf-8").trim();
+      const token = fs.readFileSync(tokenFile, "utf-8").trim();
+      enforceFilePermissions(tokenFile);
+      return token;
     }
   } catch (err: unknown) { log.debug(`read relay token failed: ${errMsg(err)}`); }
   return "";
@@ -338,6 +347,7 @@ export function runRelay() {
 
   const pidFile = path.join(linkDir, "relay.pid");
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");
+  enforceFilePermissions(pidFile);
 
   process.on("SIGTERM", () => {
     try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGTERM unlink pidFile failed: ${errMsg(err)}`); }
@@ -357,6 +367,7 @@ export function runRelay() {
     log.info(`Relay running on port ${actualPort}`);
     const portFile = path.join(linkDir, "relay.port");
     fs.writeFileSync(portFile, String(actualPort), "utf-8");
+    enforceFilePermissions(portFile);
   }).catch((err) => {
     log.error(`Relay failed to start: ${err.message}`);
     try { fs.unlinkSync(pidFile); } catch (err2: unknown) { log.debug(`startRelay cleanup unlink failed: ${errMsg(err2)}`); }

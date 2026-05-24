@@ -94,7 +94,8 @@ export function runDaemon() {
     config = loadConfig();
   } catch (err) {
     if (err instanceof ConfigError) {
-      process.exit(1)
+      log.error(`Configuration error: ${err.message}`);
+      shutdown([], 1);
     }
     throw err
   }

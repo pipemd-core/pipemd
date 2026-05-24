@@ -97,7 +97,7 @@ const inject = new Command("inject")
       : opts.format === "gemini-json" ? "gemini-json"
       : "plain";
 
-    const payloads = resolveInjections(trigger, opts.file, opts.session);
+    const payloads = await resolveInjections(trigger, opts.file, opts.session);
 
     // Record injection traffic so the Claude Code statusline has data — its
     // inject hooks call `pmd inject` directly and would otherwise track nothing.

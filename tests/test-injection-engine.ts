@@ -76,10 +76,10 @@ function clearDedup() {
 }
 
 describe("before-read", () => {
-  it("with no sessions returns crew-status payload", () => {
+  it("with no sessions returns crew-status payload", async () => {
     clearCrew()
     clearDedup()
-    const payloads = resolveInjections("before-read", undefined, "sess-1")
+    const payloads = await resolveInjections("before-read", undefined, "sess-1")
     assert.equal(payloads.length, 1)
     assert.equal(payloads[0].source, "crew-status")
     assert.ok(payloads[0].content.includes("no active sessions"))
@@ -87,11 +87,11 @@ describe("before-read", () => {
     assert.equal(payloads[0].scope, "global")
   })
 
-  it("with a session shows session info", () => {
+  it("with a session shows session info", async () => {
     clearCrew()
     clearDedup()
     writeCrewSession(makeSession({ id: "cr_alpha", harness: "AlphaAgent" }))
-    const payloads = resolveInjections("before-read", undefined, "sess-2")
+    const payloads = await resolveInjections("before-read", undefined, "sess-2")
     assert.equal(payloads.length, 1)
     assert.ok(payloads[0].content.includes("1 session(s)"))
     assert.ok(payloads[0].content.includes("AlphaAgent"))
@@ -100,24 +100,24 @@ describe("before-read", () => {
 })
 
 describe("before-edit", () => {
-  it("without targetFile skips target-file scoped rules", () => {
+  it("without targetFile skips target-file scoped rules", async () => {
     clearCrew()
     clearDedup()
-    const payloads = resolveInjections("before-edit", undefined, "sess-3")
+    const payloads = await resolveInjections("before-edit", undefined, "sess-3")
     assert.equal(payloads.length, 0)
   })
 
-  it("with targetFile and no claims returns unclaimed", () => {
+  it("with targetFile and no claims returns unclaimed", async () => {
     clearCrew()
     clearDedup()
-    const payloads = resolveInjections("before-edit", "src/foo.ts", "sess-4")
+    const payloads = await resolveInjections("before-edit", "src/foo.ts", "sess-4")
     assert.equal(payloads.length, 1)
     assert.equal(payloads[0].source, "crew-locks")
     assert.ok(payloads[0].content.includes("unclaimed"))
     assert.equal(payloads[0].targetFile, "src/foo.ts")
   })
 
-  it("with claim on target file returns claimed info", () => {
+  it("with claim on target file returns claimed info", async () => {
     clearCrew()
     clearDedup()
     const now = new Date().toISOString()
@@ -128,14 +128,14 @@ describe("before-edit", () => {
         claimedFiles: [{ path: "src/bar.ts", claimedAt: now }],
       }),
     )
-    const payloads = resolveInjections("before-edit", "src/bar.ts", "sess-5")
+    const payloads = await resolveInjections("before-edit", "src/bar.ts", "sess-5")
     assert.equal(payloads.length, 1)
     assert.ok(payloads[0].content.includes("claimed by"))
     assert.ok(payloads[0].content.includes("ClaimantAgent"))
     assert.ok(payloads[0].content.includes("cr_claimant"))
   })
 
-  it("with conflicting claims shows CONFLICT", () => {
+  it("with conflicting claims shows CONFLICT", async () => {
     clearCrew()
     clearDedup()
     const now = new Date().toISOString()
@@ -153,12 +153,12 @@ describe("before-edit", () => {
         claimedFiles: [{ path: "src/conflict.ts", claimedAt: now }],
       }),
     )
-    const payloads = resolveInjections("before-edit", "src/conflict.ts", "sess-6")
+    const payloads = await resolveInjections("before-edit", "src/conflict.ts", "sess-6")
     assert.equal(payloads.length, 1)
     assert.ok(payloads[0].content.includes("CONFLICT"))
   })
 
-  it("on different file than the claim returns unclaimed", () => {
+  it("on different file than the claim returns unclaimed", async () => {
     clearCrew()
     clearDedup()
     const now = new Date().toISOString()
@@ -169,56 +169,56 @@ describe("before-edit", () => {
         claimedFiles: [{ path: "src/claimed.ts", claimedAt: now }],
       }),
     )
-    const payloads = resolveInjections("before-edit", "src/unclaimed.ts", "sess-8")
+    const payloads = await resolveInjections("before-edit", "src/unclaimed.ts", "sess-8")
     assert.equal(payloads.length, 1)
     assert.ok(payloads[0].content.includes("unclaimed"))
   })
 })
 
 describe("dedup", () => {
-  it("second call with identical content returns empty", () => {
+  it("second call with identical content returns empty", async () => {
     clearCrew()
     clearDedup()
-    const first = resolveInjections("before-read", undefined, "sess-dedup")
+    const first = await resolveInjections("before-read", undefined, "sess-dedup")
     assert.equal(first.length, 1)
-    const second = resolveInjections("before-read", undefined, "sess-dedup")
+    const second = await resolveInjections("before-read", undefined, "sess-dedup")
     assert.equal(second.length, 0)
   })
 
-  it("changed content after state change returns new payload", () => {
+  it("changed content after state change returns new payload", async () => {
     clearCrew()
     clearDedup()
-    const first = resolveInjections("before-read", undefined, "sess-dedup2")
+    const first = await resolveInjections("before-read", undefined, "sess-dedup2")
     assert.equal(first.length, 1)
     assert.ok(first[0].content.includes("no active sessions"))
     writeCrewSession(makeSession({ id: "cr_new", harness: "NewAgent" }))
-    const second = resolveInjections("before-read", undefined, "sess-dedup2")
+    const second = await resolveInjections("before-read", undefined, "sess-dedup2")
     assert.equal(second.length, 1)
     assert.ok(second[0].content.includes("NewAgent"))
   })
 
-  it("different session ids have independent dedup state", () => {
+  it("different session ids have independent dedup state", async () => {
     clearCrew()
     clearDedup()
-    const first = resolveInjections("before-read", undefined, "sess-ind-a")
+    const first = await resolveInjections("before-read", undefined, "sess-ind-a")
     assert.equal(first.length, 1)
-    const second = resolveInjections("before-read", undefined, "sess-ind-b")
+    const second = await resolveInjections("before-read", undefined, "sess-ind-b")
     assert.equal(second.length, 1)
   })
 })
 
 describe("misc", () => {
-  it("trigger with no configured rules returns empty", () => {
+  it("trigger with no configured rules returns empty", async () => {
     clearCrew()
     clearDedup()
-    const payloads = resolveInjections("on-idle", undefined, "sess-7")
+    const payloads = await resolveInjections("on-idle", undefined, "sess-7")
     assert.equal(payloads.length, 0)
   })
 
-  it("payload hash is 16 hex characters", () => {
+  it("payload hash is 16 hex characters", async () => {
     clearCrew()
     clearDedup()
-    const payloads = resolveInjections("before-read", undefined, "sess-hash")
+    const payloads = await resolveInjections("before-read", undefined, "sess-hash")
     assert.equal(payloads.length, 1)
     assert.ok(
       /^[0-9a-f]{16}$/.test(payloads[0].hash),
@@ -226,7 +226,7 @@ describe("misc", () => {
     )
   })
 
-  it("max-lines truncation applied when output exceeds limit", () => {
+  it("max-lines truncation applied when output exceeds limit", async () => {
     clearCrew()
     clearDedup()
     for (let i = 0; i < 10; i++) {
@@ -234,7 +234,7 @@ describe("misc", () => {
         makeSession({ id: `cr_many_${i}`, harness: `Agent${i}`, pid: 10000 + i }),
       )
     }
-    const payloads = resolveInjections("before-read", undefined, "sess-trunc")
+    const payloads = await resolveInjections("before-read", undefined, "sess-trunc")
     assert.equal(payloads.length, 1)
     const lines = payloads[0].content.split("\n")
     assert.ok(lines.length <= 4, `expected ≤4 lines, got ${lines.length}`)

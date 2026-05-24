@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync, execFileSync } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { renderContentAsync } from "./injector.js";
 import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-back.js";
 import { log, errMsg } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { LIVE_DIR, STATUS_FILE } from "./paths.js";
+
+const execAsync = promisify(exec);
 
 export const ENXIO_MAX_RETRIES = 100;
 export const ENXIO_RETRY_WINDOW_MS = 60000;
@@ -173,24 +176,22 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
         return;
       }
 
-      try {
-        const output = execSync(cmd, {
-          encoding: "utf-8",
-          timeout: COMMAND_TIMEOUT_MS,
-          cwd: process.cwd(),
-        }).trimEnd();
-
-        const md = `\`\`\`\n${output}\n\`\`\``;
+      execAsync(cmd, {
+        encoding: "utf-8",
+        timeout: COMMAND_TIMEOUT_MS,
+        cwd: process.cwd(),
+      }).then(({ stdout }) => {
+        const md = `\`\`\`\n${stdout.trimEnd()}\n\`\`\``;
         writeSafe(writeFd, md);
-      } catch (err: unknown) {
+        closeSafe(writeFd);
+        trackedSetTimeout(reServe, delay);
+      }).catch((err: unknown) => {
         const e = err as { stderr?: string; message?: string };
         const detail = e.stderr?.trimEnd() || e.message || "Unknown error";
         writeSafe(writeFd, `\`\`\`\n⚠️ Command failed: ${cmd}\n${detail}\n\`\`\``);
-      } finally {
         closeSafe(writeFd);
-      }
-
-      trackedSetTimeout(reServe, delay);
+        trackedSetTimeout(reServe, delay);
+      });
     });
   };
 
