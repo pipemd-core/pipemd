@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DeliveryMode } from "./injection-types.js";
 import type { HookInstallResult } from "./hooks.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 
 declare const PKG_VERSION: string;
 
@@ -233,7 +233,7 @@ export function installOpenCodeHooks(
   }
 
   if (!dryRun && fs.existsSync(legacyTuiFile)) {
-    try { fs.unlinkSync(legacyTuiFile); results.push("TUI: removed legacy plugin/ copy"); } catch (err: unknown) { log.debug(`unlink legacy TUI failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { fs.unlinkSync(legacyTuiFile); results.push("TUI: removed legacy plugin/ copy"); } catch (err: unknown) { log.debug(`unlink legacy TUI failed: ${errMsg(err)}`); }
   }
   let tuiInstalled = false;
   const tuiExisting = fs.existsSync(tuiFile) ? fs.readFileSync(tuiFile, "utf-8") : "";
@@ -270,7 +270,7 @@ export function installOpenCodeHooks(
         results.push("tui.json: already registered");
       }
     } catch (err: unknown) {
-      log.debug(`tui.json parse failed, recreating: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`tui.json parse failed, recreating: ${errMsg(err)}`);
       configUpdated = true;
       if (!dryRun) fs.writeFileSync(tuiConfigFile, buildOpenCodeTuiConfig(relPath), "utf-8");
       results.push("tui.json: created");
@@ -303,9 +303,9 @@ export function removeOpenCodeHooks(cwd: string): HookInstallResult {
   const legacyTuiFile = path.join(cwd, ".opencode", "plugin", "pmd-crew-tui.js");
   const tuiConfigFile = path.join(cwd, ".opencode", "tui.json");
 
-  try { fs.unlinkSync(serverFile); results.push("server plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink server failed: ${err instanceof Error ? err.message : String(err)}`); }
-  try { fs.unlinkSync(tuiFile); results.push("TUI plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink TUI failed: ${err instanceof Error ? err.message : String(err)}`); }
-  try { fs.unlinkSync(legacyTuiFile); results.push("legacy TUI plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink legacy TUI failed: ${err instanceof Error ? err.message : String(err)}`); }
+  try { fs.unlinkSync(serverFile); results.push("server plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink server failed: ${errMsg(err)}`); }
+  try { fs.unlinkSync(tuiFile); results.push("TUI plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink TUI failed: ${errMsg(err)}`); }
+  try { fs.unlinkSync(legacyTuiFile); results.push("legacy TUI plugin removed"); removed = true; } catch (err: unknown) { log.debug(`unlink legacy TUI failed: ${errMsg(err)}`); }
 
   if (fs.existsSync(tuiConfigFile)) {
     try {
@@ -324,7 +324,7 @@ export function removeOpenCodeHooks(cwd: string): HookInstallResult {
           }
         }
       }
-    } catch (err: unknown) { log.debug(`tui.json cleanup parse failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`tui.json cleanup parse failed: ${errMsg(err)}`); }
   }
 
   return {

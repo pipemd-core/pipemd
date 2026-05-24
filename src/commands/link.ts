@@ -7,7 +7,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { DEFAULT_PORT } from "../core/net/protocol.js";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
 
 const LINK_DIR = path.join(os.homedir(), ".pipemd", "link");
@@ -24,7 +24,7 @@ function readRelayPid(): number | null {
   try {
     return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10) || null;
   } catch (err: unknown) {
-    log.debug(`read relay PID: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read relay PID: ${errMsg(err)}`);
     return null;
   }
 }
@@ -36,7 +36,7 @@ function isRelayRunning(): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err: unknown) {
-    log.debug(`check relay process: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`check relay process: ${errMsg(err)}`);
     try { fs.unlinkSync(PID_FILE); } catch (err2: unknown) { log.debug(`unlink stale PID file: ${err2 instanceof Error ? err2.message : String(err2)}`); }
     return false;
   }
@@ -46,7 +46,7 @@ function readRelayPort(): number {
   try {
     return parseInt(fs.readFileSync(PORT_FILE, "utf-8").trim(), 10) || DEFAULT_PORT;
   } catch (err: unknown) {
-    log.debug(`read relay port: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read relay port: ${errMsg(err)}`);
     return DEFAULT_PORT;
   }
 }
@@ -56,7 +56,7 @@ function readOrGenerateToken(): string {
     if (fs.existsSync(TOKEN_FILE)) {
       return fs.readFileSync(TOKEN_FILE, "utf-8").trim();
     }
-  } catch (err: unknown) { log.debug(`read existing token failed: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`read existing token failed: ${errMsg(err)}`); }
   const token = crypto.randomBytes(16).toString("hex");
   ensureLinkDir();
   fs.writeFileSync(TOKEN_FILE, token, "utf-8");
@@ -68,7 +68,7 @@ function readPeers(): { host: string; token: string }[] {
     if (!fs.existsSync(PEERS_FILE)) return [];
     return JSON.parse(fs.readFileSync(PEERS_FILE, "utf-8"));
   } catch (err: unknown) {
-    log.debug(`read peers: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read peers: ${errMsg(err)}`);
     return [];
   }
 }
@@ -102,7 +102,7 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: Record<string, un
             try {
               resolve({ ok: res.statusCode === 200, data: JSON.parse(Buffer.concat(chunks).toString("utf-8")) });
             } catch (err: unknown) {
-              log.debug(`parse http response: ${err instanceof Error ? err.message : String(err)}`);
+              log.debug(`parse http response: ${errMsg(err)}`);
               resolve({ ok: res.statusCode === 200, data: null });
             }
           });
@@ -111,7 +111,7 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: Record<string, un
       req.on("error", () => resolve({ ok: false, data: null }));
       req.on("timeout", () => { req.destroy(); resolve({ ok: false, data: null }); });
     } catch (err: unknown) {
-      log.debug(`http get ${urlStr}: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`http get ${urlStr}: ${errMsg(err)}`);
       resolve({ ok: false, data: null });
     }
   });
@@ -133,7 +133,7 @@ function httpGetStatus(host: string, token?: string): Promise<Record<string, unk
           try {
             resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
           } catch (err: unknown) {
-            log.debug(`parse status response from ${host}: ${err instanceof Error ? err.message : String(err)}`);
+            log.debug(`parse status response from ${host}: ${errMsg(err)}`);
             resolve(null);
           }
         });
@@ -141,7 +141,7 @@ function httpGetStatus(host: string, token?: string): Promise<Record<string, unk
       req.on("error", () => resolve(null));
       req.on("timeout", () => { req.destroy(); resolve(null); });
     } catch (err: unknown) {
-      log.debug(`http get status ${host}: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`http get status ${host}: ${errMsg(err)}`);
       resolve(null);
     }
   });
@@ -157,7 +157,7 @@ async function doStart(): Promise<string | null> {
 
   for (let i = 0; i < 20; i++) {
     const check = readRelayPid();
-    if (check && (() => { try { process.kill(check, 0); return true; } catch (err: unknown) { log.debug(`relay pid ${check} not alive: ${err instanceof Error ? err.message : String(err)}`); return false; } })()) {
+    if (check && (() => { try { process.kill(check, 0); return true; } catch (err: unknown) { log.debug(`relay pid ${check} not alive: ${errMsg(err)}`); return false; } })()) {
       const port = readRelayPort();
       return chalk.green(`✔ Relay started (PID ${check}, port ${port})`);
     }
@@ -207,7 +207,7 @@ link
     if (opts.stop) {
       const pid = readRelayPid();
       if (pid) {
-        try { process.kill(pid, "SIGTERM"); } catch (err: unknown) { log.debug(`SIGTERM relay ${pid}: ${err instanceof Error ? err.message : String(err)}`); }
+        try { process.kill(pid, "SIGTERM"); } catch (err: unknown) { log.debug(`SIGTERM relay ${pid}: ${errMsg(err)}`); }
         console.log(chalk.green(`✔ Relay stopped (PID ${pid})`));
       } else {
         console.log(chalk.dim("No relay running."));

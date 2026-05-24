@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 export type DeliveryMode = "passive" | "active" | "expert";
@@ -89,12 +89,21 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function validateRule(raw: unknown): InjectionRule | null {
-  if (typeof raw !== "object" || raw === null) return null;
+function validateRule(raw: unknown, context?: string): InjectionRule | null {
+  if (typeof raw !== "object" || raw === null) {
+    log.warn(`Injection rule ignored: expected object, got ${raw === null ? "null" : typeof raw}${context ? ` in ${context}` : ""}`);
+    return null;
+  }
   const obj = raw as Record<string, unknown>;
 
-  if (!isString(obj.source) || !VALID_SOURCES.includes(obj.source as ContextSource)) return null;
-  if (!isString(obj.scope) || !VALID_SCOPES.includes(obj.scope as InjectionScope)) return null;
+  if (!isString(obj.source) || !VALID_SOURCES.includes(obj.source as ContextSource)) {
+    log.warn(`Injection rule ignored: invalid source "${obj.source}"${context ? ` in ${context}` : ""}. Valid: ${VALID_SOURCES.join(", ")}`);
+    return null;
+  }
+  if (!isString(obj.scope) || !VALID_SCOPES.includes(obj.scope as InjectionScope)) {
+    log.warn(`Injection rule ignored: invalid scope "${obj.scope}" for source "${obj.source}"${context ? ` in ${context}` : ""}`);
+    return null;
+  }
 
   const rule: InjectionRule = {
     source: obj.source as ContextSource,
@@ -103,22 +112,34 @@ function validateRule(raw: unknown): InjectionRule | null {
 
   if (obj["max-lines"] != null) {
     const ml = Number(obj["max-lines"]);
-    if (!Number.isFinite(ml) || ml < 1) return null;
+    if (!Number.isFinite(ml) || ml < 1) {
+      log.warn(`Injection rule for "${obj.source}": invalid max-lines ${JSON.stringify(obj["max-lines"])} (must be positive number), ignoring`);
+      return null;
+    }
     rule["max-lines"] = ml;
   }
 
   if (obj.async != null) {
-    if (typeof obj.async !== "boolean") return null;
+    if (typeof obj.async !== "boolean") {
+      log.warn(`Injection rule for "${obj.source}": invalid async ${JSON.stringify(obj.async)}, ignoring`);
+      return null;
+    }
     rule.async = obj.async;
   }
 
   if (obj.command != null) {
-    if (!isString(obj.command)) return null;
+    if (!isString(obj.command)) {
+      log.warn(`Injection rule for "${obj.source}": invalid command ${JSON.stringify(obj.command)}, ignoring`);
+      return null;
+    }
     rule.command = obj.command;
   }
 
   if (obj.label != null) {
-    if (!isString(obj.label)) return null;
+    if (!isString(obj.label)) {
+      log.warn(`Injection rule for "${obj.source}": invalid label ${JSON.stringify(obj.label)}, ignoring`);
+      return null;
+    }
     rule.label = obj.label;
   }
 
@@ -146,13 +167,19 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
   if (typeof obj.rules === "object" && obj.rules !== null) {
     const rawRules = obj.rules as Record<string, unknown>;
     for (const key of Object.keys(rawRules)) {
-      if (!VALID_TRIGGERS.includes(key as InjectionTrigger)) continue;
+      if (!VALID_TRIGGERS.includes(key as InjectionTrigger)) {
+        log.warn(`Injection config: unknown trigger "${key}" ignored. Valid: ${VALID_TRIGGERS.join(", ")}`);
+        continue;
+      }
       const trigger = key as InjectionTrigger;
       const arr = rawRules[trigger];
-      if (!Array.isArray(arr)) continue;
+      if (!Array.isArray(arr)) {
+        log.warn(`Injection config: trigger "${trigger}" must be an array, got ${typeof arr}`);
+        continue;
+      }
       const validated: InjectionRule[] = [];
       for (const item of arr) {
-        const rule = validateRule(item);
+        const rule = validateRule(item, trigger);
         if (rule) validated.push(rule);
       }
       if (validated.length > 0) {
@@ -183,7 +210,14 @@ export function loadInjectionConfig(configDir?: string): InjectionConfig {
       const content = fs.readFileSync(filePath, "utf-8");
       const parsed = parseYaml(content);
       return parseInjectionConfig(parsed);
-    } catch (err: unknown) { log.debug(`loadInjectionConfig read failed: ${err instanceof Error ? err.message : String(err)}`); continue; }
+    } catch (err: unknown) {
+      const msg = errMsg(err);
+      if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      log.warn(`Failed to parse ${path.basename(filePath)}: ${msg}. Using defaults.`);
+      return { ...DEFAULT_ACTIVE_RULES };
+    }
   }
 
   return { ...DEFAULT_ACTIVE_RULES };

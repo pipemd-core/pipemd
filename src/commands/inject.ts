@@ -8,7 +8,7 @@ import { loadInjectionConfig } from "../core/injection-types.js";
 import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
 import { bumpInjectStats } from "../core/statusline-data.js";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
 
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
@@ -43,13 +43,13 @@ const inject = new Command("inject")
       try {
         realPath = realpathSync(resolved);
       } catch (err: unknown) {
-        log.debug(`resolve --file path ${resolved}: ${err instanceof Error ? err.message : String(err)}`);
+        log.debug(`resolve --file path ${resolved}: ${errMsg(err)}`);
         throw new UserError(chalk.red(`✖ --file path does not resolve: ${resolved}`));
       }
       try {
         realCwd = realpathSync(cwd);
       } catch (err: unknown) {
-        log.debug(`resolve cwd ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
+        log.debug(`resolve cwd ${cwd}: ${errMsg(err)}`);
         throw new UserError(chalk.red(`✖ Cannot resolve cwd: ${cwd}`));
       }
       if (!realPath.startsWith(realCwd + path.sep) && realPath !== realCwd) {
@@ -129,7 +129,7 @@ const inject = new Command("inject")
     try {
       mkdirSync(logDir, { recursive: true });
       writeFileSync(path.join(logDir, "last.txt"), plain, "utf-8");
-    } catch (err: unknown) { log.debug(`write injection log failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`write injection log failed: ${errMsg(err)}`); }
 
     if (format === "claude-hook") {
       const isStop = trigger === "on-idle" || trigger === "on-start";

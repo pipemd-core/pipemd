@@ -4,7 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import chalk from "chalk";
-import { log } from "../../core/logger.js";
+import { log, errMsg } from "../../core/logger.js";
 import type { Ecosystem } from "../../core/detect.js";
 import type { TokenProfile } from "../../config.js";
 import {
@@ -27,7 +27,7 @@ export function loadScriptContent(ecosystem: Ecosystem, scriptFile: string): str
     try {
       return fs.readFileSync(p, "utf-8");
     } catch (err: unknown) {
-      log.debug(`load script ${p}: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`load script ${p}: ${errMsg(err)}`);
     }
   }
   return null;
@@ -65,14 +65,14 @@ export async function testRunScripts(
     if (libContent) {
       fs.mkdirSync(path.join(tmpDir, "lib"), { recursive: true });
       fs.writeFileSync(path.join(tmpDir, "lib", "limit.sh"), libContent, "utf-8");
-      try { fs.chmodSync(path.join(tmpDir, "lib", "limit.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod limit.sh: ${err instanceof Error ? err.message : String(err)}`); }
+      try { fs.chmodSync(path.join(tmpDir, "lib", "limit.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod limit.sh: ${errMsg(err)}`); }
     }
 
     const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
     if (normContent) {
       fs.mkdirSync(path.join(tmpDir, "architecture"), { recursive: true });
       fs.writeFileSync(path.join(tmpDir, "architecture", "normalize.sh"), normContent, "utf-8");
-      try { fs.chmodSync(path.join(tmpDir, "architecture", "normalize.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod normalize.sh: ${err instanceof Error ? err.message : String(err)}`); }
+      try { fs.chmodSync(path.join(tmpDir, "architecture", "normalize.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod normalize.sh: ${errMsg(err)}`); }
     }
 
     for (const script of selected) {
@@ -92,7 +92,7 @@ export async function testRunScripts(
       fs.mkdirSync(scriptDir, { recursive: true });
       const scriptPath = path.join(tmpDir, script.file);
       fs.writeFileSync(scriptPath, scriptContent, "utf-8");
-      try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod test script ${scriptPath}: ${err instanceof Error ? err.message : String(err)}`); }
+      try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod test script ${scriptPath}: ${errMsg(err)}`); }
 
       try {
         const { stdout, stderr } = await execFileAsync("bash", [scriptPath], {
@@ -123,7 +123,7 @@ export async function testRunScripts(
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (err: unknown) { log.debug(`cleanup tmpdir failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`cleanup tmpdir failed: ${errMsg(err)}`); }
   }
 
   return results;
@@ -164,7 +164,7 @@ export async function aiValidateScripts(
         if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === "string")) {
           return parsed as string[];
         }
-      } catch (err: unknown) { log.debug(`parse AI response failed: ${err instanceof Error ? err.message : String(err)}`); }
+      } catch (err: unknown) { log.debug(`parse AI response failed: ${errMsg(err)}`); }
     }
     console.log(chalk.yellow("  ⚠ Could not parse AI response. Keeping successful scripts only."));
     return Object.keys(results).filter((id) => results[id].status === "success");

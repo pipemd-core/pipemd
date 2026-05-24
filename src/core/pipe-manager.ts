@@ -3,7 +3,7 @@ import path from "node:path";
 import { execSync, execFileSync } from "node:child_process";
 import { renderContentAsync } from "./injector.js";
 import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-back.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { LIVE_DIR, STATUS_FILE } from "./paths.js";
@@ -13,7 +13,8 @@ export const ENXIO_RETRY_WINDOW_MS = 60000;
 
 const WRITE_BUFFER_DEBOUNCE_MS = 1000;
 
-export const activeTimers: unknown[] = [];
+const activeTimeouts: NodeJS.Timeout[] = [];
+const activeIntervals: NodeJS.Timer[] = [];
 export const contextStreamEntries: { fd: number; stream: fs.ReadStream }[] = [];
 
 let shuttingDown = false;
@@ -24,24 +25,24 @@ export function setShuttingDown(value: boolean) {
 
 export function trackedSetTimeout(fn: () => void, ms: number): NodeJS.Timeout {
   const id = setTimeout(() => {
-    const idx = activeTimers.indexOf(id);
-    if (idx >= 0) activeTimers.splice(idx, 1);
+    const idx = activeTimeouts.indexOf(id);
+    if (idx >= 0) activeTimeouts.splice(idx, 1);
     fn();
   }, ms);
-  activeTimers.push(id);
+  activeTimeouts.push(id);
   return id;
 }
 
 export function trackedSetInterval(fn: () => void, ms: number): NodeJS.Timer {
   const id = setInterval(fn, ms);
-  activeTimers.push(id);
+  activeIntervals.push(id);
   return id;
 }
 
 export function trackedClearTimeout(id: NodeJS.Timeout) {
   clearTimeout(id);
-  const idx = activeTimers.indexOf(id);
-  if (idx >= 0) activeTimers.splice(idx, 1);
+  const idx = activeTimeouts.indexOf(id);
+  if (idx >= 0) activeTimeouts.splice(idx, 1);
 }
 
 export function checkMkfifo(): boolean {
@@ -52,7 +53,7 @@ export function checkMkfifo(): boolean {
     fs.unlinkSync(testPipe);
     return true;
   } catch (err: unknown) {
-    log.debug(`checkMkfifo failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`checkMkfifo failed: ${errMsg(err)}`);
     return false;
   }
 }
@@ -65,7 +66,7 @@ export function resolvePipePath(pipeFile: string, pipe: { render?: string; comma
 }
 
 export function createPipe(pipePath: string): boolean {
-  try { fs.unlinkSync(pipePath); } catch (err: unknown) { log.debug(`unlink pipe before mkfifo: ${err instanceof Error ? err.message : String(err)}`); }
+  try { fs.unlinkSync(pipePath); } catch (err: unknown) { log.debug(`unlink pipe before mkfifo: ${errMsg(err)}`); }
 
   try {
     const dir = path.dirname(pipePath);
@@ -77,7 +78,7 @@ export function createPipe(pipePath: string): boolean {
     log.info(`Created pipe: ${pipePath}`);
     return true;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     log.warn(`Could not create pipe ${pipePath}: ${msg}`);
     return false;
   }
@@ -220,7 +221,7 @@ async function updateCache(templatePath: string, config: PipeConfig) {
       renderedBytes: Buffer.byteLength(_cachedRenderedContent, "utf-8"),
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     log.error(`Error rendering context: ${msg}`);
     updateStatus({ lastRun: new Date().toISOString(), durationMs: 0, error: msg });
   } finally {
@@ -264,7 +265,7 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
 
     log.info(`Listening for AI writes on context pipe (bidirectional mode): ${pipePath}`);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     log.warn(`Could not attach ReadStream to context pipe: ${msg}. Write-back disabled for this pipe.`);
   }
 
@@ -287,7 +288,7 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== 'ENXIO') {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errMsg(err);
         log.warn(`Write failed: ${msg}`);
       }
     }
@@ -300,15 +301,19 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
 }
 
 export function shutdownPipes() {
-  for (const id of activeTimers) {
-    try { clearTimeout(id as any); } catch (err: unknown) { log.debug(`shutdown clearTimeout failed: ${err instanceof Error ? err.message : String(err)}`); }
-    try { clearInterval(id as any); } catch (err: unknown) { log.debug(`shutdown clearInterval failed: ${err instanceof Error ? err.message : String(err)}`); }
+  for (const id of activeTimeouts) {
+    try { clearTimeout(id); } catch (err: unknown) { log.debug(`shutdown clearTimeout failed: ${errMsg(err)}`); }
   }
-  activeTimers.length = 0;
+  activeTimeouts.length = 0;
+
+  for (const id of activeIntervals) {
+    try { clearInterval(id as unknown as NodeJS.Timeout); } catch (err: unknown) { log.debug(`shutdown clearInterval failed: ${errMsg(err)}`); }
+  }
+  activeIntervals.length = 0;
 
   for (const entry of contextStreamEntries) {
-    try { entry.stream.destroy(); } catch (err: unknown) { log.debug(`shutdown stream.destroy failed: ${err instanceof Error ? err.message : String(err)}`); }
-    try { fs.closeSync(entry.fd); } catch (err: unknown) { log.debug(`shutdown closeSync failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { entry.stream.destroy(); } catch (err: unknown) { log.debug(`shutdown stream.destroy failed: ${errMsg(err)}`); }
+    try { fs.closeSync(entry.fd); } catch (err: unknown) { log.debug(`shutdown closeSync failed: ${errMsg(err)}`); }
   }
   contextStreamEntries.length = 0;
 }

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { injectFile, reverseInject } from "./injector.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { PMD_CONTEXT_SEPARATOR } from "../config.js";
 import type { PipeConfig } from "../config.js";
 
@@ -8,7 +8,7 @@ export function loadBase(config: PipeConfig): string {
   if (!config.base) return "";
   try {
     return fs.readFileSync(config.base, "utf-8").trimEnd();
-  } catch (err: unknown) { log.debug(`loadBase readFileSync failed: ${err instanceof Error ? err.message : String(err)}`); return ""; }
+  } catch (err: unknown) { log.debug(`loadBase readFileSync failed: ${errMsg(err)}`); return ""; }
 }
 
 export function composeContent(base: string, renderedTemplate: string): string {
@@ -45,7 +45,7 @@ export function handleIncomingWrite(
         fs.renameSync(tmpPath, config.base);
         log.info("Base instructions updated from AI write-back");
       } catch (baseErr: unknown) {
-        const msg = baseErr instanceof Error ? baseErr.message : String(baseErr);
+        const msg = errMsg(baseErr);
         log.error(`Error saving base file: ${msg}`);
       }
     }
@@ -59,7 +59,7 @@ export function handleIncomingWrite(
         fs.writeFileSync(tmpPath, deRendered, "utf-8");
         fs.renameSync(tmpPath, templatePath);
       } catch (writeErr) {
-        try { fs.unlinkSync(tmpPath); } catch (err: unknown) { log.debug(`unlink tmpPath failed: ${err instanceof Error ? err.message : String(err)}`); }
+        try { fs.unlinkSync(tmpPath); } catch (err: unknown) { log.debug(`unlink tmpPath failed: ${errMsg(err)}`); }
         throw writeErr;
       }
       log.info("De-rendered AI write-back → template.md updated");
@@ -69,7 +69,7 @@ export function handleIncomingWrite(
       }
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     log.error(`Error processing AI write-back: ${msg}`);
   } finally {
     writeBackInProgress.value = false;

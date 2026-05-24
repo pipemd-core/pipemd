@@ -1,10 +1,10 @@
 import fs from "node:fs";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 
 export function tryReadJson<T = Record<string, unknown>>(p: string): T | null {
   try {
     return JSON.parse(fs.readFileSync(p, "utf-8")) as T;
-  } catch (err: unknown) { log.debug(`tryReadJson failed for ${p}: ${err instanceof Error ? err.message : String(err)}`); return null; }
+  } catch (err: unknown) { log.debug(`tryReadJson failed for ${p}: ${errMsg(err)}`); return null; }
 }
 
 export function isPidAlive(pid: number): boolean {

@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 import {
   resolveTraceData,
   resolveLockMap,
@@ -112,7 +112,7 @@ const trace = new Command("trace")
       running = false;
       if (interval) clearInterval(interval);
       process.stdout.write("\x1b[?25h");
-      try { process.stdin.setRawMode(false); } catch (err: unknown) { log.debug(`setRawMode(false): ${err instanceof Error ? err.message : String(err)}`); }
+      try { process.stdin.setRawMode(false); } catch (err: unknown) { log.debug(`setRawMode(false): ${errMsg(err)}`); }
       process.stdin.pause();
       clearScreen();
     };

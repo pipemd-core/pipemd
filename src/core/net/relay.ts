@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import type { CrewSession } from "../crew.js";
-import { log } from "../logger.js";
+import { log, errMsg } from "../logger.js";
 import {
   type CrewMessage,
   type SyncMessage,
@@ -98,7 +98,7 @@ function readPeers(): PeerConfig[] {
     const peersFile = path.join(homeDir, ".pipemd", "link", "peers.json");
     if (!fs.existsSync(peersFile)) return [];
     return JSON.parse(fs.readFileSync(peersFile, "utf-8")) as PeerConfig[];
-  } catch (err: unknown) { log.debug(`readPeers failed: ${err instanceof Error ? err.message : String(err)}`); return []; }
+  } catch (err: unknown) { log.debug(`readPeers failed: ${errMsg(err)}`); return []; }
 }
 
 function readToken(): string {
@@ -108,7 +108,7 @@ function readToken(): string {
     if (fs.existsSync(tokenFile)) {
       return fs.readFileSync(tokenFile, "utf-8").trim();
     }
-  } catch (err: unknown) { log.debug(`read relay token failed: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`read relay token failed: ${errMsg(err)}`); }
   return "";
 }
 
@@ -331,7 +331,7 @@ export function runRelay() {
   try {
     enforceToken();
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     log.error(`Relay auth error: ${msg}`);
     process.exit(1);
   }
@@ -340,12 +340,12 @@ export function runRelay() {
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");
 
   process.on("SIGTERM", () => {
-    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGTERM unlink pidFile failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGTERM unlink pidFile failed: ${errMsg(err)}`); }
     stopRelay();
     process.exit(0);
   });
   process.on("SIGINT", () => {
-    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGINT unlink pidFile failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGINT unlink pidFile failed: ${errMsg(err)}`); }
     stopRelay();
     process.exit(0);
   });
@@ -359,7 +359,7 @@ export function runRelay() {
     fs.writeFileSync(portFile, String(actualPort), "utf-8");
   }).catch((err) => {
     log.error(`Relay failed to start: ${err.message}`);
-    try { fs.unlinkSync(pidFile); } catch (err2: unknown) { log.debug(`startRelay cleanup unlink failed: ${err2 instanceof Error ? err2.message : String(err2)}`); }
+    try { fs.unlinkSync(pidFile); } catch (err2: unknown) { log.debug(`startRelay cleanup unlink failed: ${errMsg(err2)}`); }
     process.exit(1);
   });
 }

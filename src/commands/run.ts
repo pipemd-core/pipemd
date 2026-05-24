@@ -1,12 +1,11 @@
 import { Command } from "commander";
 import fs from "node:fs";
 import chalk from "chalk";
-import YAML from "yaml";
 import { renderContentAsync } from "../core/injector.js";
-import { PMD_CONTEXT_SEPARATOR, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
-import type { PipeConfig } from "../config.js";
+import { PMD_CONTEXT_SEPARATOR } from "../config.js";
 import { CONFIG_PATH, TEMPLATE_PATH } from "../core/paths.js";
-import { log } from "../core/logger.js";
+import { loadConfig, ConfigError } from "../core/daemon-config.js";
+import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
 
 export const runCommand = new Command("run")
@@ -14,18 +13,20 @@ export const runCommand = new Command("run")
   .option("-o, --output <file>", "Write output to file instead of stdout")
   .action(async (options: { output?: string }) => {
     if (!fs.existsSync(CONFIG_PATH)) {
-      throw new UserError("✖ PipeMD not initialized. Run `pmd init` first.");
+      throw new UserError("PipeMD not initialized. Run `pmd init` first.");
     }
 
     if (!fs.existsSync(TEMPLATE_PATH)) {
-      throw new UserError("✖ Template not found at .pipemd/template.md");
+      throw new UserError("Template not found at .pipemd/template.md");
     }
 
-    const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-    const config = YAML.parse(raw) as PipeConfig;
-    if (!config.settings || typeof config.settings !== "object") config.settings = { debounceMs: 3000, reServeDelayMs: DEFAULT_RESERVE_DELAY_MS };
-    if (typeof config.settings.debounceMs !== "number") config.settings.debounceMs = 3000;
-    if (typeof config.settings.reServeDelayMs !== "number") config.settings.reServeDelayMs = DEFAULT_RESERVE_DELAY_MS;
+    let config;
+    try {
+      config = loadConfig();
+    } catch (err) {
+      if (err instanceof ConfigError) throw new UserError(err.message);
+      throw err;
+    }
 
     const template = fs.readFileSync(TEMPLATE_PATH, "utf-8");
     const rendered = await renderContentAsync(template, config);
@@ -36,7 +37,7 @@ export const runCommand = new Command("run")
         const base = fs.readFileSync(config.base, "utf-8").trimEnd();
         output = base ? base + PMD_CONTEXT_SEPARATOR + rendered : rendered;
       } catch (err: unknown) {
-        log.debug(`read base file ${config.base}: ${err instanceof Error ? err.message : String(err)}`);
+        log.debug(`read base file ${config.base}: ${errMsg(err)}`);
         output = rendered;
       }
     } else {
@@ -47,7 +48,7 @@ export const runCommand = new Command("run")
 
     if (outputPath) {
       fs.writeFileSync(outputPath, output, "utf-8");
-      console.log(chalk.green(`✔ Rendered context written to ${outputPath}`));
+      console.log(chalk.green(`Rendered context written to ${outputPath}`));
     } else {
       process.stdout.write(output);
     }

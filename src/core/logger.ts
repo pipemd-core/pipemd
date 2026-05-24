@@ -19,6 +19,10 @@ function write(level: string, msg: string) {
 
 const DEBUG = typeof process.env.PMD_DEBUG !== "undefined";
 
+export function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export const log = {
   debug: (msg: string) => { if (DEBUG) write("DEBUG", msg); },
   info: (msg: string) => write("INFO ", msg),

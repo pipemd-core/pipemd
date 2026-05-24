@@ -22,7 +22,6 @@ const {
   updateStatus,
   trackedSetTimeout,
   trackedSetInterval,
-  activeTimers,
 } = await import("../src/core/pipe-manager.js")
 
 describe("isEpipe", () => {
@@ -105,10 +104,9 @@ describe("tracked timers", () => {
     clearInterval(id)
   })
 
-  it("activeTimers tracks created timers", () => {
-    const before = activeTimers.length
+  it("trackedSetTimeout returns a truthy ID", () => {
     const id = trackedSetTimeout(() => {}, 10000)
-    assert.ok(activeTimers.length > before)
+    assert.ok(id)
     clearTimeout(id)
   })
 })

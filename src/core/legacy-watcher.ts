@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import chokidar from "chokidar";
 import { injectFile } from "./injector.js";
 import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-back.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { trackedSetTimeout, trackedClearTimeout } from "./pipe-manager.js";
 import type { PipeConfig } from "../config.js";
 
@@ -75,7 +75,7 @@ export function startLegacyWatcher(config: PipeConfig, writeBackGuard: { value: 
                 const data = fs.readFileSync(cf, "utf-8");
                 handleIncomingWrite(data, templatePath, config, writeBackGuard);
               } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
+                const msg = errMsg(err);
                 log.error(`Error reading context file ${cf}: ${msg}`);
               }
             }, debounceMs);
@@ -83,7 +83,7 @@ export function startLegacyWatcher(config: PipeConfig, writeBackGuard: { value: 
 
           log.info(`Watching context file for AI edits: ${cf}`);
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = errMsg(err);
           log.warn(`Could not watch context file ${cf}: ${msg}`);
         }
       }

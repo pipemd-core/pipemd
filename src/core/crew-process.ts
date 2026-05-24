@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
-import { log } from "./logger.js";
+import { exec, execSync } from "node:child_process";
+import { log, errMsg } from "./logger.js";
 
 export interface ProcInfo {
   pid: number;
@@ -33,7 +33,7 @@ export function resolveProcessCwd(pid: number): string | undefined {
     const link = fs.readlinkSync(`/proc/${pid}/cwd`);
     return typeof link === "string" ? link : undefined;
   } catch (err: unknown) {
-    log.debug(`resolveProcessCwd failed for pid ${pid}: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`resolveProcessCwd failed for pid ${pid}: ${errMsg(err)}`);
     return undefined;
   }
 }
@@ -55,7 +55,33 @@ export function snapshotProcesses(): Map<number, ProcInfo> {
       const pid = Number(m[1]);
       map.set(pid, { pid, ppid: Number(m[2]), command: m[3] });
     }
-  } catch (err: unknown) { log.debug(`snapshotProcesses ps failed: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`snapshotProcesses ps failed: ${errMsg(err)}`); }
+  procCache = { stamp: now, map };
+  return map;
+}
+
+export async function snapshotProcessesAsync(): Promise<Map<number, ProcInfo>> {
+  if (isWindows()) return new Map();
+  const now = Date.now();
+  if (procCache && now - procCache.stamp < PROC_CACHE_TTL_MS) return procCache.map;
+  const map = new Map<number, ProcInfo>();
+  try {
+    const out = await new Promise<string>((resolve, reject) => {
+      exec("ps -eo pid=,ppid=,args=", {
+        encoding: "utf-8",
+        maxBuffer: 8 * 1024 * 1024,
+      }, (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout);
+      });
+    });
+    for (const line of out.split("\n")) {
+      const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/);
+      if (!m) continue;
+      const pid = Number(m[1]);
+      map.set(pid, { pid, ppid: Number(m[2]), command: m[3] });
+    }
+  } catch (err: unknown) { log.debug(`snapshotProcessesAsync ps failed: ${errMsg(err)}`); }
   procCache = { stamp: now, map };
   return map;
 }
@@ -76,7 +102,7 @@ export function resolveAgentIdentity(
         const raw = fs.readFileSync(`.pipemd/crew/${envSession}.json`, "utf-8");
         const s = JSON.parse(raw);
         if (s && s.id) return { pid: s.pid, ppid: s.ppid, harness: s.harness };
-      } catch (err: unknown) { log.debug(`resolveAgentIdentity windows session read failed: ${err instanceof Error ? err.message : String(err)}`); }
+      } catch (err: unknown) { log.debug(`resolveAgentIdentity windows session read failed: ${errMsg(err)}`); }
     }
     return { pid: process.ppid, ppid: 0, harness: "unknown" };
   }

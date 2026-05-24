@@ -3,14 +3,15 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { Command } from "commander";
 import chalk from "chalk";
-import YAML from "yaml";
 import { readPidFile } from "../core/daemon.js";
 import { listSessions } from "../core/crew.js";
 import { detectHarnesses } from "../core/detectHarness.js";
 import { installHooks } from "../core/hooks.js";
 import type { DeliveryMode } from "../core/injection-types.js";
+import { loadInjectionConfig } from "../core/injection-types.js";
 import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE, TEMPLATE_PATH, SCRIPTS_DIR } from "../core/paths.js";
-import { log } from "../core/logger.js";
+import { loadConfig, ConfigError } from "../core/daemon-config.js";
+import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
 
 function findScripts(dir: string): string[] {
@@ -55,7 +56,7 @@ export const doctorCommand = new Command("doctor")
     try {
       execSync("which mkfifo", { encoding: "utf-8", stdio: "pipe" });
       mkfifoAvailable = true;
-    } catch (err: unknown) { log.debug(`mkfifo check failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`mkfifo check failed: ${errMsg(err)}`); }
     if (mkfifoAvailable) {
       console.log(chalk.green(`  ✔ mkfifo: available`));
     } else if (process.platform !== "win32") {
@@ -67,12 +68,14 @@ export const doctorCommand = new Command("doctor")
       hasErrors = true;
     } else {
       try {
-        const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-        YAML.parse(raw);
+        loadConfig();
         console.log(chalk.green(`  ✔ Config file valid: ${CONFIG_PATH}`));
       } catch (err: unknown) {
-        log.debug(`parse config YAML: ${err instanceof Error ? err.message : String(err)}`);
-        console.log(chalk.red(`  ✖ Config file invalid YAML: ${CONFIG_PATH}`));
+        if (err instanceof ConfigError) {
+          console.log(chalk.red(`  ✖ ${err.message}`));
+        } else {
+          console.log(chalk.red(`  ✖ Config file invalid YAML: ${CONFIG_PATH}`));
+        }
         hasErrors = true;
       }
     }
@@ -85,7 +88,7 @@ export const doctorCommand = new Command("doctor")
         process.kill(pid, 0);
         console.log(chalk.green(`  ✔ Daemon running (PID ${pid})`));
       } catch (err: unknown) {
-        log.debug(`check daemon PID ${pid}: ${err instanceof Error ? err.message : String(err)}`);
+        log.debug(`check daemon PID ${pid}: ${errMsg(err)}`);
         console.log(chalk.red(`  ✖ Daemon not running (stale PID ${pid})`));
         hasErrors = true;
       }
@@ -112,7 +115,7 @@ export const doctorCommand = new Command("doctor")
         try {
           fs.accessSync(sf, fs.constants.X_OK);
         } catch (err: unknown) {
-          log.debug(`check script executable ${sf}: ${err instanceof Error ? err.message : String(err)}`);
+          log.debug(`check script executable ${sf}: ${errMsg(err)}`);
           notExecutable.push(sf);
           allExecutable = false;
         }
@@ -145,12 +148,11 @@ export const doctorCommand = new Command("doctor")
     console.log(chalk.dim("─".repeat(40)));
     console.log(chalk.bold("  Crew Coordination"));
 
-    const hasCrewCommand = fs.existsSync(CONFIG_PATH) && (() => {
+    const hasCrewCommand = (() => {
       try {
-        const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-        const cfg = YAML.parse(raw) as { commands?: Record<string, string> };
+        const cfg = loadConfig();
         return !!cfg.commands?.crew;
-      } catch (err: unknown) { log.debug(`read crew config: ${err instanceof Error ? err.message : String(err)}`); return false; }
+      } catch (err: unknown) { log.debug(`read crew config: ${errMsg(err)}`); return false; }
     })();
 
     if (!hasCrewCommand) {
@@ -176,17 +178,8 @@ export const doctorCommand = new Command("doctor")
       }
 
       const detected = detectHarnesses().filter((h) => h.detected);
-      let delivery: DeliveryMode = "passive";
-      for (const cfgPath of [path.join(PIPEMD_DIR, "injection.yml"), path.join(PIPEMD_DIR, "config.yml")]) {
-        try {
-          const raw = fs.readFileSync(cfgPath, "utf-8");
-          const cfg = YAML.parse(raw) as { delivery?: DeliveryMode };
-          if (cfg.delivery === "passive" || cfg.delivery === "active" || cfg.delivery === "expert") {
-            delivery = cfg.delivery;
-            break;
-          }
-        } catch (err: unknown) { log.debug(`read delivery config: ${err instanceof Error ? err.message : String(err)}`); }
-      }
+      const injectionConfig = loadInjectionConfig();
+      const delivery = injectionConfig.delivery;
       for (const h of detected) {
         const hookResult = installHooks(h.name, process.cwd(), delivery, true);
         const hookStatus = hookResult.detail?.includes("already installed")

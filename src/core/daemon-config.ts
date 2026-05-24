@@ -3,7 +3,7 @@ import YAML from "yaml";
 import { DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { CONFIG_PATH } from "./paths.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -80,7 +80,7 @@ export function loadConfig(): PipeConfig {
       log.error("Config file not found. Run `pmd init` first.");
       throw new ConfigError("Config file not found. Run `pmd init` first.")
     } else {
-      const msg = "Config file invalid. " + (err instanceof Error ? err.message : String(err))
+      const msg = "Config file invalid. " + errMsg(err)
       log.error(msg)
       throw new ConfigError(msg)
     }

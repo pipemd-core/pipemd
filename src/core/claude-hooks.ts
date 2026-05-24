@@ -2,7 +2,7 @@ import path from "node:path";
 import type { DeliveryMode } from "./injection-types.js";
 import type { HookInstallResult } from "./hooks.js";
 import { hasPmdCrewHookInEvent, hasPmdInjectHookInEvent, readJsonSettings, writeJsonSettings, ensureEventArray, stripPmdHooksFromSettings } from "./hook-utils.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 
 const CLAUDE_CLAIM_CMD =
   'f=$(jq -r \'.tool_input.file_path // empty\' 2>/dev/null); ' +
@@ -196,7 +196,7 @@ export function removeClaudeCodeHooks(cwd: string): HookInstallResult {
           ? "removed pmd statusline"
           : `${result.detail} \u00b7 removed pmd statusline`;
     }
-  } catch (err: unknown) { log.debug(`removeClaudeCodeHooks statusline cleanup failed: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`removeClaudeCodeHooks statusline cleanup failed: ${errMsg(err)}`); }
 
   return result;
 }

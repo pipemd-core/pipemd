@@ -34,6 +34,13 @@ pmd init      # Interactive setup — detects your ecosystem and harness
 pmd start     # Spawns the daemon — your AI now gets live context
 ```
 
+Or try it without the daemon first:
+
+```bash
+npx @pipemd-core/pipemd init
+npx @pipemd-core/pipemd run   # One-shot render to stdout — no daemon needed
+```
+
 Or run without installing:
 
 ```bash

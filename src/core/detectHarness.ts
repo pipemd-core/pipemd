@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 
 export type HarnessName =
   | "OpenCode"
@@ -48,7 +48,7 @@ function hasInPath(cmd: string): boolean {
   try {
     execFileSync("which", [cmd], { encoding: "utf-8", stdio: "pipe" });
     return true;
-  } catch (err: unknown) { log.debug(`hasInPath(${cmd}) failed: ${err instanceof Error ? err.message : String(err)}`); return false; }
+  } catch (err: unknown) { log.debug(`hasInPath(${cmd}) failed: ${errMsg(err)}`); return false; }
 }
 
 function hasNpmGlobal(pkg: string): boolean {
@@ -58,7 +58,7 @@ function hasNpmGlobal(pkg: string): boolean {
       stdio: "pipe",
     });
     return result.includes(pkg);
-  } catch (err: unknown) { log.debug(`hasNpmGlobal(${pkg}) failed: ${err instanceof Error ? err.message : String(err)}`); return false; }
+  } catch (err: unknown) { log.debug(`hasNpmGlobal(${pkg}) failed: ${errMsg(err)}`); return false; }
 }
 
 function hasNpmDevDep(pkg: string, cwd: string): boolean {
@@ -68,7 +68,7 @@ function hasNpmDevDep(pkg: string, cwd: string): boolean {
     const parsed = JSON.parse(content);
     const deps = { ...(parsed.dependencies || {}), ...(parsed.devDependencies || {}) };
     return pkg in deps;
-  } catch (err: unknown) { log.debug(`hasNpmDevDep(${pkg}) failed: ${err instanceof Error ? err.message : String(err)}`); return false; }
+  } catch (err: unknown) { log.debug(`hasNpmDevDep(${pkg}) failed: ${errMsg(err)}`); return false; }
 }
 
 export function detectHarnesses(cwd: string = process.cwd()): HarnessDetection[] {

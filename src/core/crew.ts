@@ -5,11 +5,11 @@ import { atomicWrite } from "./fs-utils.js";
 import { isPidAlive } from "./json-utils.js";
 import { PIPEMD_DIR as _PIPEMD_DIR, CREW_DIR as _CREW_DIR } from "./paths.js";
 import { resolveAgentIdentity } from "./crew-process.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { TtlCache } from "./ttl-cache.js";
 export { resolveAgentIdentity, snapshotProcesses, clearProcessCache } from "./crew-process.js";
 export type { ProcInfo } from "./crew-process.js";
-export { renderCrewBlock, getStatusJson } from "./crew-render.js";
+export { renderCrewBlock, renderCrewBlockAsync, getStatusJson } from "./crew-render.js";
 export type { CrewStatusJson } from "./crew-render.js";
 
 export type CrewRole = "coordinator" | "worker";
@@ -70,7 +70,7 @@ export function readSession(id: string): CrewSession | null {
     const s = JSON.parse(raw) as CrewSession;
     return s && s.id ? s : null;
   } catch (err: unknown) {
-    log.debug(`readSession failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`readSession failed: ${errMsg(err)}`);
     return null;
   }
 }
@@ -85,7 +85,7 @@ export function writeSessionAtomic(session: CrewSession): void {
 export function deleteSession(id: string): void {
   try {
     fs.unlinkSync(crewSessionPath(id));
-  } catch (err: unknown) { log.debug(`deleteSession unlink failed: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`deleteSession unlink failed: ${errMsg(err)}`); }
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ export function listSessions(): CrewSession[] {
   try {
     files = fs.readdirSync(CREW_DIR);
   } catch (err: unknown) {
-    log.debug(`listSessions readdir failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`listSessions readdir failed: ${errMsg(err)}`);
     files = [];
   }
   const out: CrewSession[] = [];
@@ -129,7 +129,7 @@ export function listSessions(): CrewSession[] {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(CREW_DIR, f), "utf-8")) as CrewSession;
       if (s && s.id) out.push(s);
-    } catch (err: unknown) { log.debug(`listSessions parse failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`listSessions parse failed: ${errMsg(err)}`); }
   }
   sessionListCache.set(out);
   return [...out, ...remoteSessionsCache];

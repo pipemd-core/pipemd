@@ -4,7 +4,7 @@ import path from "node:path";
 import chalk from "chalk";
 import YAML from "yaml";
 import { readPidFile } from "../core/daemon.js";
-import { log, tailLog } from "../core/logger.js";
+import { log, tailLog, errMsg } from "../core/logger.js";
 import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR, CONFIG_PATH } from "../core/paths.js";
 
 export const statusCommand = new Command("status")
@@ -22,7 +22,7 @@ export const statusCommand = new Command("status")
     try {
       process.kill(pid, 0);
       running = true;
-    } catch (err: unknown) { log.debug(`daemon pid check failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`daemon pid check failed: ${errMsg(err)}`); }
 
     if (!running) {
       console.log(chalk.red(`✖ Daemon (PID ${pid}) is not running.`));

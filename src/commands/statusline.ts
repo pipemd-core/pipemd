@@ -20,7 +20,7 @@ import {
   findConflicts,
 } from "../core/crew.js";
 import { isPidAlive } from "../core/json-utils.js";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 import {
   DAEMON_PID_FILE,
   estimateTokens,
@@ -60,7 +60,7 @@ function readStdinJson(): any | null {
     if (!raw.trim()) return null;
     return JSON.parse(raw);
   } catch (err: unknown) {
-    log.debug(`read stdin JSON: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read stdin JSON: ${errMsg(err)}`);
     return null;
   }
 }
@@ -73,7 +73,7 @@ function readDaemonPid(pipemdDir: string): number | null {
     );
     if (pid > 0 && isPidAlive(pid)) return pid;
   } catch (err: unknown) {
-    log.debug(`read daemon PID: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read daemon PID: ${errMsg(err)}`);
   }
   return null;
 }
@@ -157,7 +157,7 @@ const statusline = new Command("statusline")
     try {
       if (cwd && fs.existsSync(cwd)) process.chdir(cwd);
     } catch (err: unknown) {
-      log.debug(`chdir to ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`chdir to ${cwd}: ${errMsg(err)}`);
     }
 
     // Harmless in non-PipeMD projects — print nothing, exit clean.

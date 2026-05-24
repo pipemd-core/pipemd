@@ -2,7 +2,7 @@ import { mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, statSync 
 import { join } from "node:path";
 import { computePayloadHash } from "./injection-types.js";
 import { atomicWrite } from "./fs-utils.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { TtlCache } from "./ttl-cache.js";
 
 export interface InjectedRecord {
@@ -19,9 +19,17 @@ export const INJECTED_DIR = ".pipemd/cache/injected";
 
 const memCache = new Map<string, TtlCache<SessionStore>>();
 const MEM_CACHE_TTL = 2_000;
+const MEM_CACHE_MAX_ENTRIES = 128;
 
 export function clearMemCache(): void {
   memCache.clear();
+}
+
+function evictMemCache(): void {
+  if (memCache.size <= MEM_CACHE_MAX_ENTRIES) return;
+  for (const [key, cache] of memCache) {
+    if (cache.get() === null) memCache.delete(key);
+  }
 }
 
 export function ensureInjectedDir(): void {
@@ -46,11 +54,12 @@ function loadSession(sessionId: string): SessionStore {
     try {
       store = JSON.parse(readFileSync(p, "utf8"));
     } catch (err: unknown) {
-      log.debug(`loadSession parse failed: ${err instanceof Error ? err.message : String(err)}`);
+      log.debug(`loadSession parse failed: ${errMsg(err)}`);
       store = {};
     }
   }
   cache.set(store);
+  evictMemCache();
   return store;
 }
 
@@ -99,7 +108,7 @@ export function purgeOldRecords(maxAgeMs: number = 3600000): void {
   try {
     entries = readdirSync(INJECTED_DIR);
   } catch (err: unknown) {
-    log.debug(`purgeOldRecords readdir failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`purgeOldRecords readdir failed: ${errMsg(err)}`);
     return;
   }
   for (const file of entries) {
@@ -110,6 +119,6 @@ export function purgeOldRecords(maxAgeMs: number = 3600000): void {
       if (now - stat.mtimeMs > maxAgeMs) {
         unlinkSync(fullPath);
       }
-    } catch (err: unknown) { log.debug(`purgeOldRecords stat/unlink failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`purgeOldRecords stat/unlink failed: ${errMsg(err)}`); }
   }
 }

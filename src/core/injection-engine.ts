@@ -14,7 +14,8 @@ import type {
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
+import { snapshotProcessesAsync } from "./crew-process.js";
 
 const VALIDATION_COOLDOWN_MS = 60_000
 const RATE_LIMIT_WINDOW_MS = 10_000
@@ -43,6 +44,12 @@ function isRateLimited(sessionId: string): boolean {
   while (timestamps.length > 0 && timestamps[0] < cutoff) {
     timestamps.shift()
   }
+  if (injectionTimestamps.size > MAX_SESSION_TRACKS) {
+    for (const [key, ts] of injectionTimestamps) {
+      while (ts.length > 0 && ts[0] < cutoff) ts.shift()
+      if (ts.length === 0) injectionTimestamps.delete(key)
+    }
+  }
   return timestamps.length >= MAX_INJECTIONS_PER_WINDOW
 }
 
@@ -54,13 +61,6 @@ function recordInjectionTimestamp(sessionId: string): void {
     injectionTimestamps.set(sessionId, timestamps)
   }
   timestamps.push(now)
-  if (injectionTimestamps.size > MAX_SESSION_TRACKS) {
-    const cutoff = now - RATE_LIMIT_WINDOW_MS
-    for (const [key, ts] of injectionTimestamps) {
-      while (ts.length > 0 && ts[0] < cutoff) ts.shift()
-      if (ts.length === 0) injectionTimestamps.delete(key)
-    }
-  }
 }
 
 function truncateLines(text: string, maxLines: number): string {
@@ -78,7 +78,22 @@ function runGit(args: string[], fallback: string = ""): string {
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
   } catch (err: unknown) {
-    log.debug(`runGit failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`runGit failed: ${errMsg(err)}`);
+    return fallback;
+  }
+}
+
+async function runGitAsync(args: string[], fallback: string = ""): Promise<string> {
+  try {
+    const out = await new Promise<string>((resolve, reject) => {
+      execFile("git", args, { encoding: "utf-8", timeout: 5000 }, (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout ?? "");
+      });
+    });
+    return out.trim();
+  } catch (err: unknown) {
+    log.debug(`runGitAsync failed: ${errMsg(err)}`);
     return fallback;
   }
 }
@@ -206,7 +221,7 @@ function resolveCustom(ctx: ResolverContext): string {
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
   } catch (err: unknown) {
-    log.debug(`resolveCustom command failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`resolveCustom command failed: ${errMsg(err)}`);
     return "";
   }
 }
@@ -221,7 +236,7 @@ function resolveGitStaged(ctx: ResolverContext): string {
     if (!result) return "No staged changes";
     return result;
   } catch (err: unknown) {
-    log.debug(`resolveGitStaged failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`resolveGitStaged failed: ${errMsg(err)}`);
     return "No staged changes";
   }
 }
@@ -236,7 +251,7 @@ function resolveGitDiffStat(ctx: ResolverContext): string {
     if (!result) return "No unstaged changes";
     return result;
   } catch (err: unknown) {
-    log.debug(`resolveGitDiffStat failed: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`resolveGitDiffStat failed: ${errMsg(err)}`);
     return "No unstaged changes";
   }
 }
@@ -317,6 +332,137 @@ export function resolveInjections(
   return payloads;
 }
 
+async function resolveCrewStatusAsync(_ctx: ResolverContext): Promise<string> {
+  const sessions = listSessions();
+  const lines: string[] = [];
+
+  if (sessions.length === 0) {
+    lines.push("Crew: no active sessions");
+  } else {
+    for (const s of sessions) {
+      const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
+      lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})`);
+    }
+  }
+
+  const conflicts = findConflicts(sessions);
+  for (const c of conflicts) {
+    lines.push(`⚠️ CONFLICT: ${c.path} claimed by ${c.sessionIds.join(", ")}`);
+  }
+
+  return lines.slice(0, 5).join("\n");
+}
+
+async function resolveGitStagedAsync(_ctx: ResolverContext): Promise<string> {
+  const result = await runGitAsync(["diff", "--cached", "--stat"]);
+  return result || "No staged changes";
+}
+
+async function resolveGitDiffStatAsync(_ctx: ResolverContext): Promise<string> {
+  const result = await runGitAsync(["diff", "--stat"]);
+  return result || "No unstaged changes";
+}
+
+async function resolveGitDeltaAsync(ctx: ResolverContext): Promise<string> {
+  const cached = readCache("git-status");
+  let status: string;
+
+  if (cached && cached.data) {
+    status = cached.data;
+  } else {
+    status = await runGitAsync(["status", "--porcelain"]);
+    if (!status) return "Not a git repo";
+    writeCache("git-status", status, DEFAULT_TTLS["git-status"] ?? 10000);
+  }
+
+  if (!status.trim()) return "No changes since last check";
+
+  const lines = status.trim().split("\n");
+  const modified = lines.filter((l) => l.startsWith(" M")).length;
+  const staged = lines.filter((l) => l.startsWith("M ") || l.startsWith("A ") || l.startsWith("R ")).length;
+  const untracked = lines.filter((l) => l.startsWith("??")).length;
+
+  const parts: string[] = [];
+  if (modified > 0) parts.push(`${modified} modified`);
+  if (staged > 0) parts.push(`${staged} staged`);
+  if (untracked > 0) parts.push(`${untracked} untracked`);
+
+  return parts.join(", ") || "No changes since last check";
+}
+
+type AsyncSourceResolver = (ctx: ResolverContext) => Promise<string>;
+
+const ASYNC_RESOLVERS: Partial<Record<ContextSource, AsyncSourceResolver>> = {
+  "crew-status": resolveCrewStatusAsync,
+  "crew-locks": async (ctx) => resolveCrewLocks(ctx),
+  "file-errors": async (ctx) => resolveFileErrors(ctx),
+  "validate-file": async (ctx) => resolveValidateFile(ctx),
+  "git-context": async (ctx) => resolveGitContext(ctx),
+  "git-delta": resolveGitDeltaAsync,
+  "git-staged": resolveGitStagedAsync,
+  "git-diff-stat": resolveGitDiffStatAsync,
+  custom: async (ctx) => resolveCustom(ctx),
+};
+
+export async function resolveInjectionsAsync(
+  trigger: InjectionTrigger,
+  targetFile?: string,
+  sessionId?: string,
+): Promise<InjectionPayload[]> {
+  const config = loadInjectionConfig();
+  const rules = getRulesForTrigger(config, trigger);
+  const effectiveSessionId = sessionId || deriveStableSessionId()
+
+  if (isRateLimited(effectiveSessionId)) {
+    return []
+  }
+
+  const payloads: InjectionPayload[] = []
+  const resolverStart = Date.now()
+
+  for (const rule of rules) {
+    if (Date.now() - resolverStart > RESOLVER_TOTAL_BUDGET_MS) {
+      break
+    }
+    if (rule.scope === "target-file" && !targetFile) continue;
+
+    const ctx: ResolverContext = {
+      trigger,
+      targetFile,
+      sessionId: effectiveSessionId,
+      config,
+    };
+
+    const resolver = ASYNC_RESOLVERS[rule.source];
+    if (!resolver) continue;
+
+    const content = await resolver(ctx);
+
+    const finalContent = rule["max-lines"]
+      ? truncateLines(content, rule["max-lines"])
+      : content;
+
+    const hash = computePayloadHash(finalContent);
+    const status = checkInjectionStatus(effectiveSessionId, rule.source, finalContent);
+
+    if (status === "unchanged") continue;
+
+    recordInjection(effectiveSessionId, rule.source, finalContent)
+    recordInjectionTimestamp(effectiveSessionId)
+
+    payloads.push({
+      trigger,
+      source: rule.source,
+      scope: rule.scope,
+      targetFile,
+      content: finalContent,
+      hash,
+    });
+  }
+
+  return payloads;
+}
+
 export async function triggerAsyncValidation(filePath: string): Promise<void> {
   const cacheKey = `validation:${filePath}`;
   if (isFresh(cacheKey)) return;
@@ -345,7 +491,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
         });
       });
       if (eslintResult) errors.push(eslintResult);
-    } catch (err: unknown) { log.debug(`eslint validation failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`eslint validation failed: ${errMsg(err)}`); }
 
     try {
       const tscResult = await new Promise<string>((resolve) => {
@@ -369,7 +515,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
         const relevant = tscResult.split("\n").filter((l) => l.includes(filePath));
         if (relevant.length > 0) errors.push(...relevant);
       }
-    } catch (err: unknown) { log.debug(`tsc validation failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`tsc validation failed: ${errMsg(err)}`); }
 
     const content = errors.length > 0 ? errors.join("\n") : "No errors found";
     writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000);

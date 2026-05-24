@@ -8,7 +8,7 @@ import { stopLogic } from "../core/actions.js";
 import { removeHooks } from "../core/hooks.js";
 import { detectHarnesses } from "../core/detectHarness.js";
 import { PIPEMD_DIR, CONFIG_PATH, BAK_PATH, BASE_PATH } from "../core/paths.js";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 
 const GITIGNORE_PATH = ".gitignore";
 const IGNORE_PATH = ".ignore";
@@ -20,7 +20,7 @@ function contextFileFromConfig(): string | null {
     const renderPipe = (config.pipes || []).find((p) => p.render);
     return renderPipe?.file ?? null;
   } catch (err: unknown) {
-    log.debug(`read context file from config: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`read context file from config: ${errMsg(err)}`);
     return null;
   }
 }
@@ -46,7 +46,7 @@ function removeLinesFromFile(filepath: string, linesToRemove: string[]) {
         console.log(chalk.dim(`  → Cleaned entries from ${filepath}`));
       }
     }
-  } catch (err: unknown) { log.debug(`remove lines from file ${filepath}: ${err instanceof Error ? err.message : String(err)}`); }
+  } catch (err: unknown) { log.debug(`remove lines from file ${filepath}: ${errMsg(err)}`); }
 }
 
 export const uninstallCommand = new Command("uninstall")
@@ -100,7 +100,7 @@ export const uninstallCommand = new Command("uninstall")
     console.log(chalk.green("  ✔ Daemon stopped"));
 
     if (contextFile) {
-      try { fs.chmodSync(contextFile, 0o644); } catch (err: unknown) { log.debug(`chmod context file: ${err instanceof Error ? err.message : String(err)}`); }
+      try { fs.chmodSync(contextFile, 0o644); } catch (err: unknown) { log.debug(`chmod context file: ${errMsg(err)}`); }
 
       const hasBase = fs.existsSync(BASE_PATH);
 
@@ -140,7 +140,7 @@ export const uninstallCommand = new Command("uninstall")
         const r = removeHooks(h.name);
         if (r.installed) console.log(chalk.dim(`  → Removed ${h.name} crew hooks`));
       }
-    } catch (err: unknown) { log.debug(`remove harness hooks: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`remove harness hooks: ${errMsg(err)}`); }
 
     const extraArtifacts = [
       path.join(PIPEMD_DIR, ".crew-status.json"),
@@ -148,7 +148,7 @@ export const uninstallCommand = new Command("uninstall")
       path.join(PIPEMD_DIR, ".tui-stats.json"),
     ];
     for (const f of extraArtifacts) {
-      try { fs.unlinkSync(f); } catch (err: unknown) { log.debug(`unlink artifact ${f}: ${err instanceof Error ? err.message : String(err)}`); }
+      try { fs.unlinkSync(f); } catch (err: unknown) { log.debug(`unlink artifact ${f}: ${errMsg(err)}`); }
     }
 
     try {

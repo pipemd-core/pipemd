@@ -5,7 +5,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import { computePayloadHash } from "./injection-types.js";
 import { atomicWrite } from "./fs-utils.js";
 
@@ -77,7 +77,7 @@ export function readCache(key: string): CacheEntry | null {
       return null;
     }
     return entry;
-  } catch (err: unknown) { log.debug(`readCache parse failed: ${err instanceof Error ? err.message : String(err)}`); return null; }
+  } catch (err: unknown) { log.debug(`readCache parse failed: ${errMsg(err)}`); return null; }
 }
 
 export function writeCache(

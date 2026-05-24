@@ -23,7 +23,7 @@ import {
 import { installHooks, removeHooks } from "../core/hooks.js";
 import { clearSessionRecords } from "../core/dedup.js";
 import { detectHarnesses } from "../core/detectHarness.js";
-import { log } from "../core/logger.js";
+import { log, errMsg } from "../core/logger.js";
 import type { DeliveryMode } from "../core/injection-types.js";
 
 /** Hooks must never break an agent's edit — outside a PipeMD project, no-op. */
@@ -40,7 +40,7 @@ function readDeliveryFromConfig(): DeliveryMode {
       const config = YAML.parse(raw) as { delivery?: DeliveryMode };
       const delivery = config.delivery;
       if (delivery === "passive" || delivery === "active" || delivery === "expert") return delivery;
-    } catch (err: unknown) { log.debug(`read delivery config: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`read delivery config: ${errMsg(err)}`); }
   }
   return "passive";
 }

@@ -4,7 +4,7 @@ import { reapStaleSessions, DEFAULT_STALE_MS, listSessions as listLocalSessions 
 import { writeDashboard, resetDaemonStart } from "./dashboard.js";
 import { ensureCacheDir } from "./cache.js";
 import { purgeOldRecords } from "./dedup.js";
-import { log } from "./logger.js";
+import { log, errMsg } from "./logger.js";
 import type { PipeConfig } from "../config.js";
 import { PID_FILE, INJECTION_LOG_DIR, LIVE_DIR } from "./paths.js";
 import { startRelayClient, stopRelayClient } from "./net/daemon-client.js";
@@ -29,7 +29,7 @@ function cleanInjectionLog(maxAgeMs: number = INJECTION_LOG_MAX_AGE_MS): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(INJECTION_LOG_DIR);
-  } catch (err: unknown) { log.debug(`readdir injection log failed: ${err instanceof Error ? err.message : String(err)}`); return;
+  } catch (err: unknown) { log.debug(`readdir injection log failed: ${errMsg(err)}`); return;
   }
   for (const file of entries) {
     if (file === "last.txt") continue;
@@ -39,7 +39,7 @@ function cleanInjectionLog(maxAgeMs: number = INJECTION_LOG_MAX_AGE_MS): void {
       if (now - stat.mtimeMs > maxAgeMs) {
         fs.unlinkSync(fullPath);
       }
-    } catch (err: unknown) { log.debug(`cleanInjectionLog stat failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { log.debug(`cleanInjectionLog stat failed: ${errMsg(err)}`); }
   }
 }
 
@@ -78,9 +78,9 @@ function shutdown(allPipePaths: string[], exitCode: number = 0) {
   shutdownPipes();
 
   for (const p of allPipePaths) {
-    try { fs.unlinkSync(p); } catch (err: unknown) { log.debug(`unlink pipe failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { fs.unlinkSync(p); } catch (err: unknown) { log.debug(`unlink pipe failed: ${errMsg(err)}`); }
   }
-  try { fs.unlinkSync(PID_FILE); } catch (err: unknown) { log.debug(`unlink PID file failed: ${err instanceof Error ? err.message : String(err)}`); }
+  try { fs.unlinkSync(PID_FILE); } catch (err: unknown) { log.debug(`unlink PID file failed: ${errMsg(err)}`); }
   process.exit(exitCode);
 }
 
@@ -122,11 +122,11 @@ export function runDaemon() {
   }
 
   trackedSetInterval(() => {
-    try { purgeOldRecords(); } catch (err: unknown) { log.debug(`purgeOldRecords failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { purgeOldRecords(); } catch (err: unknown) { log.debug(`purgeOldRecords failed: ${errMsg(err)}`); }
   }, 300_000);
 
   trackedSetInterval(() => {
-    try { cleanInjectionLog(); } catch (err: unknown) { log.debug(`cleanInjectionLog failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { cleanInjectionLog(); } catch (err: unknown) { log.debug(`cleanInjectionLog failed: ${errMsg(err)}`); }
   }, 300_000);
 
   const hasMkfifo = checkMkfifo();
@@ -177,7 +177,7 @@ export function runDaemon() {
   });
 
   process.on("unhandledRejection", (reason) => {
-    const msg = reason instanceof Error ? reason.message : String(reason);
+    const msg = errMsg(reason);
     log.error(`Unhandled rejection: ${msg}`);
     shutdown(allPipePaths, 1);
   });
@@ -193,5 +193,5 @@ export function readPidFile(): number | null {
   try {
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch (err: unknown) { log.debug(`readPidFile failed: ${err instanceof Error ? err.message : String(err)}`); return null; }
+  } catch (err: unknown) { log.debug(`readPidFile failed: ${errMsg(err)}`); return null; }
 }
