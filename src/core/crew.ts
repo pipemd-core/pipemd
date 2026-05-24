@@ -5,6 +5,8 @@ import { atomicWrite } from "./fs-utils.js";
 import { isPidAlive } from "./json-utils.js";
 import { PIPEMD_DIR as _PIPEMD_DIR, CREW_DIR as _CREW_DIR } from "./paths.js";
 import { resolveAgentIdentity } from "./crew-process.js";
+import { log } from "./logger.js";
+import { TtlCache } from "./ttl-cache.js";
 export { resolveAgentIdentity, snapshotProcesses, clearProcessCache } from "./crew-process.js";
 export type { ProcInfo } from "./crew-process.js";
 export { renderCrewBlock, getStatusJson } from "./crew-render.js";
@@ -42,8 +44,6 @@ export const CREW_DIR = _CREW_DIR;
 export const DEFAULT_STALE_MS = 90_000;
 export const PID_GRACE_MS = 15_000;
 
-export const HARNESS_PROCESS_PATTERNS: { harness: string; pattern: RegExp }[] = [];
-
 // ---------------------------------------------------------------------------
 // Filesystem layer — one JSON file per session, atomic writes.
 // ---------------------------------------------------------------------------
@@ -69,7 +69,8 @@ export function readSession(id: string): CrewSession | null {
     const raw = fs.readFileSync(crewSessionPath(id), "utf-8");
     const s = JSON.parse(raw) as CrewSession;
     return s && s.id ? s : null;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`readSession failed: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -78,12 +79,13 @@ export function writeSessionAtomic(session: CrewSession): void {
   ensureCrewDir();
   const target = crewSessionPath(session.id);
   atomicWrite(target, JSON.stringify(session, null, 2) + "\n");
+  sessionListCache.invalidate();
 }
 
 export function deleteSession(id: string): void {
   try {
     fs.unlinkSync(crewSessionPath(id));
-  } catch { /* already gone */ }
+  } catch (err: unknown) { log.debug(`deleteSession unlink failed: ${err instanceof Error ? err.message : String(err)}`); }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,17 +93,15 @@ export function deleteSession(id: string): void {
 // ---------------------------------------------------------------------------
 
 let remoteSessionsCache: CrewSession[] = [];
-
-let sessionListCache: { ts: number; sessions: CrewSession[] } | null = null;
-const SESSION_LIST_CACHE_TTL = 2_000;
+const sessionListCache = new TtlCache<CrewSession[]>(2_000);
 
 export function invalidateSessionListCache(): void {
-  sessionListCache = null;
+  sessionListCache.invalidate();
 }
 
 export function setRemoteSessions(sessions: CrewSession[]): void {
   remoteSessionsCache = sessions;
-  sessionListCache = null;
+  sessionListCache.invalidate();
 }
 
 export function getRemoteSessions(): CrewSession[] {
@@ -110,18 +110,17 @@ export function getRemoteSessions(): CrewSession[] {
 
 export function clearRemoteSessions(): void {
   remoteSessionsCache = [];
-  sessionListCache = null;
+  sessionListCache.invalidate();
 }
 
 export function listSessions(): CrewSession[] {
-  const now = Date.now();
-  if (sessionListCache && now - sessionListCache.ts < SESSION_LIST_CACHE_TTL) {
-    return [...sessionListCache.sessions, ...remoteSessionsCache];
-  }
+  const cached = sessionListCache.get();
+  if (cached) return [...cached, ...remoteSessionsCache];
   let files: string[];
   try {
     files = fs.readdirSync(CREW_DIR);
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`listSessions readdir failed: ${err instanceof Error ? err.message : String(err)}`);
     files = [];
   }
   const out: CrewSession[] = [];
@@ -130,17 +129,15 @@ export function listSessions(): CrewSession[] {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(CREW_DIR, f), "utf-8")) as CrewSession;
       if (s && s.id) out.push(s);
-    } catch { /* malformed */ }
+    } catch (err: unknown) { log.debug(`listSessions parse failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
-  sessionListCache = { ts: now, sessions: out };
+  sessionListCache.set(out);
   return [...out, ...remoteSessionsCache];
 }
 
 // ---------------------------------------------------------------------------
 // Liveness & staleness.
 // ---------------------------------------------------------------------------
-
-export { isPidAlive } from "./json-utils.js";
 
 export function isSessionStale(
   session: CrewSession,

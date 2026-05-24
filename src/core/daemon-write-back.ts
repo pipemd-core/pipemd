@@ -8,9 +8,7 @@ export function loadBase(config: PipeConfig): string {
   if (!config.base) return "";
   try {
     return fs.readFileSync(config.base, "utf-8").trimEnd();
-  } catch {
-    return "";
-  }
+  } catch (err: unknown) { log.debug(`loadBase readFileSync failed: ${err instanceof Error ? err.message : String(err)}`); return ""; }
 }
 
 export function composeContent(base: string, renderedTemplate: string): string {
@@ -61,7 +59,7 @@ export function handleIncomingWrite(
         fs.writeFileSync(tmpPath, deRendered, "utf-8");
         fs.renameSync(tmpPath, templatePath);
       } catch (writeErr) {
-        try { fs.unlinkSync(tmpPath); } catch {}
+        try { fs.unlinkSync(tmpPath); } catch (err: unknown) { log.debug(`unlink tmpPath failed: ${err instanceof Error ? err.message : String(err)}`); }
         throw writeErr;
       }
       log.info("De-rendered AI write-back → template.md updated");

@@ -11,10 +11,14 @@ TREE_FIND_EXCLUDES=" \
   -not -path '*/.pipemd/*' \
   -not -path '*/.cache/*' \
   -not -path '*/node_modules/*' \
+  -not -path '*/dist/*' \
+  -not -path '*/coverage/*' \
   -not -name 'build' \
   -not -name '.git' \
   -not -name '.pipemd' \
-  -not -name 'compile_commands.json'"
+  -not -name 'compile_commands.json' \
+  -not -name 'dist' \
+  -not -name 'coverage'"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../Shared/lib/limit-core.sh"

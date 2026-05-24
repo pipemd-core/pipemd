@@ -111,6 +111,11 @@ TREE_FIND_EXCLUDES="${TREE_FIND_EXCLUDES:- \
   -not -name '.git' \
   -not -name '.pipemd'}"
 
+# Build find-exclude array from TREE_FIND_EXCLUDES string for safe expansion
+# (avoids eval). Each ecosystem limit.sh sets TREE_FIND_EXCLUDES as a string
+# of find predicates; we split on whitespace into an array.
+read -ra FIND_EXCLUDE_ARR <<< "$TREE_FIND_EXCLUDES"
+
 limit_tree() {
   local max="${1:-$MAX_TREE}"
   local excl="${TREE_EXCLUDES}"
@@ -141,6 +146,6 @@ limit_tree() {
     echo "(${lines3} lines at depth 3, showing depth 1)"
   else
     echo "Project structure:"
-    eval "find . -maxdepth 3 $TREE_FIND_EXCLUDES 2>/dev/null | head -\"$max\" | sort"
+    find . -maxdepth 3 "${FIND_EXCLUDE_ARR[@]}" 2>/dev/null | head -"$max" | sort
   fi
 }

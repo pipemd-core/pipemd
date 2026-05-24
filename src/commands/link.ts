@@ -8,6 +8,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { DEFAULT_PORT } from "../core/net/protocol.js";
 import { log } from "../core/logger.js";
+import { UserError } from "../core/errors.js";
 
 const LINK_DIR = path.join(os.homedir(), ".pipemd", "link");
 const PID_FILE = path.join(LINK_DIR, "relay.pid");
@@ -22,7 +23,8 @@ function ensureLinkDir() {
 function readRelayPid(): number | null {
   try {
     return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10) || null;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`read relay PID: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -33,8 +35,9 @@ function isRelayRunning(): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    try { fs.unlinkSync(PID_FILE); } catch {}
+  } catch (err: unknown) {
+    log.debug(`check relay process: ${err instanceof Error ? err.message : String(err)}`);
+    try { fs.unlinkSync(PID_FILE); } catch (err2: unknown) { log.debug(`unlink stale PID file: ${err2 instanceof Error ? err2.message : String(err2)}`); }
     return false;
   }
 }
@@ -42,7 +45,8 @@ function isRelayRunning(): boolean {
 function readRelayPort(): number {
   try {
     return parseInt(fs.readFileSync(PORT_FILE, "utf-8").trim(), 10) || DEFAULT_PORT;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`read relay port: ${err instanceof Error ? err.message : String(err)}`);
     return DEFAULT_PORT;
   }
 }
@@ -63,7 +67,8 @@ function readPeers(): { host: string; token: string }[] {
   try {
     if (!fs.existsSync(PEERS_FILE)) return [];
     return JSON.parse(fs.readFileSync(PEERS_FILE, "utf-8"));
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`read peers: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -96,7 +101,8 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: Record<string, un
           res.on("end", () => {
             try {
               resolve({ ok: res.statusCode === 200, data: JSON.parse(Buffer.concat(chunks).toString("utf-8")) });
-            } catch {
+            } catch (err: unknown) {
+              log.debug(`parse http response: ${err instanceof Error ? err.message : String(err)}`);
               resolve({ ok: res.statusCode === 200, data: null });
             }
           });
@@ -104,7 +110,8 @@ function httpGet(urlStr: string): Promise<{ ok: boolean; data: Record<string, un
       );
       req.on("error", () => resolve({ ok: false, data: null }));
       req.on("timeout", () => { req.destroy(); resolve({ ok: false, data: null }); });
-    } catch {
+    } catch (err: unknown) {
+      log.debug(`http get ${urlStr}: ${err instanceof Error ? err.message : String(err)}`);
       resolve({ ok: false, data: null });
     }
   });
@@ -116,7 +123,7 @@ function httpGetStatus(host: string, token?: string): Promise<Record<string, unk
       const lastColon = host.lastIndexOf(":");
       const h = host.slice(0, lastColon);
       const portStr = host.slice(lastColon + 1);
-      const port = parseInt(portStr || "9741", 10);
+      const port = parseInt(portStr || String(DEFAULT_PORT), 10);
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
       const req = http.get({ hostname: h, port, path: "/status", timeout: 3000, headers }, (res) => {
@@ -125,14 +132,16 @@ function httpGetStatus(host: string, token?: string): Promise<Record<string, unk
         res.on("end", () => {
           try {
             resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
-          } catch {
+          } catch (err: unknown) {
+            log.debug(`parse status response from ${host}: ${err instanceof Error ? err.message : String(err)}`);
             resolve(null);
           }
         });
       });
       req.on("error", () => resolve(null));
       req.on("timeout", () => { req.destroy(); resolve(null); });
-    } catch {
+    } catch (err: unknown) {
+      log.debug(`http get status ${host}: ${err instanceof Error ? err.message : String(err)}`);
       resolve(null);
     }
   });
@@ -148,7 +157,7 @@ async function doStart(): Promise<string | null> {
 
   for (let i = 0; i < 20; i++) {
     const check = readRelayPid();
-    if (check && (() => { try { process.kill(check, 0); return true; } catch { return false; } })()) {
+    if (check && (() => { try { process.kill(check, 0); return true; } catch (err: unknown) { log.debug(`relay pid ${check} not alive: ${err instanceof Error ? err.message : String(err)}`); return false; } })()) {
       const port = readRelayPort();
       return chalk.green(`✔ Relay started (PID ${check}, port ${port})`);
     }
@@ -198,7 +207,7 @@ link
     if (opts.stop) {
       const pid = readRelayPid();
       if (pid) {
-        try { process.kill(pid, "SIGTERM"); } catch {}
+        try { process.kill(pid, "SIGTERM"); } catch (err: unknown) { log.debug(`SIGTERM relay ${pid}: ${err instanceof Error ? err.message : String(err)}`); }
         console.log(chalk.green(`✔ Relay stopped (PID ${pid})`));
       } else {
         console.log(chalk.dim("No relay running."));
@@ -232,7 +241,7 @@ link
           const status = await httpGetStatus(p.host, p.token);
           if (status && status.ok) {
             const groupNames = Object.keys(status.groups || {});
-            const totalAgents = Object.values(status.groups || {}).reduce((sum: number, g: any) => sum + (g.local || 0) + (g.remote || 0), 0);
+            const totalAgents = Object.values(status.groups || {}).reduce((sum: number, g: { local: number; remote: number }) => sum + (g.local || 0) + (g.remote || 0), 0);
             console.log(chalk.green(`  ✔ ${p.host}`) + chalk.dim(` — ${totalAgents} agents, groups: ${groupNames.join(", ") || "none"}`));
           } else {
             console.log(chalk.red(`  ✖ ${p.host}`) + chalk.dim(" — unreachable"));
@@ -262,8 +271,7 @@ link
     if (host) {
       const { ok } = await httpGet(`http://${host}/health`);
       if (!ok) {
-        console.log(chalk.red(`✖ Cannot reach ${host}. Is the relay running there?`));
-        process.exit(1);
+        throw new UserError(chalk.red(`✖ Cannot reach ${host}. Is the relay running there?`));
       }
 
       const peerToken = opts.token || "";

@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { startLogic } from "../core/actions.js";
+import { UserError } from "../core/errors.js";
 
 export const startCommand = new Command("start")
   .description("Start the background daemon")
@@ -9,8 +10,7 @@ export const startCommand = new Command("start")
       const pid = startLogic();
       console.log(chalk.green(`✔ PipeMD daemon started (PID ${pid})`));
       console.log(chalk.dim("  Run `pmd status` to check daemon health."));
-    } catch (err: any) {
-      console.error(chalk.red(`✖ ${err.message}`));
-      process.exit(1);
+    } catch (err: unknown) {
+      throw new UserError(chalk.red(`✖ ${err instanceof Error ? err.message : String(err)}`));
     }
   });

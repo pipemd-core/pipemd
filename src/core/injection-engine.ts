@@ -77,7 +77,8 @@ function runGit(args: string[], fallback: string = ""): string {
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`runGit failed: ${err instanceof Error ? err.message : String(err)}`);
     return fallback;
   }
 }
@@ -204,7 +205,8 @@ function resolveCustom(ctx: ResolverContext): string {
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`resolveCustom command failed: ${err instanceof Error ? err.message : String(err)}`);
     return "";
   }
 }
@@ -218,7 +220,8 @@ function resolveGitStaged(ctx: ResolverContext): string {
     }).trim();
     if (!result) return "No staged changes";
     return result;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`resolveGitStaged failed: ${err instanceof Error ? err.message : String(err)}`);
     return "No staged changes";
   }
 }
@@ -232,7 +235,8 @@ function resolveGitDiffStat(ctx: ResolverContext): string {
     }).trim();
     if (!result) return "No unstaged changes";
     return result;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`resolveGitDiffStat failed: ${err instanceof Error ? err.message : String(err)}`);
     return "No unstaged changes";
   }
 }
@@ -341,7 +345,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
         });
       });
       if (eslintResult) errors.push(eslintResult);
-    } catch { /* eslint not available */ }
+    } catch (err: unknown) { log.debug(`eslint validation failed: ${err instanceof Error ? err.message : String(err)}`); }
 
     try {
       const tscResult = await new Promise<string>((resolve) => {
@@ -365,7 +369,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
         const relevant = tscResult.split("\n").filter((l) => l.includes(filePath));
         if (relevant.length > 0) errors.push(...relevant);
       }
-    } catch { /* tsc not available */ }
+    } catch (err: unknown) { log.debug(`tsc validation failed: ${err instanceof Error ? err.message : String(err)}`); }
 
     const content = errors.length > 0 ? errors.join("\n") : "No errors found";
     writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000);

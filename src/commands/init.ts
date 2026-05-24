@@ -22,6 +22,7 @@ import type { AiAgent, Harness } from "./init/constants.js";
 import { getAllScripts, testRunScripts, aiValidateScripts } from "./init/scripts.js";
 import { runInit, runInitFile, installHooksForHarnesses, printHarnessRouting, ensurePmdTags } from "./init/scaffold.js";
 import { renderPromptBlueprint, runHarness } from "./init/ui.js";
+import { UserError } from "../core/errors.js";
 
 export type { ScriptDef } from "./init/constants.js";
 export { getAllScripts, loadScriptContent, ensurePmdTags } from "./init/scaffold.js";
@@ -305,7 +306,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
     ],
     initial: 0,
   });
-  if (!setupAnswer.setup) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+  if (!setupAnswer.setup) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
   if (setupAnswer.setup === "recommended") {
     await runRecommendedSetup(options, detection, detectedHarnessNames);
@@ -322,7 +323,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
     ],
     initial: 0,
   });
-  if (!modeAnswer.mode) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+  if (!modeAnswer.mode) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
   const selectedMode: PmdMode = modeAnswer.mode;
   let selectedHarnesses: HarnessName[] = [];
@@ -343,7 +344,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
       choices: harnessChoices,
       hint: "space to toggle. enter to confirm. Pre-selected = auto-detected.",
     });
-    if (!harnessAnswer.harnesses) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+    if (!harnessAnswer.harnesses) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
     selectedHarnesses = harnessAnswer.harnesses;
     warnConflictingTargets(selectedHarnesses);
 
@@ -359,7 +360,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
         ],
         initial: 1,
       });
-      if (!deliveryResponse.delivery) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+      if (!deliveryResponse.delivery) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
       interactiveDelivery = deliveryResponse.delivery as DeliveryMode;
     } else {
       interactiveDelivery = resolveDelivery(options.delivery);
@@ -371,7 +372,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
       message: "Output file path (default: pmd.md)",
       initial: "pmd.md",
     });
-    if (!outputAnswer.output) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+    if (!outputAnswer.output) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
     outputFile = outputAnswer.output.trim() || "pmd.md";
   }
 
@@ -401,7 +402,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
     })),
     initial: VALID_ECOSYSTEMS.indexOf(detection.ecosystem),
   });
-  if (!ecosystemAnswer.ecosystem) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+  if (!ecosystemAnswer.ecosystem) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
   const profileAnswer = await prompts({
     type: "select",
@@ -414,7 +415,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
     })),
     initial: 1,
   });
-  if (!profileAnswer.profile) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+  if (!profileAnswer.profile) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
   const ecosystem: Ecosystem = ecosystemAnswer.ecosystem;
   const profile: TokenProfile = profileAnswer.profile;
@@ -491,7 +492,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
   });
 
   process.stdout.write(`\x1b[${counterOffset}A\x1b[2K\r\x1b[K\x1b[${counterOffset}B`);
-  if (!scriptsAnswer.scripts) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+  if (!scriptsAnswer.scripts) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
   const selectedIds: string[] = scriptsAnswer.scripts;
   const selectedScripts = allScripts.filter((s) => selectedIds.includes(s.id));
@@ -526,7 +527,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
       initial: confirmChoices.map((c, i) => !c.disabled ? i : -1).filter((i) => i >= 0) as unknown as number,
       hint: "space to toggle. enter to confirm.",
     });
-    if (!confirmAnswer.scripts) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+    if (!confirmAnswer.scripts) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
     finalIds = confirmAnswer.scripts;
   } else {
     finalIds = selectedIds;
@@ -548,7 +549,7 @@ async function runInteractive(options: InitOptions, detection: { ecosystem: Ecos
       ],
       initial: 0,
     });
-    if (!harnessPromptAnswer.harness) { console.log(chalk.yellow("\nSetup cancelled.")); process.exit(1); }
+    if (!harnessPromptAnswer.harness) { console.log(chalk.yellow("\nSetup cancelled.")); throw new UserError("Setup cancelled."); }
 
     const harness: Harness = harnessPromptAnswer.harness;
     const agent: AiAgent = resolveAgent(selectedHarnesses);

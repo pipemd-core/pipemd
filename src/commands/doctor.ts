@@ -11,6 +11,7 @@ import { installHooks } from "../core/hooks.js";
 import type { DeliveryMode } from "../core/injection-types.js";
 import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE, TEMPLATE_PATH, SCRIPTS_DIR } from "../core/paths.js";
 import { log } from "../core/logger.js";
+import { UserError } from "../core/errors.js";
 
 function findScripts(dir: string): string[] {
   const results: string[] = [];
@@ -69,7 +70,8 @@ export const doctorCommand = new Command("doctor")
         const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
         YAML.parse(raw);
         console.log(chalk.green(`  ✔ Config file valid: ${CONFIG_PATH}`));
-      } catch {
+      } catch (err: unknown) {
+        log.debug(`parse config YAML: ${err instanceof Error ? err.message : String(err)}`);
         console.log(chalk.red(`  ✖ Config file invalid YAML: ${CONFIG_PATH}`));
         hasErrors = true;
       }
@@ -82,7 +84,8 @@ export const doctorCommand = new Command("doctor")
       try {
         process.kill(pid, 0);
         console.log(chalk.green(`  ✔ Daemon running (PID ${pid})`));
-      } catch {
+      } catch (err: unknown) {
+        log.debug(`check daemon PID ${pid}: ${err instanceof Error ? err.message : String(err)}`);
         console.log(chalk.red(`  ✖ Daemon not running (stale PID ${pid})`));
         hasErrors = true;
       }
@@ -108,7 +111,8 @@ export const doctorCommand = new Command("doctor")
       for (const sf of scriptFiles) {
         try {
           fs.accessSync(sf, fs.constants.X_OK);
-        } catch {
+        } catch (err: unknown) {
+          log.debug(`check script executable ${sf}: ${err instanceof Error ? err.message : String(err)}`);
           notExecutable.push(sf);
           allExecutable = false;
         }
@@ -146,7 +150,7 @@ export const doctorCommand = new Command("doctor")
         const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
         const cfg = YAML.parse(raw) as { commands?: Record<string, string> };
         return !!cfg.commands?.crew;
-      } catch { return false; }
+      } catch (err: unknown) { log.debug(`read crew config: ${err instanceof Error ? err.message : String(err)}`); return false; }
     })();
 
     if (!hasCrewCommand) {
@@ -206,7 +210,7 @@ export const doctorCommand = new Command("doctor")
     if (hasErrors) {
       console.log(chalk.red("  ✖ Some checks failed — see above"));
       console.log();
-      process.exit(1);
+      throw new UserError("Some health checks failed");
     } else {
       console.log(chalk.green("  ✔ All checks passed"));
     }

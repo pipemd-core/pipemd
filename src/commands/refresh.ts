@@ -16,6 +16,7 @@ import {
 } from "./init.js";
 import { PIPEMD_DIR, CONFIG_PATH, SCRIPTS_DIR, TEMPLATE_PATH } from "../core/paths.js";
 import { log } from "../core/logger.js";
+import { UserError } from "../core/errors.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -108,7 +109,7 @@ function copyScript(localPath: string, content: string): void {
   fs.writeFileSync(localPath, content, "utf-8");
   try {
     fs.chmodSync(localPath, 0o755);
-  } catch {}
+  } catch (err: unknown) { log.debug(`chmod script ${localPath}: ${err instanceof Error ? err.message : String(err)}`); }
 }
 
 function buildCommand(script: ScriptDef, ecosystem: Ecosystem, profile: TokenProfile): string {
@@ -123,8 +124,7 @@ export const refreshCommand = new Command("refresh")
   .option("--scripts <ids>", "Comma-separated script IDs to add/update (skips interactive selection)")
   .action(async (options: { yes?: boolean; scripts?: string }) => {
     if (!fs.existsSync(CONFIG_PATH)) {
-      console.log(chalk.red("Error: .pipemd/config.yml not found. Run `pmd init` first."));
-      process.exit(1);
+      throw new UserError(chalk.red("Error: .pipemd/config.yml not found. Run `pmd init` first."));
     }
 
     const config = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as PipeConfig;

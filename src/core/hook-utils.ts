@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { HookInstallResult } from "./hooks.js";
+import { log } from "./logger.js";
 
 export function hasPmdHookInEvent(hooks: any, event: string, needle: string, matcher?: string): boolean {
   const entries = Array.isArray(hooks?.[event]) ? hooks[event] : [];
@@ -29,9 +30,7 @@ export function readJsonSettings(file: string): any | null {
   if (!fs.existsSync(file)) return {};
   try {
     return JSON.parse(fs.readFileSync(file, "utf-8"));
-  } catch {
-    return null;
-  }
+  } catch (err: unknown) { log.debug(`readJsonSettings failed for ${file}: ${err instanceof Error ? err.message : String(err)}`); return null; }
 }
 
 export function writeJsonSettings(file: string, data: any): void {

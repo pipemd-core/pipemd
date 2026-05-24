@@ -29,8 +29,7 @@ function cleanInjectionLog(maxAgeMs: number = INJECTION_LOG_MAX_AGE_MS): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(INJECTION_LOG_DIR);
-  } catch {
-    return;
+  } catch (err: unknown) { log.debug(`readdir injection log failed: ${err instanceof Error ? err.message : String(err)}`); return;
   }
   for (const file of entries) {
     if (file === "last.txt") continue;
@@ -79,9 +78,9 @@ function shutdown(allPipePaths: string[], exitCode: number = 0) {
   shutdownPipes();
 
   for (const p of allPipePaths) {
-    try { fs.unlinkSync(p); } catch {}
+    try { fs.unlinkSync(p); } catch (err: unknown) { log.debug(`unlink pipe failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
-  try { fs.unlinkSync(PID_FILE); } catch {}
+  try { fs.unlinkSync(PID_FILE); } catch (err: unknown) { log.debug(`unlink PID file failed: ${err instanceof Error ? err.message : String(err)}`); }
   process.exit(exitCode);
 }
 
@@ -194,7 +193,5 @@ export function readPidFile(): number | null {
   try {
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
     return isNaN(pid) ? null : pid;
-  } catch {
-    return null;
-  }
+  } catch (err: unknown) { log.debug(`readPidFile failed: ${err instanceof Error ? err.message : String(err)}`); return null; }
 }

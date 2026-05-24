@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { log } from "../core/logger.js";
 import {
   resolveTraceData,
   resolveLockMap,
@@ -105,13 +106,13 @@ const trace = new Command("trace")
     let scrollOffset = 0;
     let viewMode: ViewMode = "tree";
     let running = true;
-    let interval: ReturnType<typeof setInterval> | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined; // eslint-disable-line prefer-const
 
     const cleanup = () => {
       running = false;
       if (interval) clearInterval(interval);
       process.stdout.write("\x1b[?25h");
-      try { process.stdin.setRawMode(false); } catch {}
+      try { process.stdin.setRawMode(false); } catch (err: unknown) { log.debug(`setRawMode(false): ${err instanceof Error ? err.message : String(err)}`); }
       process.stdin.pause();
       clearScreen();
     };

@@ -7,6 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { log } from "./logger.js";
 import { tryReadJson, readInjectStats as readInjectStatsFromUtils } from "./json-utils.js";
 import { atomicWrite } from "./fs-utils.js";
 import { DEFAULT_STALE_MS } from "./crew.js";
@@ -53,7 +54,7 @@ export function findContextBytes(pipemdDir: string, cwd: string): number {
     try {
       const s = fs.statSync(path.join(cwd, f));
       if (s.isFile() && s.size > 0) return s.size;
-    } catch { /* not present */ }
+    } catch (err: unknown) { log.debug(`stat context file failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
   return 0;
 }
@@ -78,7 +79,7 @@ export function bumpInjectStats(
     };
     const target = path.join(pipemdDir, INJECT_STATS_FILE);
     atomicWrite(target, JSON.stringify(cur));
-  } catch { /* stats are best-effort */ }
+  } catch (err: unknown) { log.debug(`bumpInjectStats failed: ${err instanceof Error ? err.message : String(err)}`); }
 }
 
 /**
@@ -108,7 +109,7 @@ export function shouldSuppressGeminiStatusline(
   }
   try {
     atomicWrite(file, JSON.stringify({ ts: now, line }));
-  } catch { /* best-effort */ }
+  } catch (err: unknown) { log.debug(`atomicWrite gemini statusline state failed: ${err instanceof Error ? err.message : String(err)}`); }
   return false;
 }
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { log } from "./logger.js";
 
 export interface ProcInfo {
   pid: number;
@@ -31,7 +32,8 @@ export function resolveProcessCwd(pid: number): string | undefined {
   try {
     const link = fs.readlinkSync(`/proc/${pid}/cwd`);
     return typeof link === "string" ? link : undefined;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`resolveProcessCwd failed for pid ${pid}: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
 }
@@ -53,9 +55,7 @@ export function snapshotProcesses(): Map<number, ProcInfo> {
       const pid = Number(m[1]);
       map.set(pid, { pid, ppid: Number(m[2]), command: m[3] });
     }
-  } catch {
-    /* ps unavailable */
-  }
+  } catch (err: unknown) { log.debug(`snapshotProcesses ps failed: ${err instanceof Error ? err.message : String(err)}`); }
   procCache = { stamp: now, map };
   return map;
 }
@@ -76,7 +76,7 @@ export function resolveAgentIdentity(
         const raw = fs.readFileSync(`.pipemd/crew/${envSession}.json`, "utf-8");
         const s = JSON.parse(raw);
         if (s && s.id) return { pid: s.pid, ppid: s.ppid, harness: s.harness };
-      } catch { /* ignore */ }
+      } catch (err: unknown) { log.debug(`resolveAgentIdentity windows session read failed: ${err instanceof Error ? err.message : String(err)}`); }
     }
     return { pid: process.ppid, ppid: 0, harness: "unknown" };
   }

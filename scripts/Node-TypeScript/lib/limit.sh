@@ -10,10 +10,20 @@ TREE_FIND_EXCLUDES=" \
   -not -path '*/dist/*' \
   -not -path '*/build/*' \
   -not -path '*/.next/*' \
+  -not -path '*/.turbo/*' \
   -not -path '*/coverage/*' \
+  -not -path '*/out/*' \
+  -not -path '*/__pycache__/*' \
+  -not -path '*/venv/*' \
+  -not -path '*/.venv/*' \
   -not -name 'node_modules' \
   -not -name '.git' \
-  -not -name '.pipemd'"
+  -not -name '.pipemd' \
+  -not -name '.turbo' \
+  -not -name 'out' \
+  -not -name '__pycache__' \
+  -not -name 'venv' \
+  -not -name '.venv'"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../Shared/lib/limit-core.sh"

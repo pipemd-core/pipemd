@@ -26,8 +26,8 @@ export function loadScriptContent(ecosystem: Ecosystem, scriptFile: string): str
   for (const p of paths) {
     try {
       return fs.readFileSync(p, "utf-8");
-    } catch {
-      // try next path
+    } catch (err: unknown) {
+      log.debug(`load script ${p}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return null;
@@ -65,14 +65,14 @@ export async function testRunScripts(
     if (libContent) {
       fs.mkdirSync(path.join(tmpDir, "lib"), { recursive: true });
       fs.writeFileSync(path.join(tmpDir, "lib", "limit.sh"), libContent, "utf-8");
-      try { fs.chmodSync(path.join(tmpDir, "lib", "limit.sh"), 0o755); } catch {}
+      try { fs.chmodSync(path.join(tmpDir, "lib", "limit.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod limit.sh: ${err instanceof Error ? err.message : String(err)}`); }
     }
 
     const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
     if (normContent) {
       fs.mkdirSync(path.join(tmpDir, "architecture"), { recursive: true });
       fs.writeFileSync(path.join(tmpDir, "architecture", "normalize.sh"), normContent, "utf-8");
-      try { fs.chmodSync(path.join(tmpDir, "architecture", "normalize.sh"), 0o755); } catch {}
+      try { fs.chmodSync(path.join(tmpDir, "architecture", "normalize.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod normalize.sh: ${err instanceof Error ? err.message : String(err)}`); }
     }
 
     for (const script of selected) {
@@ -92,7 +92,7 @@ export async function testRunScripts(
       fs.mkdirSync(scriptDir, { recursive: true });
       const scriptPath = path.join(tmpDir, script.file);
       fs.writeFileSync(scriptPath, scriptContent, "utf-8");
-      try { fs.chmodSync(scriptPath, 0o755); } catch {}
+      try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod test script ${scriptPath}: ${err instanceof Error ? err.message : String(err)}`); }
 
       try {
         const { stdout, stderr } = await execFileAsync("bash", [scriptPath], {

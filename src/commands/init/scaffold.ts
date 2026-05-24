@@ -12,6 +12,7 @@ import {
 } from "../../core/injection-types.js";
 import type { DeliveryMode } from "../../core/injection-types.js";
 import { PIPEMD_DIR, PIPES_DIR, LIVE_DIR, SCRIPTS_DIR, TEMPLATE_PATH, CONFIG_PATH } from "../../core/paths.js";
+import { log } from "../../core/logger.js";
 import { HARNESS_TARGETS } from "../../core/detectHarness.js";
 import type { HarnessName } from "../../core/detectHarness.js";
 import type { Ecosystem } from "../../core/detect.js";
@@ -298,7 +299,7 @@ function writeScripts(
     if (scriptContent) {
       const scriptPath = path.join(SCRIPTS_DIR, script.file);
       addFile(scriptPath, scriptContent);
-      try { fs.chmodSync(scriptPath, 0o755); } catch {}
+      try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod script ${scriptPath}: ${err instanceof Error ? err.message : String(err)}`); }
     }
   }
 }
@@ -313,7 +314,7 @@ function writeLibraryFiles(
     mkdirp(libDir);
     const libPath = path.join(libDir, "limit.sh");
     addFile(libPath, libContent);
-    try { fs.chmodSync(libPath, 0o755); } catch {}
+    try { fs.chmodSync(libPath, 0o755); } catch (err: unknown) { log.debug(`chmod lib ${libPath}: ${err instanceof Error ? err.message : String(err)}`); }
   }
 
   const archDir = path.join(SCRIPTS_DIR, "architecture");
@@ -322,7 +323,7 @@ function writeLibraryFiles(
     mkdirp(archDir);
     const normPath = path.join(archDir, "normalize.sh");
     addFile(normPath, normContent);
-    try { fs.chmodSync(normPath, 0o755); } catch {}
+    try { fs.chmodSync(normPath, 0o755); } catch (err: unknown) { log.debug(`chmod normalize ${normPath}: ${err instanceof Error ? err.message : String(err)}`); }
   }
 }
 

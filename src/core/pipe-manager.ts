@@ -51,7 +51,8 @@ export function checkMkfifo(): boolean {
     execFileSync("mkfifo", [testPipe], { encoding: "utf-8", stdio: "pipe" });
     fs.unlinkSync(testPipe);
     return true;
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`checkMkfifo failed: ${err instanceof Error ? err.message : String(err)}`);
     return false;
   }
 }
@@ -300,14 +301,14 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
 
 export function shutdownPipes() {
   for (const id of activeTimers) {
-    try { clearTimeout(id as any); } catch {}
-    try { clearInterval(id as any); } catch {}
+    try { clearTimeout(id as any); } catch (err: unknown) { log.debug(`shutdown clearTimeout failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { clearInterval(id as any); } catch (err: unknown) { log.debug(`shutdown clearInterval failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
   activeTimers.length = 0;
 
   for (const entry of contextStreamEntries) {
-    try { entry.stream.destroy(); } catch {}
-    try { fs.closeSync(entry.fd); } catch {}
+    try { entry.stream.destroy(); } catch (err: unknown) { log.debug(`shutdown stream.destroy failed: ${err instanceof Error ? err.message : String(err)}`); }
+    try { fs.closeSync(entry.fd); } catch (err: unknown) { log.debug(`shutdown closeSync failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
   contextStreamEntries.length = 0;
 }

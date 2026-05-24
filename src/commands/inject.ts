@@ -9,6 +9,7 @@ import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
 import { bumpInjectStats } from "../core/statusline-data.js";
 import { log } from "../core/logger.js";
+import { UserError } from "../core/errors.js";
 
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
 type InjectFormat = "plain" | "claude-hook" | "gemini-json";
@@ -41,21 +42,18 @@ const inject = new Command("inject")
       let realCwd: string;
       try {
         realPath = realpathSync(resolved);
-      } catch {
-        console.error(chalk.red(`✖ --file path does not resolve: ${resolved}`));
-        process.exit(1);
-        return;
+      } catch (err: unknown) {
+        log.debug(`resolve --file path ${resolved}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new UserError(chalk.red(`✖ --file path does not resolve: ${resolved}`));
       }
       try {
         realCwd = realpathSync(cwd);
-      } catch {
-        console.error(chalk.red(`✖ Cannot resolve cwd: ${cwd}`));
-        process.exit(1);
-        return;
+      } catch (err: unknown) {
+        log.debug(`resolve cwd ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
+        throw new UserError(chalk.red(`✖ Cannot resolve cwd: ${cwd}`));
       }
       if (!realPath.startsWith(realCwd + path.sep) && realPath !== realCwd) {
-        console.error(chalk.red(`✖ --file must be within the project root`));
-        process.exit(1);
+        throw new UserError(chalk.red(`✖ --file must be within the project root`));
       }
     }
 

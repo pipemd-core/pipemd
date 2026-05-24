@@ -14,7 +14,9 @@ TREE_FIND_EXCLUDES=" \
   -not -path '*/build/*' \
   -not -name '__pycache__' \
   -not -name '.git' \
-  -not -name '.pipemd'"
+  -not -name '.pipemd' \
+  -not -name 'dist' \
+  -not -name 'build'"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../Shared/lib/limit-core.sh"

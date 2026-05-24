@@ -6,19 +6,19 @@ import { renderContentAsync } from "../core/injector.js";
 import { PMD_CONTEXT_SEPARATOR, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { CONFIG_PATH, TEMPLATE_PATH } from "../core/paths.js";
+import { log } from "../core/logger.js";
+import { UserError } from "../core/errors.js";
 
 export const runCommand = new Command("run")
   .description("Render context once to stdout or a file (no daemon needed)")
   .option("-o, --output <file>", "Write output to file instead of stdout")
   .action(async (options: { output?: string }) => {
     if (!fs.existsSync(CONFIG_PATH)) {
-      console.error(chalk.red("✖ PipeMD not initialized. Run `pmd init` first."));
-      process.exit(1);
+      throw new UserError("✖ PipeMD not initialized. Run `pmd init` first.");
     }
 
     if (!fs.existsSync(TEMPLATE_PATH)) {
-      console.error(chalk.red("✖ Template not found at .pipemd/template.md"));
-      process.exit(1);
+      throw new UserError("✖ Template not found at .pipemd/template.md");
     }
 
     const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
@@ -35,7 +35,8 @@ export const runCommand = new Command("run")
       try {
         const base = fs.readFileSync(config.base, "utf-8").trimEnd();
         output = base ? base + PMD_CONTEXT_SEPARATOR + rendered : rendered;
-      } catch {
+      } catch (err: unknown) {
+        log.debug(`read base file ${config.base}: ${err instanceof Error ? err.message : String(err)}`);
         output = rendered;
       }
     } else {

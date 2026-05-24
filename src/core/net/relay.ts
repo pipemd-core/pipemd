@@ -98,9 +98,7 @@ function readPeers(): PeerConfig[] {
     const peersFile = path.join(homeDir, ".pipemd", "link", "peers.json");
     if (!fs.existsSync(peersFile)) return [];
     return JSON.parse(fs.readFileSync(peersFile, "utf-8")) as PeerConfig[];
-  } catch {
-    return [];
-  }
+  } catch (err: unknown) { log.debug(`readPeers failed: ${err instanceof Error ? err.message : String(err)}`); return []; }
 }
 
 function readToken(): string {
@@ -342,18 +340,18 @@ export function runRelay() {
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");
 
   process.on("SIGTERM", () => {
-    try { fs.unlinkSync(pidFile); } catch {}
+    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGTERM unlink pidFile failed: ${err instanceof Error ? err.message : String(err)}`); }
     stopRelay();
     process.exit(0);
   });
   process.on("SIGINT", () => {
-    try { fs.unlinkSync(pidFile); } catch {}
+    try { fs.unlinkSync(pidFile); } catch (err: unknown) { log.debug(`SIGINT unlink pidFile failed: ${err instanceof Error ? err.message : String(err)}`); }
     stopRelay();
     process.exit(0);
   });
 
   const envPort = parseInt(process.env.PMD_LINK_PORT || "", 10);
-  let port = isNaN(envPort) ? DEFAULT_PORT : envPort;
+  const port = isNaN(envPort) ? DEFAULT_PORT : envPort;
 
   startRelay(port).then((actualPort) => {
     log.info(`Relay running on port ${actualPort}`);
@@ -361,7 +359,7 @@ export function runRelay() {
     fs.writeFileSync(portFile, String(actualPort), "utf-8");
   }).catch((err) => {
     log.error(`Relay failed to start: ${err.message}`);
-    try { fs.unlinkSync(pidFile); } catch {}
+    try { fs.unlinkSync(pidFile); } catch (err2: unknown) { log.debug(`startRelay cleanup unlink failed: ${err2 instanceof Error ? err2.message : String(err2)}`); }
     process.exit(1);
   });
 }

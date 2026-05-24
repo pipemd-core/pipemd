@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { log } from "./logger.js";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 export type DeliveryMode = "passive" | "active" | "expert";
@@ -182,9 +183,7 @@ export function loadInjectionConfig(configDir?: string): InjectionConfig {
       const content = fs.readFileSync(filePath, "utf-8");
       const parsed = parseYaml(content);
       return parseInjectionConfig(parsed);
-    } catch {
-      continue;
-    }
+    } catch (err: unknown) { log.debug(`loadInjectionConfig read failed: ${err instanceof Error ? err.message : String(err)}`); continue; }
   }
 
   return { ...DEFAULT_ACTIVE_RULES };

@@ -5,6 +5,7 @@ import { listSessions } from "./crew.js";
 import type { CrewSession } from "./crew.js";
 import { INJECTED_DIR } from "./dedup.js";
 import { CREW_DIR, INJECTION_LOG_DIR, TUI_STATS_FILE, INJECT_STATS_FILE } from "./paths.js";
+import { log } from "./logger.js";
 import { tryReadJson, isPidAlive, readInjectStats, formatTimeAgo } from "./json-utils.js";
 
 export interface TraceSession {
@@ -104,8 +105,7 @@ function readPayloads(maxPayloads: number): TracePayload[] {
   let files: string[];
   try {
     files = fs.readdirSync(INJECTION_LOG_DIR).filter(f => /^\d+\.txt$/.test(f));
-  } catch {
-    return [];
+  } catch (err: unknown) { log.debug(`readdir INJECTION_LOG_DIR failed: ${err instanceof Error ? err.message : String(err)}`); return [];
   }
   files.sort((a, b) => {
     const na = parseInt(a, 10);
@@ -119,8 +119,7 @@ function readPayloads(maxPayloads: number): TracePayload[] {
     let raw: string;
     try {
       raw = fs.readFileSync(p, "utf-8");
-    } catch {
-      continue;
+    } catch (err: unknown) { log.debug(`readFile payload ${p} failed: ${err instanceof Error ? err.message : String(err)}`); continue;
     }
     const id = parseInt(f, 10);
     const stat = fs.statSync(p);
@@ -158,8 +157,7 @@ function readOrphanedDedup(crewIds: Set<string>): string[] {
   let files: string[];
   try {
     files = fs.readdirSync(INJECTED_DIR).filter(f => f.endsWith(".json"));
-  } catch {
-    return [];
+  } catch (err: unknown) { log.debug(`readdir INJECTED_DIR failed: ${err instanceof Error ? err.message : String(err)}`); return [];
   }
   const orphaned: string[] = [];
   for (const f of files) {

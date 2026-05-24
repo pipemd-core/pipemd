@@ -1,7 +1,8 @@
-import { describe, it } from "node:test"
+import { describe, it, before, after } from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
+import os from "node:os"
 import {
   isSessionStale,
   findConflicts,
@@ -15,6 +16,9 @@ import {
   DEFAULT_STALE_MS,
 } from "../src/core/crew.js"
 import type { CrewSession } from "../src/core/crew.js"
+
+let tmpDir: string;
+let origCwd: string;
 
 function makeSession(overrides: Partial<CrewSession> = {}): CrewSession {
   return {
@@ -33,18 +37,17 @@ function makeSession(overrides: Partial<CrewSession> = {}): CrewSession {
   }
 }
 
-const TEST_IDS: string[] = []
-function testId(): string {
-  const id = "cr_test_" + Math.random().toString(36).slice(2, 10)
-  TEST_IDS.push(id)
-  return id
-}
+before(() => {
+  origCwd = process.cwd();
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pmd-crew-test-"));
+  fs.mkdirSync(path.join(tmpDir, ".pipemd", "crew"), { recursive: true });
+  process.chdir(tmpDir);
+});
 
-function cleanupTestSessions() {
-  for (const id of TEST_IDS) {
-    try { fs.unlinkSync(path.join(".pipemd", "crew", `${id}.json`)) } catch {}
-  }
-}
+after(() => {
+  process.chdir(origCwd);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
 describe("isSessionStale", () => {
   it("fresh session is not stale", () => {
@@ -166,8 +169,7 @@ describe("generateSessionId", () => {
 
 describe("filesystem (writeSessionAtomic / readSession / deleteSession / listSessions)", () => {
   it("write then read round-trip", () => {
-    fs.mkdirSync(path.join(".pipemd", "crew"), { recursive: true })
-    const id = testId()
+    const id = "cr_" + Math.random().toString(36).slice(2, 10)
     const s = makeSession({ id, lastHeartbeat: new Date().toISOString() })
     writeSessionAtomic(s)
     const read = readSession(id)
@@ -175,7 +177,6 @@ describe("filesystem (writeSessionAtomic / readSession / deleteSession / listSes
     assert.equal(read!.id, id)
     assert.equal(read!.role, "coordinator")
     assert.equal(read!.harness, "TestHarness")
-    cleanupTestSessions()
   })
 
   it("read non-existent returns null", () => {
@@ -183,7 +184,7 @@ describe("filesystem (writeSessionAtomic / readSession / deleteSession / listSes
   })
 
   it("delete removes the file", () => {
-    const id = testId()
+    const id = "cr_" + Math.random().toString(36).slice(2, 10)
     writeSessionAtomic(makeSession({ id }))
     assert.ok(readSession(id), "should exist before delete")
     deleteSession(id)
@@ -195,18 +196,17 @@ describe("filesystem (writeSessionAtomic / readSession / deleteSession / listSes
   })
 
   it("listSessions returns sessions from JSON files", () => {
-    const id1 = testId()
-    const id2 = testId()
+    const id1 = "cr_" + Math.random().toString(36).slice(2, 10)
+    const id2 = "cr_" + Math.random().toString(36).slice(2, 10)
     writeSessionAtomic(makeSession({ id: id1 }))
     writeSessionAtomic(makeSession({ id: id2 }))
     const ids = listSessions().map((s) => s.id)
     assert.ok(ids.includes(id1), `should include ${id1}`)
     assert.ok(ids.includes(id2), `should include ${id2}`)
-    cleanupTestSessions()
   })
 
   it("listSessions skips malformed JSON files", () => {
-    const badId = testId() + "_bad"
+    const badId = "cr_bad_" + Math.random().toString(36).slice(2, 10)
     const badPath = path.join(".pipemd", "crew", `${badId}.json`)
     fs.writeFileSync(badPath, "{{not json}}")
     const ids = listSessions().map((s) => s.id)

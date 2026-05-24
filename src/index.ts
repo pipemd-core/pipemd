@@ -16,6 +16,7 @@ import { traceCommand } from "./commands/trace.js";
 import { linkCommand } from "./commands/link.js";
 import { runDaemon } from "./core/daemon.js";
 import { runRelay } from "./core/net/relay.js";
+import { UserError } from "./core/errors.js";
 
 declare const PKG_VERSION: string;
 
@@ -142,4 +143,16 @@ program
     runRelay();
   });
 
-program.parse();
+program.exitOverride((err) => {
+  if (err.code === "commander.help" || err.code === "commander.version") {
+    process.exit(0);
+  }
+});
+
+program.parseAsync().catch((err: unknown) => {
+  if (err instanceof UserError) {
+    process.stderr.write(`\n${err.message}\n`);
+    process.exit(1);
+  }
+  throw err;
+});

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { log } from "./logger.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "__pycache__", "vendor", "target", ".terraform", "cmake-build-", "_deps"]);
 
@@ -25,7 +26,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
       while (stack.length > 0) {
         const current = stack.pop()!;
         let entries: fs.Dirent[];
-        try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+        try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (err: unknown) { log.debug(`readdirSync failed for ${current}: ${err instanceof Error ? err.message : String(err)}`); continue; }
         for (const entry of entries) {
           const name = entry.name;
           if (SKIP_DIRS.has(name)) continue;
@@ -37,7 +38,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
         }
       }
       return false;
-    } catch { return false; }
+    } catch (err: unknown) { log.debug(`hasIn failed for ${dir}: ${err instanceof Error ? err.message : String(err)}`); return false; }
   };
 
   // ── Ecosystem Detection ──
@@ -167,7 +168,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
         signals.push("sqlalchemy dependency → sqlalchemy models");
         recommended.push("sqlalchemy");
       }
-    } catch { /* skip */ }
+    } catch (err: unknown) { log.debug(`pyproject.toml read failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
 
   // ── API Framework Detection ──
@@ -180,14 +181,14 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
           const allFiles = fs.readdirSync(path.join(cwd, d), { recursive: true }).map(String);
           const jsFiles = allFiles.filter(f => !f.includes("node_modules") && /\.(ts|js|mjs)$/.test(f));
           const content = jsFiles.slice(0, 40).map((f) => {
-            try { return fs.readFileSync(path.join(cwd, d, f), "utf-8"); } catch { return ""; }
+            try { return fs.readFileSync(path.join(cwd, d, f), "utf-8"); } catch (err: unknown) { log.debug(`readFile failed for ${f}: ${err instanceof Error ? err.message : String(err)}`); return ""; }
           }).join("\n");
           if (content.includes("app.get") || content.includes("router.get") || content.includes("router.post")) {
             signals.push("Express routes detected → express-routes");
             recommended.push("express-routes");
             break;
           }
-        } catch { /* skip */ }
+        } catch (err: unknown) { log.debug(`Express route detection readdir failed for ${d}: ${err instanceof Error ? err.message : String(err)}`); }
       }
     }
     if (hasIn("src", /controller.*\.ts/) || hasIn("src", /\.controller\.ts/)) {
@@ -210,7 +211,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
               pythonFiles.push(full);
             }
           }
-        } catch { /* skip */ }
+        } catch (err: unknown) { log.debug(`walkDir readdir failed for ${dir}: ${err instanceof Error ? err.message : String(err)}`); }
       };
       walkDir(cwd, "");
       for (const f of pythonFiles.slice(0, 5)) {
@@ -221,7 +222,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
           break;
         }
       }
-    } catch { /* skip */ }
+    } catch (err: unknown) { log.debug(`FastAPI detection failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
 
   // ── C/C++ Script Detection ──
@@ -245,7 +246,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
               const content = fs.readFileSync(path.join(cwd, f), "utf-8");
               if (content.includes("= 0") && content.includes("virtual")) hasVirtual = true;
               if (content.includes(": public") || content.includes(": private") || content.includes(": protected")) hasInheritance = true;
-            } catch { /* skip */ }
+            } catch (err: unknown) { log.debug(`C++ header read failed for ${f}: ${err instanceof Error ? err.message : String(err)}`); }
           }
           if (hasInheritance) {
             signals.push("C++ class inheritance detected → class-diagram");
@@ -258,7 +259,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
           signals.push("C++ headers detected → include-graph");
           recommended.push("include-graph");
         }
-      } catch { /* skip */ }
+      } catch (err: unknown) { log.debug(`C++ header scan failed: ${err instanceof Error ? err.message : String(err)}`); }
     }
   }
 
@@ -289,7 +290,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
           signals.push("Cargo features detected → cargo-features");
           recommended.push("cargo-features");
         }
-      } catch { /* skip */ }
+      } catch (err: unknown) { log.debug(`Cargo.toml read failed: ${err instanceof Error ? err.message : String(err)}`); }
     }
   }
 
@@ -337,10 +338,10 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
               }
             }
           }
-        } catch { /* skip */ }
+        } catch (err: unknown) { log.debug(`monorepo subdirectory readdir failed: ${err instanceof Error ? err.message : String(err)}`); }
       }
     }
-  } catch { /* skip */ }
+  } catch (err: unknown) { log.debug(`monorepo detection readdir failed: ${err instanceof Error ? err.message : String(err)}`); }
 
   if (monorepoSignals.length > 0 || hasMonorepoDirs || subReadmeCount >= 2) {
     if (monorepoSignals.length > 0) {

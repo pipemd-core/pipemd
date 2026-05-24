@@ -16,10 +16,11 @@ import { Command } from "commander";
 import chalk from "chalk";
 import {
   PIPEMD_DIR,
-  isPidAlive,
   listSessions,
   findConflicts,
 } from "../core/crew.js";
+import { isPidAlive } from "../core/json-utils.js";
+import { log } from "../core/logger.js";
 import {
   DAEMON_PID_FILE,
   estimateTokens,
@@ -58,7 +59,8 @@ function readStdinJson(): any | null {
     const raw = fs.readFileSync(0, "utf-8");
     if (!raw.trim()) return null;
     return JSON.parse(raw);
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`read stdin JSON: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -70,8 +72,8 @@ function readDaemonPid(pipemdDir: string): number | null {
       10,
     );
     if (pid > 0 && isPidAlive(pid)) return pid;
-  } catch {
-    /* no daemon */
+  } catch (err: unknown) {
+    log.debug(`read daemon PID: ${err instanceof Error ? err.message : String(err)}`);
   }
   return null;
 }
@@ -154,8 +156,8 @@ const statusline = new Command("statusline")
       input?.workspace?.current_dir ?? input?.cwd ?? process.cwd();
     try {
       if (cwd && fs.existsSync(cwd)) process.chdir(cwd);
-    } catch {
-      /* fall back to the current working directory */
+    } catch (err: unknown) {
+      log.debug(`chdir to ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Harmless in non-PipeMD projects — print nothing, exit clean.

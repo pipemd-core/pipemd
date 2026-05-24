@@ -2,6 +2,8 @@ import { mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, statSync 
 import { join } from "node:path";
 import { computePayloadHash } from "./injection-types.js";
 import { atomicWrite } from "./fs-utils.js";
+import { log } from "./logger.js";
+import { TtlCache } from "./ttl-cache.js";
 
 export interface InjectedRecord {
   sessionId: string;
@@ -15,7 +17,7 @@ type SessionStore = Record<string, { hash: string; timestamp: number }>;
 
 export const INJECTED_DIR = ".pipemd/cache/injected";
 
-const memCache = new Map<string, { ts: number; store: SessionStore }>();
+const memCache = new Map<string, TtlCache<SessionStore>>();
 const MEM_CACHE_TTL = 2_000;
 
 export function clearMemCache(): void {
@@ -31,26 +33,33 @@ function sessionPath(sessionId: string): string {
 }
 
 function loadSession(sessionId: string): SessionStore {
-  const now = Date.now();
-  const cached = memCache.get(sessionId);
-  if (cached && now - cached.ts < MEM_CACHE_TTL) return cached.store;
+  let cache = memCache.get(sessionId);
+  if (!cache) {
+    cache = new TtlCache<SessionStore>(MEM_CACHE_TTL);
+    memCache.set(sessionId, cache);
+  }
+  const cached = cache.get();
+  if (cached !== null) return cached;
   const p = sessionPath(sessionId);
   let store: SessionStore = {};
   if (existsSync(p)) {
     try {
       store = JSON.parse(readFileSync(p, "utf8"));
-    } catch {
+    } catch (err: unknown) {
+      log.debug(`loadSession parse failed: ${err instanceof Error ? err.message : String(err)}`);
       store = {};
     }
   }
-  memCache.set(sessionId, { ts: now, store });
+  cache.set(store);
   return store;
 }
 
 function saveSession(sessionId: string, store: SessionStore): void {
   ensureInjectedDir();
   atomicWrite(sessionPath(sessionId), JSON.stringify(store));
-  memCache.set(sessionId, { ts: Date.now(), store });
+  const cache = memCache.get(sessionId);
+  if (cache) cache.set(store);
+  else memCache.set(sessionId, (() => { const c = new TtlCache<SessionStore>(MEM_CACHE_TTL); c.set(store); return c; })());
 }
 
 export function recordInjection(sessionId: string, source: string, content: string): void {
@@ -89,7 +98,8 @@ export function purgeOldRecords(maxAgeMs: number = 3600000): void {
   let entries: string[];
   try {
     entries = readdirSync(INJECTED_DIR);
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`purgeOldRecords readdir failed: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
   for (const file of entries) {
@@ -100,8 +110,6 @@ export function purgeOldRecords(maxAgeMs: number = 3600000): void {
       if (now - stat.mtimeMs > maxAgeMs) {
         unlinkSync(fullPath);
       }
-    } catch {
-      // ignore
-    }
+    } catch (err: unknown) { log.debug(`purgeOldRecords stat/unlink failed: ${err instanceof Error ? err.message : String(err)}`); }
   }
 }

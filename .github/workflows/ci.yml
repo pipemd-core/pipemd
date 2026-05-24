@@ -39,7 +39,8 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: npx tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm typecheck
       - run: pnpm test:unit
       - run: pnpm test:e2e
       - run: pnpm test:bidir
@@ -48,6 +49,7 @@ jobs:
       - run: pnpm test:compose
       - run: pnpm test:crew
       - run: pnpm test:inject
+      - run: pnpm test:link
 
   publish:
     name: Publish to npm

@@ -1,14 +1,18 @@
 import { execFileSync } from "node:child_process";
-import { snapshotProcesses, resolvePassiveAgents, resolveProcessCwd } from "./crew-process.js";
+import { log } from "./logger.js";
+import { snapshotProcesses, resolvePassiveAgents } from "./crew-process.js";
 import type { ProcInfo } from "./crew-process.js";
 import {
   listSessions,
   findConflicts,
   reapStaleSessions,
-  isPidAlive,
   type CrewSession,
   type CrewConflict,
 } from "./crew.js";
+
+// NOTE: This module imports from crew.ts, and crew.ts re-exports from this module.
+// This is safe because all imports here are used inside functions (lazy evaluation),
+// never at module-initialization time.
 
 export interface CrewStatusJson {
   sessions: Array<{
@@ -35,7 +39,8 @@ function resolveUncommittedFiles(): string[] {
       stdio: ["ignore", "pipe", "ignore"],
     });
     return out.split("\n").filter(Boolean).map((l) => l.slice(3));
-  } catch {
+  } catch (err: unknown) {
+    log.debug(`resolveUncommittedFiles failed: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -49,7 +54,7 @@ export function getStatusJson(): CrewStatusJson {
   try {
     const procs = snapshotProcesses();
     passive.push(...resolvePassiveAgents(sessions, procs, process.cwd()));
-  } catch { /* ps unavailable */ }
+  } catch (err: unknown) { log.debug(`getStatusJson snapshotProcesses failed: ${err instanceof Error ? err.message : String(err)}`); }
 
   const uncommitted = resolveUncommittedFiles();
 
