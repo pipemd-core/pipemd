@@ -24,6 +24,7 @@ const inject = new Command("inject")
   .option("--run-validation", "internal: execute validation synchronously (called by self-spawn)")
   .option("--format <format>", "output format: plain | claude-hook | gemini-json")
   .option("--show-last", "output the most recent injection payload without re-running")
+  .option("--verbose", "log resolver trace to stderr")
   .action(async (opts: {
     trigger?: string;
     file?: string;
@@ -32,6 +33,7 @@ const inject = new Command("inject")
     runValidation?: boolean;
     format?: string;
     showLast?: boolean;
+    verbose?: boolean;
   }) => {
     if (!isPipemdProject()) return;
 
@@ -97,7 +99,7 @@ const inject = new Command("inject")
       : opts.format === "gemini-json" ? "gemini-json"
       : "plain";
 
-    const payloads = await resolveInjections(trigger, opts.file, opts.session);
+    const payloads = await resolveInjections(trigger, opts.file, opts.session, opts.verbose);
 
     // Record injection traffic so the Claude Code statusline has data — its
     // inject hooks call `pmd inject` directly and would otherwise track nothing.

@@ -245,6 +245,7 @@ export async function resolveInjections(
   trigger: InjectionTrigger,
   targetFile?: string,
   sessionId?: string,
+  verbose?: boolean,
 ): Promise<InjectionPayload[]> {
   const config = loadInjectionConfig();
   const rules = getRulesForTrigger(config, trigger);
@@ -275,6 +276,12 @@ export async function resolveInjections(
 
     const content = await resolver(ctx);
 
+    if (verbose) {
+      const elapsed = Date.now() - resolverStart;
+      const truncated = rule["max-lines"] ? ` (truncated to ${rule["max-lines"]} lines)` : "";
+      process.stderr.write(`[pmd:inject] resolving ${rule.source} → ${content.length} bytes${truncated} (${elapsed}ms)\n`);
+    }
+
     const finalContent = rule["max-lines"]
       ? truncateLines(content, rule["max-lines"])
       : content;
@@ -282,7 +289,10 @@ export async function resolveInjections(
     const hash = computePayloadHash(finalContent);
     const status = checkInjectionStatus(effectiveSessionId, rule.source, finalContent);
 
-    if (status === "unchanged") continue;
+    if (status === "unchanged") {
+      if (verbose) process.stderr.write(`[pmd:inject] dedup: ${rule.source} unchanged, skipping\n`);
+      continue;
+    }
 
     recordInjection(effectiveSessionId, rule.source, finalContent)
     recordInjectionTimestamp(effectiveSessionId)

@@ -479,3 +479,51 @@ export function renderPayloads(payloads: TracePayload[]): string {
 
   return lines.join("\n");
 }
+
+export function renderInjectionSummary(data: TraceData): string {
+  const lines: string[] = [chalk.bold("Injection Summary:"), ""];
+
+  const total = data.totalInjected + data.totalDedup;
+  if (total === 0) {
+    lines.push(chalk.gray("No injections recorded yet."));
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `  ${chalk.green(String(data.totalInjected))} delivered  ·  ${chalk.yellow(String(data.totalDedup))} deduped  ·  ${chalk.bold(String(total))} total`,
+  );
+
+  if (data.payloads.length > 0) {
+    lines.push("");
+    lines.push(chalk.bold("  Last injections:"));
+    for (const p of data.payloads.slice(0, 10)) {
+      const ago = formatTimeAgo(p.timestamp);
+      const trigger = p.meta?.trigger || "?";
+      const file = p.meta?.file || "-";
+      const bytes = p.content.length;
+      const sources = p.content.split(/\[pmd:([^\]]+)\]/).filter((_, i) => i % 2 === 1);
+      const sourceTag = sources.length > 0 ? sources.join(", ") : "raw";
+
+      lines.push(
+        `    ${chalk.blue(trigger.padEnd(14))} ${chalk.gray(file.padEnd(30))} ${String(bytes).padStart(5)} bytes  ${chalk.gray(sourceTag)}  ${chalk.gray(ago)}`,
+      );
+    }
+  }
+
+  const sessionStats: string[] = [];
+  const allSessions = flattenAllSessions(data.sessions);
+  for (const s of allSessions) {
+    if (s.injectionCount > 0 || s.dedupCount > 0) {
+      sessionStats.push(
+        `    ${chalk.cyan(s.harness)} ${chalk.gray(shortId(s.id))}  ${s.injectionCount} delivered  ${s.dedupCount} deduped`,
+      );
+    }
+  }
+  if (sessionStats.length > 0) {
+    lines.push("");
+    lines.push(chalk.bold("  Per session:"));
+    lines.push(...sessionStats);
+  }
+
+  return lines.join("\n");
+}

@@ -4,8 +4,10 @@ import path from "node:path";
 import chalk from "chalk";
 import { readPidFile } from "../core/daemon.js";
 import { log, tailLog, errMsg } from "../core/logger.js";
-import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR } from "../core/paths.js";
+import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR, INJECT_STATS_FILE } from "../core/paths.js";
 import { loadConfig, ConfigError } from "../core/daemon-config.js";
+import { readInjectStats } from "../core/json-utils.js";
+import { formatTimeAgo } from "../core/json-utils.js";
 
 export const statusCommand = new Command("status")
   .description("Show daemon health and recent logs")
@@ -73,6 +75,19 @@ export const statusCommand = new Command("status")
         log.error(err.message);
       }
     }
+
+    try {
+      const injectStats = readInjectStats(INJECT_STATS_FILE);
+      if (injectStats.delivered > 0 || injectStats.dedup > 0) {
+        const total = injectStats.delivered + injectStats.dedup;
+        console.log(chalk.dim(`  Injected: ${injectStats.delivered} delivered · ${injectStats.dedup} deduped · ${total} total`));
+        if (injectStats.lastEvent) {
+          const ev = injectStats.lastEvent;
+          const ago = formatTimeAgo(new Date(ev.ts as number).toISOString());
+          console.log(chalk.dim(`  Last:     ${String(ev.trigger)} ${String(ev.file || "")} (${String(ev.result)}) ${ago}`));
+        }
+      }
+    } catch { /* inject stats are best-effort */ }
 
     const logLines = parseInt(options.log, 10) || 10;
     const recentLogs = tailLog(logLines);

@@ -8,10 +8,11 @@ import {
   renderTimeline,
   renderLockMap,
   renderPayloads,
+  renderInjectionSummary,
   type TraceData,
 } from "../core/trace.js";
 
-type ViewMode = "tree" | "timeline" | "locks" | "payloads";
+type ViewMode = "tree" | "timeline" | "locks" | "payloads" | "inject";
 
 const BOX = {
   tl: "\u2554", tr: "\u2557", bl: "\u255a", br: "\u255d",
@@ -46,7 +47,7 @@ function banner(w: number, data: TraceData): string {
 
 function statusBar(w: number): string {
   const inner = w - 4;
-  const keys = "[q] quit  [\u2191\u2193] scroll  [f] locks  [t] timeline  [p] payloads  [r] refresh";
+      const keys = "[q] quit  [\u2191\u2193] scroll  [f] locks  [t] timeline  [p] payloads  [i] inject  [r] refresh";
   const dimmed = chalk.dim(keys.length > inner ? keys.slice(0, inner) : keys);
   return `${BOX.v} ${padLine(dimmed, inner)} ${BOX.v}`;
 }
@@ -64,18 +65,39 @@ function clearScreen(): void {
 }
 
 const trace = new Command("trace")
-  .description("Live resolution tree \u2014 debug crew coordination in real-time")
+  .description("Live resolution tree — debug crew coordination in real-time")
   .option("--snapshot", "one-shot output (no watch)")
   .option("--json", "structured JSON output")
   .option("--locks", "show file lock map only")
   .option("--timeline", "show injection timeline only")
   .option("--payloads", "show recent injection payloads")
+  .option("--inject", "show injection summary (sources, bytes, dedup stats)")
   .option("--max-payloads <n>", "max payloads to show", "20")
   .action(async (opts) => {
     const data = resolveTraceData({ maxPayloads: parseInt(opts.maxPayloads) || 20 });
 
     if (opts.json) {
       console.log(JSON.stringify(data, null, 2));
+      return;
+    }
+
+    if (opts.locks) {
+      console.log(renderLockMap(resolveLockMap(data.sessions)));
+      return;
+    }
+
+    if (opts.timeline) {
+      console.log(renderTimeline(data.events, data.sessions));
+      return;
+    }
+
+    if (opts.payloads) {
+      console.log(renderPayloads(data.payloads));
+      return;
+    }
+
+    if (opts.inject) {
+      console.log(renderInjectionSummary(data));
       return;
     }
 
@@ -151,6 +173,10 @@ const trace = new Command("trace")
         viewMode = "payloads";
         scrollOffset = 0;
         render();
+      } else if (key === "i") {
+        viewMode = "inject";
+        scrollOffset = 0;
+        render();
       } else if (key === "r") {
         render();
       } else if (key === "\u001b" || key === "g") {
@@ -175,6 +201,9 @@ const trace = new Command("trace")
           break;
         case "payloads":
           content = renderPayloads(data.payloads);
+          break;
+        case "inject":
+          content = renderInjectionSummary(data);
           break;
         default:
           content = renderTraceTree(data);

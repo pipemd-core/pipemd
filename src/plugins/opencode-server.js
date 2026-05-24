@@ -1,5 +1,5 @@
 // pmd-crew — PipeMD Crew coordination plugin.
-// Installed by `pmd crew install-hooks`. Safe to delete manually.
+// Installed by `pmd init`. Safe to delete manually.
 // @pmd-plugin-version ${PLUGIN_VERSION}
 //
 // Events:
@@ -10,6 +10,20 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+
+const PLUGIN_DIR = joinPath(process.cwd(), ".opencode", "plugin");
+const CONFIG_PATH = joinPath(PLUGIN_DIR, "pmd-config.json");
+
+function loadConfig() {
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+  } catch {
+    return { delivery: "passive" };
+  }
+}
+
+const CONFIG = loadConfig();
+const WITH_INJECTION = CONFIG.delivery === "active" || CONFIG.delivery === "expert";
 
 const FIFO_TEMP = joinPath("/tmp", "pmd-fifo-read-" + process.pid + ".md");
 
@@ -52,6 +66,7 @@ function getPmdBin() {
 }
 const STATS_PATH = joinPath(".pipemd", ".tui-stats.json");
 const ERROR_LOG_PATH = joinPath(".pipemd", ".plugin-errors.log");
+const INJECT_LOG_DIR = joinPath(".pipemd", ".injection-log");
 const MAX_ERROR_LINES = 20;
 
 const stats = {
@@ -59,19 +74,37 @@ const stats = {
   claimsMade: 0,
   injectionsDelivered: 0,
   dedupHits: 0,
-  deliveryMode: "${DELIVERY_MODE}",
+  deliveryMode: CONFIG.delivery || "passive",
   events: [],
   passiveAgents: [],
 };
 
+let lastInjection = null;
+let stableInjected = false;
+let injectLogCounter = 0;
 let coordinatorCrewId = "";
 let coordinatorOcSessionId = "";
 let activeOcSessionId = "";
 const workerSessions = new Map();
-
 let lastAgentRefresh = 0;
 
-${INJECTION_HELPERS}
+function formatTok(n) {
+  if (n < 1000) return n + " tok";
+  return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k tok";
+}
+
+function storePayload(trigger, payload) {
+  try {
+    mkdirSync(INJECT_LOG_DIR, { recursive: true });
+    injectLogCounter++;
+    const sid = getActiveCrewSession();
+    const meta = "[pmd-meta session=" + (sid || "") + " trigger=" + (trigger || "") + "]\n";
+    const filename = injectLogCounter + ".txt";
+    writeFileSync(joinPath(INJECT_LOG_DIR, filename), meta + payload, "utf-8");
+    writeFileSync(joinPath(INJECT_LOG_DIR, "last.txt"), meta + payload, "utf-8");
+    stats.lastPayloadFile = filename;
+  } catch (e) { logPluginError("storePayload", e); }
+}
 
 function extractFilePath(args) {
   return args.path || args.filePath || args.file_path || "";
@@ -242,6 +275,121 @@ function cleanupOrphanedWorkers() {
   }
 }
 
+async function beforeHandler(input, output) {
+  try {
+    const tool = (input && input.tool) || "";
+    const args = (output && output.args) || {};
+    if (tool === "read") resolveFifoRead(args);
+    const trigger = isEditTool(tool) ? "before-edit" : "before-read";
+    const filePath = extractFilePath(args);
+    join(); heartbeat();
+
+    if (WITH_INJECTION) {
+      const sid = getActiveCrewSession();
+      try {
+        const out = execFileSync(getPmdBin(), ["inject", "--trigger", trigger, "--file", filePath, "--session", sid], { encoding: "utf-8", timeout: 5000 });
+        if (out.trim()) {
+          lastInjection = { payload: out.trim(), bytes: out.length, trigger, tool, file: filePath, ts: Date.now() };
+          stats.injectionsDelivered++;
+          storePayload(trigger, out.trim());
+          pushEvent(trigger, tool, filePath, "injected", out.length);
+        } else {
+          lastInjection = null;
+          stats.dedupHits++;
+          pushEvent(trigger, tool, filePath, "dedup", 0);
+        }
+      } catch (e) { lastInjection = null; logPluginError("tool.execute.before", e); pushEvent(trigger, tool, filePath, "ok", 0); }
+    } else {
+      pushEvent("before", tool, extractFilePath(args), "ok", 0);
+    }
+  } catch (e) { logPluginError("tool.execute.before", e); }
+}
+
+async function afterHandler(input, output) {
+  try {
+    cleanupFifoTemp();
+    const tool = (input && input.tool) || "";
+    const isEdit = isEditTool(tool);
+    if (isEdit) {
+      const args = (output && output.args) || (input && input.args) || {};
+      const filePath = extractFilePath(args);
+      claim(filePath);
+
+      if (WITH_INJECTION) {
+        const sid = getActiveCrewSession();
+        try {
+          execFileSync(getPmdBin(), ["inject", "--trigger", "after-edit", "--file", extractFilePath(args), "--async-validate", "--session", sid], { encoding: "utf-8", timeout: 3000, stdio: "ignore" });
+        } catch (e) { logPluginError("after-edit-async", e); }
+        pushEvent("after-edit", tool, filePath || "", "claimed", 0);
+      }
+    }
+
+    if (WITH_INJECTION && lastInjection) {
+      const inj = lastInjection;
+      lastInjection = null;
+      const tok = Math.round(inj.bytes / 4);
+      if (typeof (output && output.output) === "string") {
+        output.output += "\n" + "[PipeMD] +" + formatTok(tok) + " injected";
+      }
+    }
+
+    if (!WITH_INJECTION && isEdit) {
+      pushEvent("after-edit", tool, "", "claimed", 0);
+    }
+  } catch (e) { logPluginError("tool.execute.after", e); }
+}
+
+async function systemTransform(input, output) {
+  if (!WITH_INJECTION) return;
+  try {
+    handleSessionSwitch(input && input.sessionID);
+    const sid = getActiveCrewSession();
+    if (!stableInjected) {
+      try {
+        const stable = execFileSync(getPmdBin(), ["inject", "--trigger", "on-start", "--session", sid], { encoding: "utf-8", timeout: 5000 });
+        const stableTrimmed = (stable || "").trim();
+        if (stableTrimmed) {
+          stats.injectionsDelivered++;
+          storePayload("on-start", stableTrimmed);
+          pushEvent("on-start", "", "", "injected", stable.length);
+          output.system.push(stableTrimmed);
+        }
+      } catch (e) { logPluginError("on-start", e); }
+      stableInjected = true;
+    }
+    const out = execFileSync(getPmdBin(), ["inject", "--trigger", "on-idle", "--session", sid], { encoding: "utf-8", timeout: 5000 });
+    const trimmed = (out || "").trim();
+    if (trimmed) {
+      stats.injectionsDelivered++;
+      storePayload("system-transform", trimmed);
+      pushEvent("system-transform", "", "", "injected", out.length);
+      output.system.push(trimmed);
+    }
+  } catch (e) { logPluginError("system.transform", e); }
+}
+
+async function eventHandler({ event }) {
+  try {
+    if (!event) return;
+    const eventType = event.type;
+    const props = event.properties || {};
+    if (eventType === "session.idle") {
+      const ocSid = props.sessionID;
+      if (ocSid && workerSessions.has(ocSid)) {
+        leaveWorker(ocSid);
+      } else {
+        heartbeat();
+      }
+      pushEvent("on-idle", "", "", "heartbeat", 0);
+    } else if (eventType === "session.status" && props.status && props.status.type === "idle") {
+      const ocSid = props.sessionID;
+      if (ocSid && workerSessions.has(ocSid)) {
+        leaveWorker(ocSid);
+      }
+    }
+  } catch (e) { logPluginError("event", e); }
+}
+
 join();
 writeStats();
 setInterval(() => { try { heartbeat(); } catch {} }, 30_000);
@@ -249,9 +397,9 @@ setInterval(() => { try { heartbeat(); } catch {} }, 30_000);
 export default {
   id: "pmd-crew",
   server: async () => ({
-    ${BEFORE_HANDLER}
-    ${AFTER_HANDLER}
-    ${SYSTEM_TRANSFORM}
-    ${EVENT_HANDLER}
+    "tool.execute.before": beforeHandler,
+    "tool.execute.after": afterHandler,
+    "experimental.chat.system.transform": systemTransform,
+    "event": eventHandler,
   }),
 };
