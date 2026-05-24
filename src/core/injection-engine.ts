@@ -380,7 +380,7 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
 
     try {
       const eslintResult = await new Promise<string>((resolve) => {
-        execFile("npx", ["eslint", filePath, "--format", "compact"], {
+        execFile("npx", ["eslint", filePath, "--no-color"], {
           timeout: 10000,
         }, (err, stdout) => {
           if (err) {

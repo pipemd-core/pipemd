@@ -31,13 +31,14 @@ export const validateCommand = new Command("validate")
 
     execFile(
       "npx",
-      ["eslint", filePath, "--format", "compact"],
+      ["eslint", filePath, "--no-color"],
       { timeout: VALIDATE_TIMEOUT_MS },
       (err, stdout) => {
         if (err && stdout && typeof stdout === "string") {
           const out = stdout.trim();
           if (out) {
-            process.stdout.write(out + "\n");
+            const lines = out.split("\n").slice(0, 5).join("\n");
+            process.stdout.write(lines + "\n");
             return;
           }
         }
