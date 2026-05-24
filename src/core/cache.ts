@@ -18,11 +18,6 @@ export interface CacheEntry {
   metadata?: Record<string, string>;
 }
 
-export interface CacheManifest {
-  lastRender: number;
-  hashes: Record<string, string>;
-}
-
 export const CACHE_DIR = ".pipemd/cache/sources";
 export const VALIDATION_DIR = ".pipemd/cache/validation";
 export const CACHE_MANIFEST = ".pipemd/cache/manifest.json";

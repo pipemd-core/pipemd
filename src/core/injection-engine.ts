@@ -366,9 +366,3 @@ export {
   MAX_INJECTIONS_PER_WINDOW,
   RESOLVER_TOTAL_BUDGET_MS,
 }
-
-export function getValidationResult(filePath: string): string {
-  const entry = readCache(`validation:${filePath}`);
-  if (entry && entry.data) return entry.data;
-  return "";
-}

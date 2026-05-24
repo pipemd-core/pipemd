@@ -2,6 +2,66 @@
 
 All notable changes to PipeMD.
 
+## [1.1.2] — 2026-05-24
+
+A hardening release focused on stability, security, and code quality. 10 commits, 67 files changed (+5,373 / −3,373). The daemon no longer blocks on shell commands, fatal errors clean up properly, credential files are protected, and the sync/async code duplication is eliminated. 96 unit tests (up from 7).
+
+### Stability
+
+- **Daemon event loop no longer blocks** — `execSync` in pipe command handler replaced with async `exec`; daemon stays responsive during command execution
+- **Proper shutdown on fatal config errors** — `process.exit(1)` replaced with `shutdown([], 1)` so named pipes, PID files, and timers are cleaned up before exit
+- **Claude Code Stop hook outputs valid JSON** — `hookSpecificOutput` is not supported for Stop events; now omitted from the response
+- **Injection skips non-existent and external file paths silently** — instead of throwing errors on `--file` paths that are missing or outside the project root
+- **Remote session handling fixed** — relay client correctly merges and expires remote crew sessions across reconnects
+- **Session cache invalidation fixed** — stale crew sessions no longer persist after their TTL expires
+
+### Security
+
+- **Credential file permissions enforced** — relay token, PID, and port files are set to `0o600` (owner-only) on write and verified on read
+- **Symlink traversal protection** — filesystem-walking scripts follow symlinks only within the project root
+- **`eval` removed from `limit-core.sh`** — replaced with safe string operations
+- **SECURITY.md added** — comprehensive threat model, attack surfaces with severity ratings, relay security documentation, reporting instructions
+
+### Performance
+
+- **Async hot path** — injection engine resolvers are fully async; no blocking I/O in the daemon pipe loop
+- **Token profiles** — `config.ts` now exports `TOKEN_PROFILES` for context size limits (compact/standard/extended)
+- **Detection performance** — `detect.ts` avoids redundant filesystem walks; caches results per run
+- **Rate limiting** — injection engine caps at 30 injections per 10s per session; 5s total resolver budget
+
+### Architecture
+
+- **Daemon decomposition** — `daemon.ts` (477→198 lines) split into `daemon-config.ts`, `daemon-write-back.ts`, `legacy-watcher.ts`, `pipe-manager.ts`
+- **Crew decomposition** — `crew.ts` (466→120 lines) split into `crew-process.ts` (process tree, identity resolution) and `crew-render.ts` (block rendering)
+- **Sync/async deduplication** — eliminated duplicate resolver maps and render functions; single async code path for all resolvers (-220 lines net)
+- **Init decomposition** — `init.ts` split into `init/scaffold.ts`, `init/scripts.ts`, `init/constants.ts`, `init/ui.ts`
+- **`limit.sh` consolidation** — 8 identical per-ecosystem scripts replaced with single `Shared/lib/limit-core.sh`
+
+### Code Quality
+
+- **ESLint added** — `eslint.config.js` with `typescript-eslint`; all source linted (0 errors)
+- **`process.exit` replaced with `UserError`** — CLI commands throw `UserError` instead of calling `process.exit()` directly
+- **`ConfigError` class** — distinct error type for config validation failures
+- **`TtlCache` utility** — generic time-to-live cache replacing ad-hoc expiry logic in `dedup.ts` and `crew-process.ts`
+- **`errMsg()` utility** — consistent error message extraction across 100+ catch blocks with debug logging
+- **`any` types eliminated** from core modules (injection-engine, dedup, crew, json-utils, pipe-manager, statusline-data)
+- **Dead code removed** — unused `CacheManifest` interface, `getValidationResult` export
+
+### Testing
+
+- **96 unit tests** (up from 7) — migrated to `node:test` with proper isolation
+  - `test-daemon-core.ts` (30) — pipe-manager state, isEpipe, updateStatus, timers, loadBase, composeContent, PID file, loadConfig, reverseInject, dedup
+  - `test-crew.ts` (25) — isSessionStale, findConflicts, toRepoRelative, generateSessionId, filesystem CRUD
+  - `test-injection-engine.ts` (13) — before-read, before-edit, dedup, triggers, hash, truncation, rate limiting
+  - `test-injection-types.ts` (25) — parseInjectionConfig (null, passive, active, expert, invalid fields), computePayloadHash, getRulesForTrigger
+  - `test-reverse-inject.ts` (7) — preserve edits, clean blocks, handle unknowns, interstitial text
+
+### Docs
+
+- **AI_SETUP_PIPEMD.md rewritten** — comprehensive onboarding guide for AI agents
+- **README updated** — link and trace command documentation, `pmd run` usage
+- **SECURITY.md** — token file permissions documented as enforced (updated from "not currently enforced")
+
 ## [1.1.0] — 2026-05-23
 
 ### Added

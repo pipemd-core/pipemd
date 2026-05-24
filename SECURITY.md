@@ -108,7 +108,7 @@ The `pmd link` feature introduces network communication. The security model is *
 | Threat | Severity | Mitigation |
 |--------|----------|------------|
 | Unauthenticated session injection via `/crew` | Medium | localhost-only check (rejects non-loopback) |
-| Token theft from `~/.pipemd/link/relay.token` | Medium | Token file should be `chmod 0o600` (not currently enforced) |
+| Token theft from `~/.pipemd/link/relay.token` | Medium | Token file permissions enforced to `0o600` on write and read |
 | Plain-text HTTP traffic sniffing | Medium | Use SSH tunnels for remote connections |
 | Relay DDoS via session flood | Low | Sessions expire after 15 seconds; no persistence |
 | Malicious relay URL in config | Low | `PMD_RELAY` and config are trusted inputs |
@@ -116,7 +116,7 @@ The `pmd link` feature introduces network communication. The security model is *
 ### Recommendations for Production Use
 
 1. **Always use SSH tunnels or WireGuard** for cross-machine relay communication. Plain HTTP exposes bearer tokens.
-2. **Set `chmod 0o600`** on `~/.pipemd/link/relay.token` after first run.
+2. **Token file permissions are enforced automatically** — `relay.token`, PID files, and port files are set to `chmod 0o600` on creation and verified on read.
 3. **Firewall the relay port** (default 9741) to only accept connections from expected peers.
 4. **Do not expose the relay to the public internet.**
 
@@ -129,3 +129,4 @@ If you discover a security vulnerability in PipeMD, please open a GitHub Issue w
 | Date | Change |
 |------|--------|
 | 2026-05-24 | Initial security model document |
+| 2026-05-24 | Updated: token/PID/port file permissions now enforced (0o600) |
