@@ -347,9 +347,7 @@ function handleSessionSwitch(ocSid) {
     if (!coordinatorCrewId) return;
   }
   if (!workerSessions.has(ocSid)) {
-    const parentCrewId = workerSessions.has(activeOcSessionId)
-      ? workerSessions.get(activeOcSessionId)
-      : coordinatorCrewId;
+    const parentCrewId = coordinatorCrewId;
     if (!parentCrewId) return;
     const out = pmdSync(["crew", "join", "--role", "worker", "--coordinator", parentCrewId]);
     const wid = parseCrewId(out);

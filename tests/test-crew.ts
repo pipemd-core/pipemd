@@ -213,4 +213,50 @@ describe("filesystem (writeSessionAtomic / readSession / deleteSession / listSes
     assert.ok(!ids.includes(badId), "should skip malformed file")
     try { fs.unlinkSync(badPath) } catch {}
   })
+
+  it("multiple workers with same coordinator form flat hierarchy", () => {
+    const coordId = "cr_" + Math.random().toString(36).slice(2, 10)
+    const w1Id = "cr_" + Math.random().toString(36).slice(2, 10)
+    const w2Id = "cr_" + Math.random().toString(36).slice(2, 10)
+    const w3Id = "cr_" + Math.random().toString(36).slice(2, 10)
+
+    writeSessionAtomic(makeSession({ id: coordId, role: "coordinator" }))
+    writeSessionAtomic(makeSession({ id: w1Id, role: "worker", coordinatorId: coordId }))
+    writeSessionAtomic(makeSession({ id: w2Id, role: "worker", coordinatorId: coordId }))
+    writeSessionAtomic(makeSession({ id: w3Id, role: "worker", coordinatorId: coordId }))
+
+    const sessions = listSessions()
+    const coord = sessions.find((s) => s.id === coordId)!
+    const workers = sessions.filter((s) => s.role === "worker")
+    const directReports = workers.filter((w) => w.coordinatorId === coord.id)
+
+    assert.equal(coord.role, "coordinator")
+    assert.equal(workers.length, 3, "should have 3 workers")
+    assert.equal(directReports.length, 3, "all 3 workers should be direct children of coordinator")
+    for (const w of workers) {
+      assert.equal(w.coordinatorId, coordId, `${w.id} should point to coordinator, not another worker`)
+    }
+
+    for (const id of [coordId, w1Id, w2Id, w3Id]) deleteSession(id)
+  })
+
+  it("chained workers (the bug) are NOT flat — verifies test catches it", () => {
+    const coordId = "cr_" + Math.random().toString(36).slice(2, 10)
+    const w1Id = "cr_" + Math.random().toString(36).slice(2, 10)
+    const w2Id = "cr_" + Math.random().toString(36).slice(2, 10)
+
+    writeSessionAtomic(makeSession({ id: coordId, role: "coordinator" }))
+    writeSessionAtomic(makeSession({ id: w1Id, role: "worker", coordinatorId: coordId }))
+    writeSessionAtomic(makeSession({ id: w2Id, role: "worker", coordinatorId: w1Id }))
+
+    const sessions = listSessions()
+    const workers = sessions.filter((s) => s.role === "worker")
+    const directReports = workers.filter((w) => w.coordinatorId === coordId)
+
+    assert.equal(workers.length, 2)
+    assert.equal(directReports.length, 1, "W2 is chained under W1, not coordinator")
+    assert.equal(workers.find((w) => w.id === w2Id)!.coordinatorId, w1Id)
+
+    for (const id of [coordId, w1Id, w2Id]) deleteSession(id)
+  })
 })
