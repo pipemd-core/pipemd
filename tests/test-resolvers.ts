@@ -34,6 +34,15 @@ fs.writeFileSync(path.join(tmpDir, "bad.js"), "const x = {\n")
 fs.writeFileSync(path.join(tmpDir, "good.ts"), "const x: number = 1;\n")
 fs.writeFileSync(path.join(tmpDir, "readme.md"), "# Hello\n")
 
+import { execFileSync as setupExec } from "node:child_process"
+try {
+  setupExec("git", ["init"], { cwd: tmpDir, timeout: 5000 })
+  setupExec("git", ["config", "user.email", "test@test.com"], { cwd: tmpDir, timeout: 5000 })
+  setupExec("git", ["config", "user.name", "Test"], { cwd: tmpDir, timeout: 5000 })
+  setupExec("git", ["add", "."], { cwd: tmpDir, timeout: 5000 })
+  setupExec("git", ["commit", "-m", "init"], { cwd: tmpDir, timeout: 5000 })
+} catch { /* ignore */ }
+
 const origDir = process.cwd()
 process.chdir(tmpDir)
 
@@ -67,19 +76,19 @@ describe("edit-diff resolver", () => {
     assert.ok(!editDiff, "edit-diff should be skipped without target file")
   })
 
-  it("returns no changes message for clean file", async () => {
+  it("returns nothing for clean file (no diff to report)", async () => {
     clearAllCache()
     const payloads = await resolveInjections("after-edit", "good.js", "sess-diff-2")
     const editDiff = payloads.find((p) => p.source === "edit-diff")
-    assert.ok(editDiff, "edit-diff should be present")
-    assert.ok(editDiff.content.includes("No unstaged changes"))
+    assert.ok(!editDiff, "edit-diff should be skipped when no unstaged changes")
   })
 
-  it("caches edit-diff results", async () => {
+  it("caches edit-diff results for modified files", async () => {
     clearAllCache()
+    fs.appendFileSync(path.join(tmpDir, "good.js"), "// modified\n")
     const first = await resolveInjections("after-edit", "good.js", "sess-diff-3")
     const editDiff1 = first.find((p) => p.source === "edit-diff")
-    assert.ok(editDiff1)
+    assert.ok(editDiff1, "edit-diff should be present for modified file")
     const second = await resolveInjections("after-edit", "good.js", "sess-diff-3")
     const editDiff2 = second.find((p) => p.source === "edit-diff")
     assert.ok(!editDiff2, "cached result should be deduped")
@@ -118,12 +127,11 @@ describe("syntax-check resolver", () => {
     )
   })
 
-  it("returns empty for unsupported extensions like .md", async () => {
+  it("returns nothing for unsupported extensions like .md", async () => {
     clearAllCache()
     const payloads = await resolveInjections("after-edit", "readme.md", "sess-syntax-4")
     const syntax = payloads.find((p) => p.source === "syntax-check")
-    assert.ok(syntax, "syntax-check should still return something for .md")
-    assert.equal(syntax.content, "")
+    assert.ok(!syntax, "syntax-check should be skipped for unsupported extensions")
   })
 
   it("caches syntax check results", async () => {

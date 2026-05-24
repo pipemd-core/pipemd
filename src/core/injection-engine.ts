@@ -89,15 +89,12 @@ async function runGitAsync(args: string[], fallback: string = ""): Promise<strin
 
 async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
   const sessions = listSessions();
-  const lines: string[] = [];
+  if (sessions.length === 0) return "";
 
-  if (sessions.length === 0) {
-    lines.push("Crew: no active sessions");
-  } else {
-    for (const s of sessions) {
-      const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
-      lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})`);
-    }
+  const lines: string[] = [];
+  for (const s of sessions) {
+    const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
+    lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})`);
   }
 
   const conflicts = findConflicts(sessions);
@@ -110,16 +107,14 @@ async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
 
 async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
-  if (!file) return "No target file specified";
+  if (!file) return "";
 
   const sessions = listSessions();
   const claimers = sessions.filter((s) =>
     s.claimedFiles.some((c) => c.path === file),
   );
 
-  if (claimers.length === 0) {
-    return `File ${file}: unclaimed`;
-  }
+  if (claimers.length === 0) return "";
 
   if (claimers.length === 1) {
     const s = claimers[0];
@@ -142,7 +137,7 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
 
 async function resolveFileErrors(ctx: ResolverContext): Promise<string> {
   const result = await resolveValidation(ctx);
-  return result || `No known errors in ${ctx.targetFile ?? "file"}`;
+  return result || "";
 }
 
 async function resolveValidateFile(ctx: ResolverContext): Promise<string> {
@@ -151,14 +146,15 @@ async function resolveValidateFile(ctx: ResolverContext): Promise<string> {
 
 async function resolveGitContext(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
-  if (!file) return "No target file specified";
+  if (!file) return "";
+  if (ctx.trigger === "before-edit") return "";
 
   const cacheKey = `git-context:${file}`;
   const cached = readCache(cacheKey);
   if (cached && cached.data) return cached.data;
 
   const result = await runGitAsync(["log", "-1", "--format=%an, %ar", "--", file]);
-  if (!result) return "No git history for this file";
+  if (!result) return "";
 
   const content = `Last edit: ${result}`;
   writeCache(cacheKey, content, DEFAULT_TTLS["git-delta"] ?? 10000);
@@ -177,7 +173,7 @@ async function resolveGitDelta(_ctx: ResolverContext): Promise<string> {
     writeCache("git-status", status, DEFAULT_TTLS["git-status"] ?? 10000);
   }
 
-  if (!status.trim()) return "No changes since last check";
+  if (!status.trim()) return "";
 
   const lines = status.trim().split("\n");
   const modified = lines.filter((l) => l.startsWith(" M")).length;
@@ -189,7 +185,7 @@ async function resolveGitDelta(_ctx: ResolverContext): Promise<string> {
   if (staged > 0) parts.push(`${staged} staged`);
   if (untracked > 0) parts.push(`${untracked} untracked`);
 
-  return parts.join(", ") || "No changes since last check";
+  return parts.join(", ") || "";
 }
 
 async function resolveCustom(ctx: ResolverContext): Promise<string> {
@@ -219,13 +215,11 @@ async function resolveCustom(ctx: ResolverContext): Promise<string> {
 }
 
 async function resolveGitStaged(_ctx: ResolverContext): Promise<string> {
-  const result = await runGitAsync(["diff", "--cached", "--stat"]);
-  return result || "No staged changes";
+  return await runGitAsync(["diff", "--cached", "--stat"], "");
 }
 
 async function resolveGitDiffStat(_ctx: ResolverContext): Promise<string> {
-  const result = await runGitAsync(["diff", "--stat"]);
-  return result || "No unstaged changes";
+  return await runGitAsync(["diff", "--stat"], "");
 }
 
 async function resolveEditDiff(ctx: ResolverContext): Promise<string> {
@@ -236,7 +230,7 @@ async function resolveEditDiff(ctx: ResolverContext): Promise<string> {
   if (cached && cached.data) return cached.data;
 
   const result = await runGitAsync(["diff", "--", file]);
-  if (!result) return "No unstaged changes for this file";
+  if (!result) return "";
 
   const lines = result.split("\n").filter((l) =>
     l.startsWith("+++") || l.startsWith("---") || l.startsWith("@@") || l.startsWith("-") || l.startsWith("+")
@@ -338,6 +332,8 @@ export async function resolveInjections(
     if (!resolver) continue;
 
     const content = await resolver(ctx);
+
+    if (!content) continue;
 
     if (verbose) {
       const elapsed = Date.now() - resolverStart;

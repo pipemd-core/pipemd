@@ -11,6 +11,7 @@ import { refreshCommand } from "./commands/refresh.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { crewCommand } from "./commands/crew.js";
 import { injectCommand } from "./commands/inject.js";
+import { validateCommand } from "./commands/validate.js";
 import { statuslineCommand } from "./commands/statusline.js";
 import { traceCommand } from "./commands/trace.js";
 import { linkCommand } from "./commands/link.js";
@@ -127,6 +128,7 @@ program.addCommand(crewCommand);
 program.addCommand(traceCommand);
 program.addCommand(linkCommand);
 program.addCommand(injectCommand, { hidden: true });
+program.addCommand(validateCommand, { hidden: true });
 program.addCommand(statuslineCommand, { hidden: true });
 
 program

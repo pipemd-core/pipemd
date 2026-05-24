@@ -308,6 +308,34 @@ async function beforeHandler(input, output) {
   } catch (e) { logPluginError("tool.execute.before", e); }
 }
 
+async function buildEditFeedback(filePath) {
+  if (!filePath) return null;
+  const parts = [];
+
+  try {
+    const out = execFileSync(getPmdBin(), ["inject", "--trigger", "before-edit", "--file", filePath, "--session", getActiveCrewSession()], { encoding: "utf-8", timeout: 3000 }).trim();
+    if (out) {
+      const lines = out.split("\n");
+      for (const line of lines) {
+        if (line.includes("⚠️ CONFLICT")) {
+          parts.push("[pmd] " + line.replace(/^\[pmd:[^\]]*\]\s*/, "").trim());
+        }
+      }
+    }
+  } catch (e) { /* non-critical */ }
+
+  try {
+    const out = execFileSync(getPmdBin(), ["validate", "--file", filePath], { encoding: "utf-8", timeout: 4000 }).trim();
+    if (out && out !== "No errors found" && out !== "ok") {
+      const errors = out.split("\n").slice(0, 5).join("\n");
+      parts.push("[pmd] ⚠ errors in " + filePath + ":\n" + errors);
+    }
+  } catch (e) { /* non-critical */ }
+
+  if (parts.length === 0) return null;
+  return parts.join("\n");
+}
+
 async function afterHandler(input, output) {
   try {
     cleanupFifoTemp();
@@ -327,15 +355,11 @@ async function afterHandler(input, output) {
           pmd(["inject", "--invalidate", filePath]);
         } catch (e) { /* non-critical */ }
         pushEvent("after-edit", tool, filePath || "", "claimed", 0);
-      }
-    }
 
-    if (WITH_INJECTION && lastInjection) {
-      const inj = lastInjection;
-      lastInjection = null;
-      const tok = Math.round(inj.bytes / 4);
-      if (typeof (output && output.output) === "string") {
-        output.output += "\n" + "[PipeMD] +" + formatTok(tok) + " injected";
+        const feedback = await buildEditFeedback(filePath);
+        if (feedback && typeof (output && output.output) === "string") {
+          output.output += "\n" + feedback;
+        }
       }
     }
 

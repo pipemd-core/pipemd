@@ -76,15 +76,11 @@ function clearDedup() {
 }
 
 describe("before-read", () => {
-  it("with no sessions returns crew-status payload", async () => {
+  it("with no sessions returns empty (nothing to report)", async () => {
     clearCrew()
     clearDedup()
     const payloads = await resolveInjections("before-read", undefined, "sess-1")
-    assert.equal(payloads.length, 1)
-    assert.equal(payloads[0].source, "crew-status")
-    assert.ok(payloads[0].content.includes("no active sessions"))
-    assert.equal(payloads[0].trigger, "before-read")
-    assert.equal(payloads[0].scope, "global")
+    assert.equal(payloads.length, 0)
   })
 
   it("with a session shows session info", async () => {
@@ -107,14 +103,11 @@ describe("before-edit", () => {
     assert.equal(payloads.length, 0)
   })
 
-  it("with targetFile and no claims returns unclaimed", async () => {
+  it("with targetFile and no claims returns empty (nothing to report)", async () => {
     clearCrew()
     clearDedup()
     const payloads = await resolveInjections("before-edit", "src/foo.ts", "sess-4")
-    assert.equal(payloads.length, 1)
-    assert.equal(payloads[0].source, "crew-locks")
-    assert.ok(payloads[0].content.includes("unclaimed"))
-    assert.equal(payloads[0].targetFile, "src/foo.ts")
+    assert.equal(payloads.length, 0)
   })
 
   it("with claim on target file returns claimed info", async () => {
@@ -158,7 +151,7 @@ describe("before-edit", () => {
     assert.ok(payloads[0].content.includes("CONFLICT"))
   })
 
-  it("on different file than the claim returns unclaimed", async () => {
+  it("on different file than the claim returns empty (unclaimed)", async () => {
     clearCrew()
     clearDedup()
     const now = new Date().toISOString()
@@ -170,8 +163,7 @@ describe("before-edit", () => {
       }),
     )
     const payloads = await resolveInjections("before-edit", "src/unclaimed.ts", "sess-8")
-    assert.equal(payloads.length, 1)
-    assert.ok(payloads[0].content.includes("unclaimed"))
+    assert.equal(payloads.length, 0)
   })
 })
 
@@ -179,6 +171,7 @@ describe("dedup", () => {
   it("second call with identical content returns empty", async () => {
     clearCrew()
     clearDedup()
+    writeCrewSession(makeSession({ id: "cr_dedup", harness: "DedupAgent" }))
     const first = await resolveInjections("before-read", undefined, "sess-dedup")
     assert.equal(first.length, 1)
     const second = await resolveInjections("before-read", undefined, "sess-dedup")
@@ -188,9 +181,10 @@ describe("dedup", () => {
   it("changed content after state change returns new payload", async () => {
     clearCrew()
     clearDedup()
+    writeCrewSession(makeSession({ id: "cr_old", harness: "OldAgent" }))
     const first = await resolveInjections("before-read", undefined, "sess-dedup2")
     assert.equal(first.length, 1)
-    assert.ok(first[0].content.includes("no active sessions"))
+    assert.ok(first[0].content.includes("OldAgent"))
     writeCrewSession(makeSession({ id: "cr_new", harness: "NewAgent" }))
     const second = await resolveInjections("before-read", undefined, "sess-dedup2")
     assert.equal(second.length, 1)
@@ -200,6 +194,7 @@ describe("dedup", () => {
   it("different session ids have independent dedup state", async () => {
     clearCrew()
     clearDedup()
+    writeCrewSession(makeSession({ id: "cr_ind", harness: "IndAgent" }))
     const first = await resolveInjections("before-read", undefined, "sess-ind-a")
     assert.equal(first.length, 1)
     const second = await resolveInjections("before-read", undefined, "sess-ind-b")
@@ -218,6 +213,7 @@ describe("misc", () => {
   it("payload hash is 16 hex characters", async () => {
     clearCrew()
     clearDedup()
+    writeCrewSession(makeSession({ id: "cr_hash", harness: "HashAgent" }))
     const payloads = await resolveInjections("before-read", undefined, "sess-hash")
     assert.equal(payloads.length, 1)
     assert.ok(
