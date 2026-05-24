@@ -24,6 +24,8 @@ AI coding agents need to know your project state — git status, lint errors, TO
 
 **PipeMD makes `AGENTS.md` a named pipe.** When your AI reads it, PipeMD intercepts the read, runs your scripts concurrently, and streams live context straight to the agent. Zero files change on disk. The output is completely ephemeral.
 
+Every context block is one file, one emitter, no architectural change. Blocks are inputs — the injection pipeline is the product.
+
 ---
 
 ## Quick Start
