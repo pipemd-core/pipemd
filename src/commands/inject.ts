@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import chalk from "chalk";
+
 import { Command } from "commander";
 import { resolveInjections, triggerAsyncValidation } from "../core/injection-engine.js";
 import { loadInjectionConfig } from "../core/injection-types.js";
@@ -9,7 +9,7 @@ import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
 import { bumpInjectStats } from "../core/statusline-data.js";
 import { log, errMsg } from "../core/logger.js";
-import { UserError } from "../core/errors.js";
+
 
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
 type InjectFormat = "plain" | "claude-hook" | "gemini-json";
@@ -36,24 +36,20 @@ const inject = new Command("inject")
     if (!isPipemdProject()) return;
 
     if (opts.file) {
-      const resolved = path.resolve(opts.file);
-      const cwd = process.cwd();
       let realPath: string;
       let realCwd: string;
       try {
-        realPath = realpathSync(resolved);
-      } catch (err: unknown) {
-        log.debug(`resolve --file path ${resolved}: ${errMsg(err)}`);
-        throw new UserError(chalk.red(`✖ --file path does not resolve: ${resolved}`));
+        realPath = realpathSync(path.resolve(opts.file));
+      } catch {
+        return;
       }
       try {
-        realCwd = realpathSync(cwd);
-      } catch (err: unknown) {
-        log.debug(`resolve cwd ${cwd}: ${errMsg(err)}`);
-        throw new UserError(chalk.red(`✖ Cannot resolve cwd: ${cwd}`));
+        realCwd = realpathSync(process.cwd());
+      } catch {
+        return;
       }
       if (!realPath.startsWith(realCwd + path.sep) && realPath !== realCwd) {
-        throw new UserError(chalk.red(`✖ --file must be within the project root`));
+        return;
       }
     }
 
