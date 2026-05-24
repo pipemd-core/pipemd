@@ -8,7 +8,7 @@ eco="${PMD_ECOSYSTEM:-}"
 case "$eco" in
   Node-TypeScript)
     if compgen -G ".eslintrc.*" &>/dev/null || compgen -G "eslint.config.*" &>/dev/null; then
-      out=$(npx eslint . --format=compact 2>&1 | head -30)
+      out=$(npx eslint . --format=stylish 2>&1 | grep -v "^$" | head -30)
       limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
       exit 0
     fi
@@ -59,7 +59,7 @@ esac
 
 # Generic: auto-detect
 if compgen -G ".eslintrc.*" &>/dev/null || compgen -G "eslint.config.*" &>/dev/null; then
-  out=$(npx eslint . --format=compact 2>&1 | head -30)
+  out=$(npx eslint . --format=stylish 2>&1 | grep -v "^$" | head -30)
   limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
 elif command -v ruff &>/dev/null; then
   out=$(ruff check . 2>&1 | head -30)
