@@ -34,7 +34,7 @@ PipeMD executes commands defined in `.pipemd/config.yml` on every context render
 
 **Severity: High**
 
-The `custom` injection source in `.pipemd/injection.yml` can execute arbitrary shell commands via `execSync`. This is gated by `customCommandsAllowed: true`.
+The `custom` injection source in `.pipemd/injection.yml` can execute arbitrary commands via `execFile`. This is gated by `customCommandsAllowed: true`.
 
 **Mitigations:**
 - The flag defaults to `false`. Users must explicitly enable it.
@@ -122,7 +122,12 @@ The `pmd link` feature introduces network communication. The security model is *
 
 ## Reporting Security Issues
 
-If you discover a security vulnerability in PipeMD, please open a GitHub Issue with the tag `security`. For sensitive vulnerabilities, email the maintainer directly (see `package.json`).
+If you discover a security vulnerability in PipeMD, please **do not** open a public GitHub issue. Instead:
+
+1. Use [GitHub Security Advisories](https://github.com/anomalyco/pipemd/security/advisories/new) to report privately.
+2. For sensitive vulnerabilities, email the maintainer directly (see `package.json`).
+
+We will acknowledge reports within 48 hours and aim to ship a fix within 7 days.
 
 ## Changelog
 

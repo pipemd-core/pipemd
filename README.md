@@ -167,6 +167,10 @@ Active mode injects context at four moments:
 
 All injection is deduplicated — unchanged data is skipped, saving tokens.
 
+### Token Costs
+
+Every injected block costs LLM tokens (roughly 1 token per 4 bytes). A typical `before-edit` injection runs 2-3 blocks (~500-2000 tokens). Active mode fires on every tool call, so costs scale with agent activity. Use token profiles (`PMD_TOKEN_PROFILE=low|medium|high`) in `config.yml` to control block output size. Passive mode (single render at session start) has the lowest cost.
+
 ---
 
 ## Features
@@ -397,6 +401,7 @@ PMD_LINK_PORT=9741             # Override relay listen port
 
 - `/crew` endpoint (daemon → relay) is **localhost-only** — rejects non-loopback connections
 - `/sync` endpoint (relay → relay) requires a **bearer token** — auto-generated on relay start
+- Relay binds to **127.0.0.1** by default — not exposed to the network
 - `/status` and `/health` are read-only — no sensitive data exposed
 - All session data is **ephemeral** — stored in-memory only, expires after 15 seconds without refresh
 

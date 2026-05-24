@@ -19,7 +19,7 @@ case "$eco" in
         pkg_mgr="npm"
         [ -f pnpm-lock.yaml ] && pkg_mgr="pnpm"
         [ -f yarn.lock ] && pkg_mgr="yarn"
-        out=$($pkg_mgr run $test_cmd 2>&1 | tail -"$MAX_TEST")
+        out=$("$pkg_mgr" run "$test_cmd" 2>&1 | tail -"$MAX_TEST")
         if [ -n "$out" ]; then
           echo "$out"
           exit 0

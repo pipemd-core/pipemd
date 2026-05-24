@@ -404,11 +404,11 @@ function updateConfigInjected(configPath: string, mdFile: string, harnessPipes?:
       ];
     } else {
       config.pipes = (config.pipes || []).map(
-        (p: { render?: string; file?: string; command?: string; mode?: string }) => {
+        (p: { render?: string; file?: string; command?: string; mode?: PipeMode }) => {
           if (p.render === ".pipemd/template.md") {
             return { file: mdFile, render: ".pipemd/template.md" };
           }
-          return { file: p.file!, command: p.command, render: p.render };
+          return { file: p.file!, command: p.command, render: p.render, ...(p.mode ? { mode: p.mode } : {}) };
         },
       );
     }

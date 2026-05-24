@@ -52,12 +52,12 @@ export function cleanStaleState() {
 
 export function startLogic(): number {
   if (!fs.existsSync(CONFIG_PATH)) {
-    throw new Error("PipeMD not initialized. Run `pmd init` first.");
+    throw new UserError("PipeMD not initialized. Run `pmd init` first.");
   }
 
   const existingPid = readPidFile();
   if (existingPid && isDaemonRunning(existingPid)) {
-    throw new Error(`Daemon already running (PID ${existingPid}).`);
+    throw new UserError(`Daemon already running (PID ${existingPid}).`);
   }
 
   cleanStaleState();

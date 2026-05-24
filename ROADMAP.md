@@ -98,16 +98,22 @@ Crew coordination already ships (file claims, status broadcasts, sub-agent hiera
   - Gather feedback on conflict resolution patterns and missing coordination primitives.
 
 ## Phase 3: The Distributed Future (`pmd link`)
-*Expand to the network only when local coordination hits its ceiling.*
+*Expand to the network when the design is proven and the use case is clear.*
 
-The in-memory relay exists today (~840 LOC in `src/core/net/`) with plain HTTP, bearer-token auth between peers, and no persistence. It works for demos. It is explicitly paused until market pull justifies further investment.
+The in-memory relay exists today (~840 LOC in `src/core/net/`) with plain HTTP, bearer-token auth between peers, and no persistence. It works for LAN demos.
 
-- **Market Signal Requirement:** Resume active development when power users hit the ceiling of local swarms (e.g., "I need my Docker-based testing agent fleet to see my laptop's Crew state").
+Open design questions that must be resolved before active development:
+- **Cross-branch coordination**: agents on different machines may work different branches — how does the fleet share a coherent view?
+- **Shared vs. dedicated objectives**: should fleet agents share one task queue or work independent goals?
+- **Block sharing vs. session-only**: should the relay share rendered blocks (full context) or just crew sessions (coordination)?
+- **Discovery**: mDNS for LAN? Manual peers? A registry service?
+
+- **Market Signal Requirement:** Resume active development when the design questions above have answers validated by real usage.
 - **Evolution Path (when triggered):**
-  - Persistent session store (survive relay restarts).
+  - Block sharing via relay (agents on remote machines see full project context).
   - Encrypted peer sync (TLS, not plain HTTP).
   - Discovery protocol (mDNS for LAN, manual for WAN).
-  - Conflict resolution across machines (vector clocks or CRDT).
+  - Conflict resolution across machines.
 
 ---
 

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import http from "node:http";
 import os from "node:os";
 import fs from "node:fs";
@@ -26,6 +27,13 @@ function hostname(): string {
 }
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 function isLocalhost(req: http.IncomingMessage): boolean {
   const remote = req.socket.remoteAddress ?? "";
@@ -219,7 +227,7 @@ function handleCrew(req: http.IncomingMessage, res: http.ServerResponse) {
 function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
   const token = cachedRelayToken || readToken();
   const auth = req.headers.authorization;
-  if (!token || auth !== `Bearer ${token}`) {
+  if (!token || !auth || !timingSafeEqual(auth, `Bearer ${token}`)) {
     jsonResponse(res, 403, { error: "unauthorized" });
     return;
   }
@@ -303,7 +311,7 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       }
     });
 
-    server.listen(port, () => {
+    server.listen(port, "127.0.0.1", () => {
       const addr = server!.address();
       const actualPort = typeof addr === "object" && addr ? addr.port : port;
       log.info(`Relay listening on port ${actualPort}`);

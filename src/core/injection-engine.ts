@@ -1,4 +1,4 @@
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { readCache, writeCache, isFresh, invalidate, DEFAULT_TTLS } from "./cache.js";
@@ -19,7 +19,6 @@ import { formatTimeAgo } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
 import { invalidateCachePattern } from "./cache.js";
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 const VALIDATION_COOLDOWN_MS = 60_000
@@ -205,7 +204,10 @@ async function resolveCustom(ctx: ResolverContext): Promise<string> {
   }
 
   try {
-    const { stdout } = await execAsync(customRule.command, {
+    const parts = customRule.command.split(/\s+/);
+    const cmd = parts[0];
+    const args = parts.slice(1);
+    const { stdout } = await execFileAsync(cmd, args, {
       encoding: "utf-8",
       timeout: 5000,
     });
@@ -251,8 +253,6 @@ const SYNTAX_EXT_MAP: Record<string, string> = {
   ".js": "node",
   ".mjs": "node",
   ".cjs": "node",
-  ".ts": "tsc",
-  ".tsx": "tsc",
   ".jsx": "node",
 };
 
@@ -268,54 +268,21 @@ async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
   const checker = SYNTAX_EXT_MAP[ext];
   if (!checker) return "";
 
-  if (checker === "node") {
-    try {
-      await execFileAsync("node", ["--check", file], {
-        encoding: "utf-8",
-        timeout: 5000,
-      });
-      const content = "No syntax errors";
-      writeCache(cacheKey, content, DEFAULT_TTLS["syntax-check"] ?? 10000);
-      return content;
-    } catch (err: unknown) {
-      const e = err as { stderr?: string; message?: string } | null;
-      const detail = e?.stderr?.trim() || e?.message || "Syntax error";
-      const lines = detail.split("\n").slice(0, 5).join("\n");
-      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
-      return lines;
-    }
+  try {
+    await execFileAsync("node", ["--check", file], {
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    const content = "No syntax errors";
+    writeCache(cacheKey, content, DEFAULT_TTLS["syntax-check"] ?? 10000);
+    return content;
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string } | null;
+    const detail = e?.stderr?.trim() || e?.message || "Syntax error";
+    const lines = detail.split("\n").slice(0, 5).join("\n");
+    writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
+    return lines;
   }
-
-  if (checker === "tsc") {
-    try {
-      const { stdout, stderr } = await execFileAsync("npx", [
-        "tsc", "--noEmit", "--pretty", "false",
-      ], {
-        encoding: "utf-8",
-        timeout: 15000,
-      });
-      const relevant = (stdout || stderr || "").split("\n").filter((l: string) => l.includes(file));
-      if (relevant.length === 0) {
-        writeCache(cacheKey, "No syntax errors", DEFAULT_TTLS["syntax-check"] ?? 10000);
-        return "No syntax errors";
-      }
-      const lines = relevant.slice(0, 5).join("\n");
-      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
-      return lines;
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string } | null;
-      const output = (e?.stdout || e?.stderr || "").split("\n").filter((l: string) => l.includes(file));
-      if (output.length === 0) {
-        writeCache(cacheKey, "No syntax errors", DEFAULT_TTLS["syntax-check"] ?? 10000);
-        return "No syntax errors";
-      }
-      const lines = output.slice(0, 5).join("\n");
-      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
-      return lines;
-    }
-  }
-
-  return "";
 }
 
 const RESOLVERS: Record<ContextSource, SourceResolver> = {
@@ -433,9 +400,6 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
       });
       if (eslintResult) errors.push(eslintResult);
     } catch (err: unknown) { log.debug(`eslint validation failed: ${errMsg(err)}`); }
-
-    const eslintContent = errors.length > 0 ? errors.join("\n") : "No errors found";
-    writeCache(cacheKey, eslintContent, DEFAULT_TTLS.validation ?? 60000);
 
     try {
       const tscResult = await new Promise<string>((resolve) => {

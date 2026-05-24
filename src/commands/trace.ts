@@ -101,21 +101,6 @@ const trace = new Command("trace")
       return;
     }
 
-    if (opts.locks) {
-      console.log(renderLockMap(resolveLockMap(data.sessions)));
-      return;
-    }
-
-    if (opts.timeline) {
-      console.log(renderTimeline(data.events, data.sessions));
-      return;
-    }
-
-    if (opts.payloads) {
-      console.log(renderPayloads(data.payloads));
-      return;
-    }
-
     if (opts.snapshot) {
       console.log(renderTraceTree(data));
       if (data.events.length > 0) {

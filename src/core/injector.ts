@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import { execSync, exec } from "node:child_process";
+import { execFileSync, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 import { COMMAND_TIMEOUT_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const BLOCK_RE = /<!--\s*pmd:\s*([\w-]+)\s*-->\n?([\s\S]*?)<!--\s*\/pmd\s*-->/g;
 
@@ -59,7 +59,10 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         return;
       }
       try {
-        const { stdout } = await execAsync(cmd, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd() });
+        const parts = cmd.split(/\s+/);
+        const bin = parts[0];
+        const binArgs = parts.slice(1);
+        const { stdout } = await execFileAsync(bin, binArgs, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd() });
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
@@ -94,8 +97,14 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
 }
 
 function runCommandSync(commandName: string, cmd: string): string {
+  // Legacy sync path — used by injectContent() for file-watcher mode.
+  // Cannot be made async because injectContent() is called synchronously
+  // by the legacy watcher. See renderContentAsync() for the async equivalent.
   try {
-    const out = execSync(cmd, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd() });
+    const parts = cmd.split(/\s+/);
+    const bin = parts[0];
+    const binArgs = parts.slice(1);
+    const out = execFileSync(bin, binArgs, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd() });
     return out.trimEnd();
   } catch (err: unknown) {
     const execErr = err as { stderr?: string; message?: string } | null;

@@ -24,7 +24,8 @@ src/
 ├── index.ts            # CLI entry — Commander program, registers all commands
 ├── config.ts           # PipeConfig type + DEFAULT_CONFIG
 ├── commands/           # One file per command: init, start, stop, restart,
-│                       #   status, run, refresh, doctor, uninstall, crew
+│                       #   status, run, refresh, doctor, uninstall, crew, link
+│                       #   init/ subdirectory: constants.ts, scaffold.ts, scripts.ts, ui.ts
 └── core/
     ├── daemon.ts       # Daemon loop — pipe mode (mkfifo) + legacy mode (chokidar)
     ├── injector.ts     # Renders <!-- pmd: --> blocks; reverseInject write-back
@@ -34,14 +35,37 @@ src/
     ├── dedup.ts        # Per-session dedup — skips unchanged content
     ├── detect.ts       # Ecosystem auto-detection (Node, Python, Rust, …)
     ├── detectHarness.ts # AI-harness detection (Claude Code, OpenCode, …)
-    ├── crew.ts         # Crew ledger, conflict detection, block rendering
-    ├── hooks.ts        # Per-harness hook installers (crew + injection)
+    ├── crew.ts         # Crew ledger, session management, conflict detection
+    ├── crew-process.ts # Crew session lifecycle (join, leave, claim, heartbeat)
+    ├── crew-render.ts  # Crew block rendering (tree, lock map, timeline)
+    ├── hooks.ts        # HarnessAdapter interface + adapter registry
+    ├── hook-utils.ts   # Shared hook installation utilities (JSON-based harnesses)
+    ├── opencode-hooks.ts  # OpenCode-specific hook installer
+    ├── claude-hooks.ts # Claude Code-specific hook installer
+    ├── gemini-hooks.ts # Gemini CLI-specific hook installer
     ├── actions.ts      # start/stop/cleanup logic
-    └── logger.ts       # File logger → .pipemd/daemon.log
+    ├── daemon-config.ts # Config loading + validation
+    ├── daemon-write-back.ts # Bidirectional write-back handler
+    ├── fs-utils.ts     # Atomic file write with O_EXCL
+    ├── legacy-watcher.ts # File watcher for legacy (non-pipe) mode
+    ├── pipe-manager.ts # Named pipe creation, serving, and write-safe handling
+    ├── statusline-data.ts # Injection stats and statusline reporting
+    ├── json-utils.ts   # Shared JSON read/write helpers
+    ├── errors.ts       # UserError class for CLI-facing errors
+    ├── logger.ts       # File logger → .pipemd/daemon.log
+    ├── ttl-cache.ts    # Generic TTL cache (used by crew-render)
+    └── net/            # Cross-machine federation (pmd link)
+        ├── protocol.ts # Shared types, constants (CrewMessage, SyncMessage)
+        ├── relay.ts    # pmd-linkd server (in-memory store, peer sync)
+        └── daemon-client.ts # Daemon-side HTTP client (push/pull sessions)
+
+src/plugins/             # Harness-specific runtime plugins
+    ├── opencode-server.js  # OpenCode plugin (hooks + injection + crew)
+    └── opencode-tui.js     # OpenCode TUI panel (Solid.js)
 
 scripts/                # Bundled Bash library, by ecosystem & category
 templates/              # Per-ecosystem Markdown templates
-tests/                  # e2e-*.sh suites + test-reverse-inject.ts + fixtures/
+tests/                  # Unit tests (tsx) + e2e suites (bash)
 ```
 
 ## The Render Pipeline

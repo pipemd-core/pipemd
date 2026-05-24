@@ -8,8 +8,9 @@
 //   event(session.idle / session.status) → heartbeat + worker cleanup
 //   experimental.chat.system.transform → sub-agent detection + LLM context injection
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync, mkdtempSync } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+import { tmpdir } from "node:os";
 
 const PLUGIN_DIR = joinPath(process.cwd(), ".opencode", "plugin");
 const CONFIG_PATH = joinPath(PLUGIN_DIR, "pmd-config.json");
@@ -25,7 +26,8 @@ function loadConfig() {
 const CONFIG = loadConfig();
 const WITH_INJECTION = CONFIG.delivery === "active" || CONFIG.delivery === "expert";
 
-const FIFO_TEMP = joinPath("/tmp", "pmd-fifo-read-" + process.pid + ".md");
+const FIFO_TEMP_DIR = mkdtempSync(joinPath(tmpdir(), "pmd-fifo-"));
+const FIFO_TEMP = joinPath(FIFO_TEMP_DIR, "read.md");
 
 function isFifoFile(filePath) {
   if (!filePath) return false;
@@ -45,6 +47,7 @@ function resolveFifoRead(args) {
 
 function cleanupFifoTemp() {
   try { unlinkSync(FIFO_TEMP); } catch {}
+  try { require("node:fs").rmdirSync(FIFO_TEMP_DIR); } catch {}
 }
 
 function resolvePmd() {

@@ -135,9 +135,10 @@ Auth: `Authorization: Bearer <token>` header. The token is read from `~/.pipemd/
 
 ## Adding New Features
 
-The architecture is designed for extension:
+The architecture is designed for extension. The relay's star topology and in-memory store provide a foundation for future capabilities, which will be prioritized based on user demand:
 
-- **Block sharing** (Phase 2): Add a `POST /blocks` endpoint to the relay. Daemons push rendered blocks. Remote daemons subscribe via `GET /blocks?group=pipemd`.
-- **SSH tunnel management** (Phase 2): Add `pmd tunnel <user@host>` that creates an SSH tunnel and writes the local address to `peers.json`.
-- **Relay-to-relay mesh** (Phase 2): Currently each relay syncs with explicitly configured peers. A gossip protocol could enable dynamic discovery.
-- **Team mode** (Phase 3): Token rotation, revocation, and per-group access control.
+- **Block sharing**: Add a `POST /blocks` endpoint to the relay. Daemons push rendered blocks. Remote daemons subscribe via `GET /blocks?group=pipemd`.
+- **mDNS discovery**: Zero-config relay discovery on LAN.
+- **TLS peer sync**: Encrypted peer-to-peer communication.
+
+> **Note:** These are design notes for future development, not committed roadmap items. See `ROADMAP.md` for current priorities.
