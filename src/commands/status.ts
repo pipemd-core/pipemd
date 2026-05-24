@@ -10,7 +10,7 @@ import { readInjectStats } from "../core/json-utils.js";
 import { formatTimeAgo } from "../core/json-utils.js";
 
 export const statusCommand = new Command("status")
-  .description("Show daemon health and recent logs")
+  .description("Show daemon health, injection stats, and recent logs")
   .option("-l, --log <lines>", "Show last N log lines", "10")
   .action((options: { log: string }) => {
     const pid = readPidFile();

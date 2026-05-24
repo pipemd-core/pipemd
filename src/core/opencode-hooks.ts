@@ -14,7 +14,16 @@ const OPENCODE_PLUGIN_VERSION = (() => {
 })();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PLUGIN_DIR = path.join(__dirname, "..", "plugins");
+const PLUGIN_DIR = (() => {
+  const candidates = [
+    path.join(__dirname, "plugins"),
+    path.join(__dirname, "..", "plugins"),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, "opencode-server.js"))) return dir;
+  }
+  return path.join(__dirname, "..", "plugins");
+})();
 
 function loadTemplate(name: string): string {
   return fs.readFileSync(path.join(PLUGIN_DIR, name), "utf-8");

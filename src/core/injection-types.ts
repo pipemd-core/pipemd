@@ -17,6 +17,8 @@ export type ContextSource =
   | "git-delta"
   | "git-staged"
   | "git-diff-stat"
+  | "edit-diff"
+  | "syntax-check"
   | "custom";
 
 export type InjectionScope = "target-file" | "global";
@@ -56,6 +58,8 @@ const VALID_SOURCES: ContextSource[] = [
   "git-delta",
   "git-staged",
   "git-diff-stat",
+  "edit-diff",
+  "syntax-check",
   "custom",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
@@ -68,11 +72,14 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     ],
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },
-      { source: "file-errors", scope: "target-file", "max-lines": 5 },
+      { source: "syntax-check", scope: "target-file", "max-lines": 5 },
+      { source: "file-errors", scope: "target-file", "max-lines": 15 },
       { source: "git-context", scope: "target-file", "max-lines": 2 },
     ],
     "after-edit": [
-      { source: "validate-file", scope: "target-file", async: true, "max-lines": 5 },
+      { source: "edit-diff", scope: "target-file", async: true, "max-lines": 20 },
+      { source: "syntax-check", scope: "target-file", async: true, "max-lines": 5 },
+      { source: "validate-file", scope: "target-file", async: true, "max-lines": 15 },
     ],
     "on-start": [
       { source: "git-delta", scope: "global", "max-lines": 3 },
@@ -242,7 +249,8 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "#",
     "# triggers: before-read | before-edit | after-edit | on-idle | on-start",
     "# sources:  crew-status | crew-locks | file-errors | validate-file",
-    "#           git-context | git-delta | git-staged | git-diff-stat | custom",
+    "#           git-context | git-delta | git-staged | git-diff-stat",
+    "#           edit-diff | syntax-check | custom",
     "# scope:    target-file | global",
     "",
   ].join("\n");

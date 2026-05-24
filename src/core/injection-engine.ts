@@ -1,5 +1,6 @@
 import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
+import path from "node:path";
 import { readCache, writeCache, isFresh, invalidate, DEFAULT_TTLS } from "./cache.js";
 import {
   loadInjectionConfig,
@@ -16,6 +17,7 @@ import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
+import { invalidateCachePattern } from "./cache.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -224,6 +226,98 @@ async function resolveGitDiffStat(_ctx: ResolverContext): Promise<string> {
   return result || "No unstaged changes";
 }
 
+async function resolveEditDiff(ctx: ResolverContext): Promise<string> {
+  const file = ctx.targetFile;
+  if (!file) return "";
+  const cacheKey = `edit-diff:${file}`;
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
+
+  const result = await runGitAsync(["diff", "--", file]);
+  if (!result) return "No unstaged changes for this file";
+
+  const lines = result.split("\n").filter((l) =>
+    l.startsWith("+++") || l.startsWith("---") || l.startsWith("@@") || l.startsWith("-") || l.startsWith("+")
+  );
+  const diff = lines.length > 40
+    ? lines.slice(0, 40).join("\n") + `\n... (+${lines.length - 40} more diff lines)`
+    : lines.join("\n");
+
+  writeCache(cacheKey, diff, 5000);
+  return diff;
+}
+
+const SYNTAX_EXT_MAP: Record<string, string> = {
+  ".js": "node",
+  ".mjs": "node",
+  ".cjs": "node",
+  ".ts": "tsc",
+  ".tsx": "tsc",
+  ".jsx": "node",
+};
+
+async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
+  const file = ctx.targetFile;
+  if (!file) return "";
+
+  const cacheKey = `syntax-check:${file}`;
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
+
+  const ext = path.extname(file);
+  const checker = SYNTAX_EXT_MAP[ext];
+  if (!checker) return "";
+
+  if (checker === "node") {
+    try {
+      await execFileAsync("node", ["--check", file], {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+      const content = "No syntax errors";
+      writeCache(cacheKey, content, DEFAULT_TTLS["syntax-check"] ?? 10000);
+      return content;
+    } catch (err: unknown) {
+      const e = err as { stderr?: string; message?: string } | null;
+      const detail = e?.stderr?.trim() || e?.message || "Syntax error";
+      const lines = detail.split("\n").slice(0, 5).join("\n");
+      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
+      return lines;
+    }
+  }
+
+  if (checker === "tsc") {
+    try {
+      const { stdout, stderr } = await execFileAsync("npx", [
+        "tsc", "--noEmit", "--pretty", "false",
+      ], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      const relevant = (stdout || stderr || "").split("\n").filter((l: string) => l.includes(file));
+      if (relevant.length === 0) {
+        writeCache(cacheKey, "No syntax errors", DEFAULT_TTLS["syntax-check"] ?? 10000);
+        return "No syntax errors";
+      }
+      const lines = relevant.slice(0, 5).join("\n");
+      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
+      return lines;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string } | null;
+      const output = (e?.stdout || e?.stderr || "").split("\n").filter((l: string) => l.includes(file));
+      if (output.length === 0) {
+        writeCache(cacheKey, "No syntax errors", DEFAULT_TTLS["syntax-check"] ?? 10000);
+        return "No syntax errors";
+      }
+      const lines = output.slice(0, 5).join("\n");
+      writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
+      return lines;
+    }
+  }
+
+  return "";
+}
+
 const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
@@ -233,6 +327,8 @@ const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "git-delta": resolveGitDelta,
   "git-staged": resolveGitStaged,
   "git-diff-stat": resolveGitDiffStat,
+  "edit-diff": resolveEditDiff,
+  "syntax-check": resolveSyntaxCheck,
   custom: resolveCustom,
 };
 
@@ -312,8 +408,6 @@ export async function resolveInjections(
 
 export async function triggerAsyncValidation(filePath: string): Promise<void> {
   const cacheKey = `validation:${filePath}`;
-  if (isFresh(cacheKey)) return;
-
   const guardKey = "validation:running";
   if (isFresh(guardKey)) return;
   writeCache(guardKey, "1", VALIDATION_COOLDOWN_MS);
@@ -339,6 +433,9 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
       });
       if (eslintResult) errors.push(eslintResult);
     } catch (err: unknown) { log.debug(`eslint validation failed: ${errMsg(err)}`); }
+
+    const eslintContent = errors.length > 0 ? errors.join("\n") : "No errors found";
+    writeCache(cacheKey, eslintContent, DEFAULT_TTLS.validation ?? 60000);
 
     try {
       const tscResult = await new Promise<string>((resolve) => {

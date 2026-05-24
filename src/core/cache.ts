@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   unlinkSync,
 } from "node:fs";
 import { resolve } from "node:path";
@@ -33,6 +34,8 @@ export const DEFAULT_TTLS: Record<string, number> = {
   deps: 120000,
   arch: 300000,
   todos: 60000,
+  "syntax-check": 10000,
+  "edit-diff": 5000,
 };
 
 function keyToFilename(key: string): string {
@@ -101,8 +104,26 @@ export function isFresh(key: string): boolean {
 }
 
 export function invalidate(key: string): void {
-  const path = entryPath(key);
-  if (existsSync(path)) {
-    unlinkSync(path);
+  const p = entryPath(key);
+  if (existsSync(p)) {
+    unlinkSync(p);
   }
+}
+
+export function invalidateCachePattern(pattern: string): number {
+  let count = 0;
+  const dirs = [CACHE_DIR, VALIDATION_DIR];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    try {
+      const files = readdirSync(dir);
+      for (const file of files) {
+        if (!file.endsWith(".json")) continue;
+        if (file.includes(pattern)) {
+          try { unlinkSync(resolve(dir, file)); count++; } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return count;
 }

@@ -320,6 +320,9 @@ async function afterHandler(input, output) {
         try {
           execFileSync(getPmdBin(), ["inject", "--trigger", "after-edit", "--file", extractFilePath(args), "--async-validate", "--session", sid], { encoding: "utf-8", timeout: 3000, stdio: "ignore" });
         } catch (e) { logPluginError("after-edit-async", e); }
+        try {
+          pmd(["inject", "--invalidate", filePath]);
+        } catch (e) { /* non-critical */ }
         pushEvent("after-edit", tool, filePath || "", "claimed", 0);
       }
     }

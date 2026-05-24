@@ -38,7 +38,7 @@ const GROUPS: { title: string; commands: { name: string; desc: string }[] }[] =
         { name: "start", desc: "Start the background daemon" },
         { name: "stop", desc: "Stop the background daemon" },
         { name: "restart", desc: "Stop then start the daemon" },
-        { name: "status", desc: "Show daemon health and recent logs" },
+        { name: "status", desc: "Show daemon health, injection stats, and recent logs" },
       ],
     },
     {
@@ -59,11 +59,11 @@ const GROUPS: { title: string; commands: { name: string; desc: string }[] }[] =
         },
         {
           name: "trace",
-          desc: "Live resolution tree — debug crew coordination",
+          desc: "Live debugging — crew sessions, injection payloads, file locks",
         },
         {
           name: "link",
-          desc: "Connect daemons across machines and Docker containers",
+          desc: "[Beta] Connect daemons across machines and Docker containers",
         },
       ],
     },

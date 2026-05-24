@@ -8,6 +8,7 @@ import { loadInjectionConfig } from "../core/injection-types.js";
 import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
 import { bumpInjectStats } from "../core/statusline-data.js";
+import { invalidateCachePattern } from "../core/cache.js";
 import { log, errMsg } from "../core/logger.js";
 
 
@@ -22,6 +23,7 @@ const inject = new Command("inject")
   .option("--session <id>", "crew session ID for dedup tracking")
   .option("--async-validate", "spawn background validation after edit, return immediately")
   .option("--run-validation", "internal: execute validation synchronously (called by self-spawn)")
+  .option("--invalidate <file>", "invalidate cached quality data for a file (called after edits)")
   .option("--format <format>", "output format: plain | claude-hook | gemini-json")
   .option("--show-last", "output the most recent injection payload without re-running")
   .option("--verbose", "log resolver trace to stderr")
@@ -31,6 +33,7 @@ const inject = new Command("inject")
     session?: string;
     asyncValidate?: boolean;
     runValidation?: boolean;
+    invalidate?: string;
     format?: string;
     showLast?: boolean;
     verbose?: boolean;
@@ -91,6 +94,15 @@ const inject = new Command("inject")
         windowsHide: true,
       });
       child.unref();
+      return;
+    }
+
+    if (opts.invalidate) {
+      const file = opts.invalidate;
+      const patterns = [file.replace(/\//g, "%2F"), "syntax-check%2F", "edit-diff%2F"];
+      for (const pat of patterns) {
+        invalidateCachePattern(pat);
+      }
       return;
     }
 

@@ -65,7 +65,7 @@ function clearScreen(): void {
 }
 
 const trace = new Command("trace")
-  .description("Live resolution tree — debug crew coordination in real-time")
+  .description("Live debugging — crew sessions, injection payloads, file locks")
   .option("--snapshot", "one-shot output (no watch)")
   .option("--json", "structured JSON output")
   .option("--locks", "show file lock map only")
