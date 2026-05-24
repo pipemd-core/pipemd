@@ -36,6 +36,7 @@ export const DEFAULT_TTLS: Record<string, number> = {
   todos: 60000,
   "syntax-check": 10000,
   "edit-diff": 5000,
+  "test-failures": 60000,
 };
 
 function keyToFilename(key: string): string {

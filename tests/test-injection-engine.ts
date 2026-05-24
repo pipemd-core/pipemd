@@ -265,6 +265,137 @@ describe("misc", () => {
   })
 })
 
+describe("test-failures resolver", () => {
+  it("returns cached failure data from cache", async () => {
+    clearDedup()
+    const { writeCache } = await import("../src/core/cache.js")
+    writeCache("test-failures", "2 test(s) failed:\n• not ok 1 - foo\n• not ok 2 - bar", 60000)
+    const { RESOLVERS } = await import("../src/core/injection-engine.ts")
+    const resolve = (RESOLVERS as Record<string, any>)["test-failures"]
+    const result = await resolve({ trigger: "on-start", config: { delivery: "active", rules: {} } })
+    assert.ok(result.includes("2 test(s) failed"))
+    assert.ok(result.includes("not ok 1 - foo"))
+    const { invalidate } = await import("../src/core/cache.js")
+    invalidate("test-failures")
+  })
+
+  it("returns empty when cache has all-pass marker", async () => {
+    clearDedup()
+    const { writeCache } = await import("../src/core/cache.js")
+    writeCache("test-failures", "__all_pass__", 60000)
+    const { RESOLVERS } = await import("../src/core/injection-engine.ts")
+    const resolve = (RESOLVERS as Record<string, any>)["test-failures"]
+    const result = await resolve({ trigger: "on-start", config: { delivery: "active", rules: {} } })
+    assert.equal(result, "")
+    const { invalidate } = await import("../src/core/cache.js")
+    invalidate("test-failures")
+  })
+
+  it("returns empty when cache entry has expired", async () => {
+    clearDedup()
+    const { writeCache, readCache } = await import("../src/core/cache.js")
+    const entry = writeCache("test-failures", "1 test(s) failed:\n• not ok 1 - expired", 0)
+    entry.timestamp = Date.now() - 1000
+    fs.writeFileSync(
+      path.join(tmpDir, ".pipemd", "cache", "sources", "test-failures.json"),
+      JSON.stringify(entry),
+    )
+    const cached = readCache("test-failures")
+    assert.equal(cached, null)
+    const { invalidate } = await import("../src/core/cache.js")
+    invalidate("test-failures")
+  })
+
+  it("returns empty when no package.json exists", async () => {
+    clearDedup()
+    const { invalidate } = await import("../src/core/cache.js")
+    invalidate("test-failures")
+    const { RESOLVERS } = await import("../src/core/injection-engine.ts")
+    const resolve = (RESOLVERS as Record<string, any>)["test-failures"]
+    const result = await resolve({ trigger: "on-start", config: { delivery: "active", rules: {} } })
+    assert.equal(result, "")
+  })
+})
+
+describe("context-rules", () => {
+  it("returns empty when no context-files configured", async () => {
+    clearCrew()
+    clearDedup()
+    const payloads = await resolveInjections("on-idle", undefined, "sess-cr1")
+    assert.equal(payloads.length, 0)
+  })
+
+  it("returns file content when glob matches existing files", async () => {
+    clearCrew()
+    clearDedup()
+    fs.writeFileSync(path.join(tmpDir, "hello.txt"), "line1\nline2\nline3\n")
+    fs.writeFileSync(
+      path.join(tmpDir, ".pipemd", "injection.yml"),
+      `delivery: expert
+rules:
+  before-read:
+    - source: context-rules
+      scope: global
+      max-lines: 50
+context-files:
+  - glob: "hello.txt"
+    trigger: before-read
+    max-lines: 10
+`,
+    )
+    const payloads = await resolveInjections("before-read", undefined, "sess-cr2")
+    assert.equal(payloads.length, 1)
+    assert.ok(payloads[0].content.includes("=== hello.txt ==="))
+    assert.ok(payloads[0].content.includes("line1"))
+    assert.ok(payloads[0].content.includes("line3"))
+  })
+
+  it("returns empty when glob matches nothing", async () => {
+    clearCrew()
+    clearDedup()
+    fs.writeFileSync(
+      path.join(tmpDir, ".pipemd", "injection.yml"),
+      `delivery: expert
+rules:
+  before-read:
+    - source: context-rules
+      scope: global
+context-files:
+  - glob: "nonexistent/**/*.xyz"
+    trigger: before-read
+`,
+    )
+    const payloads = await resolveInjections("before-read", undefined, "sess-cr3")
+    assert.equal(payloads.length, 0)
+  })
+
+  it("respects max-lines truncation", async () => {
+    clearCrew()
+    clearDedup()
+    const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`)
+    fs.writeFileSync(path.join(tmpDir, "long.txt"), lines.join("\n") + "\n")
+    fs.writeFileSync(
+      path.join(tmpDir, ".pipemd", "injection.yml"),
+      `delivery: expert
+rules:
+  before-read:
+    - source: context-rules
+      scope: global
+context-files:
+  - glob: "long.txt"
+    trigger: before-read
+    max-lines: 5
+`,
+    )
+    const payloads = await resolveInjections("before-read", undefined, "sess-cr4")
+    assert.equal(payloads.length, 1)
+    assert.ok(payloads[0].content.includes("=== long.txt ==="))
+    assert.ok(payloads[0].content.includes("line5"))
+    assert.ok(!payloads[0].content.includes("line6"))
+    assert.ok(payloads[0].content.includes("... (+"))
+  })
+})
+
 after(() => {
   process.chdir(origDir)
   fs.rmSync(tmpDir, { recursive: true, force: true })

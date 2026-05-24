@@ -20,7 +20,9 @@ export type ContextSource =
   | "git-diff-stat"
   | "edit-diff"
   | "syntax-check"
-  | "custom";
+  | "test-failures"
+  | "custom"
+  | "context-rules";
 
 export type InjectionScope = "target-file" | "global";
 
@@ -33,10 +35,17 @@ export interface InjectionRule {
   label?: string;
 }
 
+export interface ContextFileRule {
+  glob: string;
+  trigger: InjectionTrigger;
+  "max-lines"?: number;
+}
+
 export interface InjectionConfig {
   delivery: DeliveryMode;
   rules: Partial<Record<InjectionTrigger, InjectionRule[]>>;
   customCommandsAllowed?: boolean;
+  contextFiles?: ContextFileRule[];
 }
 
 export interface InjectionPayload {
@@ -62,7 +71,9 @@ const VALID_SOURCES: ContextSource[] = [
   "git-diff-stat",
   "edit-diff",
   "syntax-check",
+  "test-failures",
   "custom",
+  "context-rules",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
 
@@ -202,7 +213,24 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
 
   const customCommandsAllowed = obj.customCommandsAllowed === true;
 
-  return { delivery, rules, customCommandsAllowed: customCommandsAllowed || undefined };
+  const contextFiles: ContextFileRule[] = [];
+  if (Array.isArray(obj["context-files"])) {
+    for (const entry of obj["context-files"]) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const e = entry as Record<string, unknown>;
+      if (!isString(e.glob) || !isString(e.trigger) || !VALID_TRIGGERS.includes(e.trigger as InjectionTrigger)) continue;
+      const rule: ContextFileRule = { glob: e.glob, trigger: e.trigger as InjectionTrigger };
+      if (e["max-lines"] != null) {
+        const ml = Number(e["max-lines"]);
+        if (Number.isFinite(ml) && ml >= 1) rule["max-lines"] = ml;
+      }
+      contextFiles.push(rule);
+    }
+  }
+
+  const result: InjectionConfig = { delivery, rules, customCommandsAllowed: customCommandsAllowed || undefined };
+  if (contextFiles.length > 0) result.contextFiles = contextFiles;
+  return result;
 }
 
 export function loadInjectionConfig(configDir?: string): InjectionConfig {
@@ -251,13 +279,13 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "# triggers: before-read | before-edit | after-edit | on-idle | on-start",
     "# sources:  crew-status | crew-locks | file-errors | validate-file",
     "#           git-context | git-delta | git-staged | git-diff-stat",
-    "#           edit-diff | syntax-check | custom",
+    "#           edit-diff | syntax-check | test-failures | custom | context-rules",
     "# scope:    target-file | global",
     "",
   ].join("\n");
 
   const yamlBody = stringifyYaml(
-    { delivery: config.delivery, rules: config.rules },
+    { delivery: config.delivery, rules: config.rules, "context-files": config.contextFiles || [] },
     { lineWidth: 0, singleQuote: true }
   );
 

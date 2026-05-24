@@ -13,6 +13,7 @@ import type {
   InjectionConfig,
   InjectionPayload,
   ContextSource,
+  ContextFileRule,
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
@@ -313,6 +314,163 @@ async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
   }
 }
 
+async function resolveTestFailures(_ctx: ResolverContext): Promise<string> {
+  const cached = readCache("test-failures");
+  if (cached) {
+    return cached.data === "__all_pass__" ? "" : cached.data;
+  }
+
+  let pkgJson: { scripts?: Record<string, unknown> };
+  try {
+    const raw = fs.readFileSync("package.json", "utf-8");
+    pkgJson = JSON.parse(raw);
+  } catch {
+    return "";
+  }
+
+  const scripts = pkgJson.scripts;
+  if (!scripts || typeof scripts !== "object") return "";
+
+  const testCmd = scripts["test:unit"] || scripts["test"];
+  if (!testCmd || typeof testCmd !== "string") return "";
+
+  const parts = testCmd.split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
+
+  try {
+    await execFileAsync(cmd, args, {
+      encoding: "utf-8",
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+    });
+    writeCache("test-failures", "__all_pass__", DEFAULT_TTLS["test-failures"] ?? 60000);
+    return "";
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string };
+    const output = `${e.stdout || ""}\n${e.stderr || ""}`.trim();
+
+    const failMatch = output.match(/# fail\s+(\d+)/);
+    if (failMatch && parseInt(failMatch[1], 10) === 0) {
+      writeCache("test-failures", "__all_pass__", DEFAULT_TTLS["test-failures"] ?? 60000);
+      return "";
+    }
+
+    if (!failMatch && !output.includes("not ok") && !output.includes("FAIL")) {
+      writeCache("test-failures", "__all_pass__", DEFAULT_TTLS["test-failures"] ?? 60000);
+      return "";
+    }
+
+    const lines = output.split("\n");
+    const failures: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith("not ok")) {
+        failures.push(line.trim());
+      }
+    }
+
+    const failCount = failMatch ? parseInt(failMatch[1], 10) : failures.length;
+    if (failCount === 0) {
+      writeCache("test-failures", "__all_pass__", DEFAULT_TTLS["test-failures"] ?? 60000);
+      return "";
+    }
+
+    const summary = `${failCount} test(s) failed:\n${failures.map((f) => `• ${f}`).join("\n")}`;
+    const result = summary.split("\n").slice(0, 20).join("\n");
+    writeCache("test-failures", result, DEFAULT_TTLS["test-failures"] ?? 60000);
+    return result;
+  }
+}
+
+const IGNORED_DIRS = new Set([".git", "node_modules", "dist", "__pycache__", ".next", ".nuxt", "coverage", ".cache"]);
+
+function globToRegex(pattern: string): RegExp {
+  let re = "^";
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i];
+    if (ch === "*" && pattern[i + 1] === "*") {
+      if (pattern[i + 2] === "/") {
+        re += "(?:.*/)?";
+        i += 3;
+      } else {
+        re += ".*";
+        i += 2;
+      }
+    } else if (ch === "*") {
+      re += "[^/]*";
+      i++;
+    } else if (ch === "?") {
+      re += "[^/]";
+      i++;
+    } else if (ch === "." || ch === "+" || ch === "^" || ch === "$" || ch === "|" || ch === "\\" || ch === "(" || ch === ")" || ch === "[" || ch === "]" || ch === "{" || ch === "}") {
+      re += "\\" + ch;
+      i++;
+    } else {
+      re += ch;
+      i++;
+    }
+  }
+  re += "$";
+  return new RegExp(re);
+}
+
+function collectFiles(root: string, pattern: string): string[] {
+  const regex = globToRegex(pattern);
+  const results: string[] = [];
+
+  function walk(dir: string) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch { return; }
+    for (const entry of entries) {
+      if (IGNORED_DIRS.has(entry.name)) continue;
+      const fullPath = path.join(dir, entry.name);
+      const relPath = path.relative(root, fullPath);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && regex.test(relPath)) {
+        results.push(relPath);
+      }
+    }
+  }
+
+  walk(root);
+  return results.sort();
+}
+
+async function resolveContextRules(ctx: ResolverContext): Promise<string> {
+  const config = ctx.config;
+  if (!config.contextFiles || config.contextFiles.length === 0) return "";
+
+  const matching = config.contextFiles.filter((r: ContextFileRule) => r.trigger === ctx.trigger);
+  if (matching.length === 0) return "";
+
+  const cwd = process.cwd();
+  const parts: string[] = [];
+
+  for (const rule of matching) {
+    const files = collectFiles(cwd, rule.glob);
+    const maxLines = rule["max-lines"] ?? 50;
+    for (const relPath of files) {
+      try {
+        const content = fs.readFileSync(path.join(cwd, relPath), "utf-8");
+        if (!content.trim()) continue;
+        const lines = content.split("\n");
+        const truncated = lines.length <= maxLines
+          ? content
+          : lines.slice(0, maxLines).join("\n") + `\n... (+${lines.length - maxLines} more)`;
+        parts.push(`=== ${relPath} ===\n${truncated}`);
+      } catch (err: unknown) {
+        log.debug(`resolveContextRules: failed to read ${relPath}: ${errMsg(err)}`);
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n\n") : "";
+}
+
 const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
@@ -325,7 +483,9 @@ const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "git-diff-stat": resolveGitDiffStat,
   "edit-diff": resolveEditDiff,
   "syntax-check": resolveSyntaxCheck,
+  "test-failures": resolveTestFailures,
   custom: resolveCustom,
+  "context-rules": resolveContextRules,
 };
 
 const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
@@ -505,4 +665,5 @@ export {
   RATE_LIMIT_WINDOW_MS,
   MAX_INJECTIONS_PER_WINDOW,
   RESOLVER_TOTAL_BUDGET_MS,
+  RESOLVERS,
 }
