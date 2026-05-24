@@ -20,7 +20,8 @@
     "test:compose": "bash tests/e2e-compose.sh",
     "test:crew": "bash tests/e2e-crew.sh",
     "test:inject": "bash tests/e2e-inject.sh",
-    "test:unit": "npx tsx tests/test-daemon-core.ts && npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts",
+    "test:unit": "npx tsx tests/test-ttl-cache.ts && npx tsx tests/test-detect.ts && npx tsx tests/test-crew-render.ts && npx tsx tests/test-daemon-core.ts && npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage pnpm test:unit",
     "test:link": "bash tests/e2e-link.sh",
     "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject && pnpm test:link"
   },
@@ -71,6 +72,7 @@
     "@types/prompts": "^2.4.9",
     "eslint": "^10.4.0",
     "tsup": "^8.5.1",
+    "c8": "^10.1.3",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4"

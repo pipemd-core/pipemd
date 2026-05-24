@@ -5,6 +5,7 @@ import YAML from "yaml";
 import type { PipeConfig } from "../config.js";
 import { readPidFile, writePidFile } from "./daemon.js";
 import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE } from "./paths.js";
+import { UserError } from "./errors.js";
 
 export function isDaemonRunning(pid: number): boolean {
   try {
@@ -69,6 +70,9 @@ export function startLogic(): number {
   });
 
   child.unref();
-  writePidFile(child.pid!);
-  return child.pid!;
+  if (!child.pid) {
+    throw new UserError("Failed to spawn daemon process — system may be out of resources (EMFILE or similar).");
+  }
+  writePidFile(child.pid);
+  return child.pid;
 }

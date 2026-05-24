@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { DeliveryMode } from "./injection-types.js";
-import type { HookInstallResult } from "./hooks.js";
+import type { HookInstallResult, HarnessAdapter } from "./hooks.js";
 import { hasPmdCrewHookInEvent, hasPmdInjectHookInEvent, hasPmdStatuslineHookInEvent, readJsonSettings, writeJsonSettings, ensureEventArray, stripPmdHooksFromSettings } from "./hook-utils.js";
 
 const GEMINI_CLAIM_CMD =
@@ -125,6 +125,12 @@ export function installGeminiHooks(
     injectionMode: withInjection ? delivery : undefined,
   };
 }
+
+export const geminiAdapter: HarnessAdapter = {
+  name: "Gemini",
+  installHooks: installGeminiHooks,
+  removeHooks: removeGeminiHooks,
+};
 
 export function removeGeminiHooks(cwd: string): HookInstallResult {
   return stripPmdHooksFromSettings(

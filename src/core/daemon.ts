@@ -44,6 +44,7 @@ function cleanInjectionLog(maxAgeMs: number = INJECTION_LOG_MAX_AGE_MS): void {
 }
 
 const writeBackGuard = { value: false };
+let isShuttingDown = false;
 
 function runPipeMode(config: PipeConfig) {
   log.info("Pipe mode: mkfifo available");
@@ -72,6 +73,8 @@ function runPipeMode(config: PipeConfig) {
 }
 
 function shutdown(allPipePaths: string[], exitCode: number = 0) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   setShuttingDown(true);
   log.info("Daemon shutting down...");
 

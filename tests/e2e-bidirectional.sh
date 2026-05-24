@@ -100,7 +100,7 @@ echo ""
 
 # ── Test 2: reverseInject unit tests ──
 echo -e "${YELLOW}Test 2: reverseInject unit tests${NC}"
-node "$SCRIPT_DIR/test-reverse-inject.mjs"
+npx tsx "$SCRIPT_DIR/test-reverse-inject.ts"
 if [ $? -eq 0 ]; then
   PASS=$((PASS + 1))
 else

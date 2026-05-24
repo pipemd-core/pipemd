@@ -2,14 +2,11 @@ import fs from "node:fs";
 import { execSync, exec } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
-import { log } from "./logger.js";
 import { COMMAND_TIMEOUT_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 
 const execAsync = promisify(exec);
 
-const TAG_OPEN_RE = /<!--\s*pmd:\s*([\w-]+)\s*-->/;
-const TAG_CLOSE_RE = /<!--\s*\/pmd\s*-->/;
 const BLOCK_RE = /<!--\s*pmd:\s*([\w-]+)\s*-->\n?([\s\S]*?)<!--\s*\/pmd\s*-->/g;
 
 const ERROR_BLOCK = (commandName: string, cmd: string, detail: string) =>
@@ -29,12 +26,12 @@ export function injectFile(filePath: string, config: PipeConfig, outputPath?: st
 
 export function injectContent(content: string, config: PipeConfig): string | null {
   let changed = false;
-  const result = content.replace(BLOCK_RE, (_match, commandName: string, inner: string) => {
+  const result = content.replace(BLOCK_RE, (_match, commandName: string, _inner: string) => {
     const cmd = config.commands[commandName];
     if (!cmd) return _match;
     const output = runCommandSync(commandName, cmd);
     const replacement = buildBlock(commandName, output);
-    if (replacement !== `<!-- pmd: ${commandName} -->\n${inner}<!-- /pmd -->`) {
+    if (replacement !== _match) {
       changed = true;
     }
     return replacement;

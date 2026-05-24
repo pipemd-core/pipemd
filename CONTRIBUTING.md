@@ -41,7 +41,7 @@ src/
 
 scripts/                # Bundled Bash library, by ecosystem & category
 templates/              # Per-ecosystem Markdown templates
-tests/                  # e2e-*.sh suites + test-reverse-inject.mjs + fixtures/
+tests/                  # e2e-*.sh suites + test-reverse-inject.ts + fixtures/
 ```
 
 ## The Render Pipeline

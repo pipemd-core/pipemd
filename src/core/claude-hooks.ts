@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { DeliveryMode } from "./injection-types.js";
-import type { HookInstallResult } from "./hooks.js";
+import type { HookInstallResult, HarnessAdapter } from "./hooks.js";
 import { hasPmdCrewHookInEvent, hasPmdInjectHookInEvent, readJsonSettings, writeJsonSettings, ensureEventArray, stripPmdHooksFromSettings } from "./hook-utils.js";
 import { log, errMsg } from "./logger.js";
 
@@ -175,6 +175,12 @@ export function installClaudeCodeHooks(
     injectionMode: withInjection ? delivery : undefined,
   };
 }
+
+export const claudeAdapter: HarnessAdapter = {
+  name: "Claude Code",
+  installHooks: installClaudeCodeHooks,
+  removeHooks: removeClaudeCodeHooks,
+};
 
 export function removeClaudeCodeHooks(cwd: string): HookInstallResult {
   const file = path.join(cwd, ".claude", "settings.json");

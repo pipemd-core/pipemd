@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DeliveryMode } from "./injection-types.js";
-import type { HookInstallResult } from "./hooks.js";
+import type { HookInstallResult, HarnessAdapter } from "./hooks.js";
 import { log, errMsg } from "./logger.js";
 
 declare const PKG_VERSION: string;
@@ -294,6 +294,12 @@ export function installOpenCodeHooks(
     injectionMode: withInjection ? delivery : undefined,
   };
 }
+
+export const opencodeAdapter: HarnessAdapter = {
+  name: "OpenCode",
+  installHooks: installOpenCodeHooks,
+  removeHooks: removeOpenCodeHooks,
+};
 
 export function removeOpenCodeHooks(cwd: string): HookInstallResult {
   const results: string[] = [];

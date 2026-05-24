@@ -2,10 +2,10 @@ import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
-import YAML from "yaml";
 import { readPidFile } from "../core/daemon.js";
 import { log, tailLog, errMsg } from "../core/logger.js";
-import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR, CONFIG_PATH } from "../core/paths.js";
+import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR } from "../core/paths.js";
+import { loadConfig, ConfigError } from "../core/daemon-config.js";
 
 export const statusCommand = new Command("status")
   .description("Show daemon health and recent logs")
@@ -44,8 +44,8 @@ export const statusCommand = new Command("status")
       }
     }
 
-    if (fs.existsSync(CONFIG_PATH)) {
-      const config = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    try {
+      const config = loadConfig();
 
       const injected = (config.injected || [])
         .filter((i: { watch?: boolean }) => i.watch)
@@ -67,6 +67,10 @@ export const statusCommand = new Command("status")
         for (const p of renderPipes) {
           console.log(chalk.dim(`  Context:  ${p.file} ← ${p.render}`));
         }
+      }
+    } catch (err: unknown) {
+      if (err instanceof ConfigError) {
+        log.error(err.message);
       }
     }
 

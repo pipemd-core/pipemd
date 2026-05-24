@@ -1,7 +1,7 @@
 import type { DeliveryMode } from "./injection-types.js";
-import { installClaudeCodeHooks, removeClaudeCodeHooks } from "./claude-hooks.js";
-import { installGeminiHooks, removeGeminiHooks } from "./gemini-hooks.js";
-import { installOpenCodeHooks, removeOpenCodeHooks } from "./opencode-hooks.js";
+import { claudeAdapter } from "./claude-hooks.js";
+import { geminiAdapter } from "./gemini-hooks.js";
+import { opencodeAdapter } from "./opencode-hooks.js";
 import { errMsg } from "./logger.js";
 
 export interface HookInstallResult {
@@ -10,6 +10,26 @@ export interface HookInstallResult {
   mechanism: string;
   detail: string;
   injectionMode?: DeliveryMode;
+}
+
+export interface HarnessAdapter {
+  name: string;
+  installHooks(cwd: string, delivery: DeliveryMode, dryRun: boolean, force: boolean): HookInstallResult;
+  removeHooks(cwd: string): HookInstallResult;
+}
+
+const adapters: Map<string, HarnessAdapter> = new Map([
+  ["Claude Code", claudeAdapter],
+  ["OpenCode", opencodeAdapter],
+  ["Gemini", geminiAdapter],
+]);
+
+export function registerAdapter(adapter: HarnessAdapter): void {
+  adapters.set(adapter.name, adapter);
+}
+
+export function getAdapter(name: string): HarnessAdapter | undefined {
+  return adapters.get(name);
 }
 
 const INSTRUCTION_ONLY = ["Cursor", "Aider", "OpenClaw", "Hermes", "OS Agent"];
@@ -22,9 +42,8 @@ export function installHooks(
   force: boolean = false,
 ): HookInstallResult {
   try {
-    if (harness === "Claude Code") return installClaudeCodeHooks(cwd, delivery, dryRun, force);
-    if (harness === "OpenCode") return installOpenCodeHooks(cwd, delivery, dryRun, force);
-    if (harness === "Gemini") return installGeminiHooks(cwd, delivery, dryRun, force);
+    const adapter = adapters.get(harness);
+    if (adapter) return adapter.installHooks(cwd, delivery, dryRun, force);
     if (INSTRUCTION_ONLY.includes(harness)) {
       return {
         harness,
@@ -42,9 +61,8 @@ export function installHooks(
 
 export function removeHooks(harness: string, cwd: string = process.cwd()): HookInstallResult {
   try {
-    if (harness === "Claude Code") return removeClaudeCodeHooks(cwd);
-    if (harness === "OpenCode") return removeOpenCodeHooks(cwd);
-    if (harness === "Gemini") return removeGeminiHooks(cwd);
+    const adapter = adapters.get(harness);
+    if (adapter) return adapter.removeHooks(cwd);
     return { harness, installed: false, mechanism: "none", detail: "no hooks to remove" };
   } catch (err: unknown) {
     const msg = errMsg(err);

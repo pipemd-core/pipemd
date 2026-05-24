@@ -17,6 +17,7 @@ import {
 import { PIPEMD_DIR, CONFIG_PATH, SCRIPTS_DIR, TEMPLATE_PATH } from "../core/paths.js";
 import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
+import { loadConfig, ConfigError } from "../core/daemon-config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -127,7 +128,15 @@ export const refreshCommand = new Command("refresh")
       throw new UserError(chalk.red("Error: .pipemd/config.yml not found. Run `pmd init` first."));
     }
 
-    const config = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as PipeConfig;
+    let config: PipeConfig;
+    try {
+      config = loadConfig();
+    } catch (err: unknown) {
+      if (err instanceof ConfigError) {
+        throw new UserError(chalk.red(`Error: ${err.message}`));
+      }
+      throw err;
+    }
     const ecosystem = detectEcosystemFromConfig(config) || detectProject().ecosystem;
     const profile = detectProfileFromConfig(config);
     const detection = detectProject();
