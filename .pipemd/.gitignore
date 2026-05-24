@@ -1,12 +1,10 @@
 live/
 crew/
 cache/
-pipes/
-.injection-log/
 .daemon.pid
 daemon.log
+.dashboard.json
 .inject-stats.json
+.injection-log/
 .status.json
 .tui-stats.json
-.dashboard.json
-.plugin-errors.log

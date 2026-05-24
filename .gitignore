@@ -48,6 +48,5 @@ node_modules/.cache/
 # PipeMD ephemeral context files
 AGENTS.md
 CLAUDE.md
-AI_CONTEXT.md
 .pipemd/live/
 .pipemd/.daemon.pid

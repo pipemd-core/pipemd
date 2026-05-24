@@ -195,6 +195,22 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ```
 <!-- /pmd -->
 
+### Lint Errors
+
+<!-- pmd: lint -->
+```
+
+```
+<!-- /pmd -->
+
+### Test Summary
+
+<!-- pmd: test-summary -->
+```
+
+```
+<!-- /pmd -->
+
 ### Crew Activity
 
 <!-- pmd: crew -->
@@ -212,6 +228,14 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ### Git Status
 
 <!-- pmd: git-status -->
+```
+
+```
+<!-- /pmd -->
+
+### Diff Stats
+
+<!-- pmd: diff-stat -->
 ```
 
 ```
