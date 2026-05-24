@@ -26,4 +26,6 @@ TREE_FIND_EXCLUDES=" \
   -not -name '.venv'"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../Shared/lib/limit-core.sh"
+LIMIT_CORE="$SCRIPT_DIR/limit-core.sh"
+[ -f "$LIMIT_CORE" ] || LIMIT_CORE="$SCRIPT_DIR/../../Shared/lib/limit-core.sh"
+source "$LIMIT_CORE"

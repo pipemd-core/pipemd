@@ -317,6 +317,14 @@ function writeLibraryFiles(
     try { fs.chmodSync(libPath, 0o755); } catch (err: unknown) { log.debug(`chmod lib ${libPath}: ${errMsg(err)}`); }
   }
 
+  const coreContent = loadScriptContent(ecosystem, "lib/limit-core.sh");
+  if (coreContent) {
+    mkdirp(libDir);
+    const corePath = path.join(libDir, "limit-core.sh");
+    addFile(corePath, coreContent);
+    try { fs.chmodSync(corePath, 0o755); } catch (err: unknown) { log.debug(`chmod core ${corePath}: ${errMsg(err)}`); }
+  }
+
   const archDir = path.join(SCRIPTS_DIR, "architecture");
   const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
   if (normContent) {

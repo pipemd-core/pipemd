@@ -68,6 +68,13 @@ export async function testRunScripts(
       try { fs.chmodSync(path.join(tmpDir, "lib", "limit.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod limit.sh: ${errMsg(err)}`); }
     }
 
+    const coreContent = loadScriptContent(ecosystem, "lib/limit-core.sh");
+    if (coreContent) {
+      fs.mkdirSync(path.join(tmpDir, "lib"), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, "lib", "limit-core.sh"), coreContent, "utf-8");
+      try { fs.chmodSync(path.join(tmpDir, "lib", "limit-core.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod limit-core.sh: ${errMsg(err)}`); }
+    }
+
     const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
     if (normContent) {
       fs.mkdirSync(path.join(tmpDir, "architecture"), { recursive: true });

@@ -7,7 +7,7 @@ import YAML from "yaml";
 import { stopLogic } from "../core/actions.js";
 import { removeHooks } from "../core/hooks.js";
 import { detectHarnesses } from "../core/detectHarness.js";
-import { PIPEMD_DIR, CONFIG_PATH, BAK_PATH, BASE_PATH } from "../core/paths.js";
+import { PIPEMD_DIR, CONFIG_PATH, BAK_PATH, BASE_PATH, TEMPLATE_PATH } from "../core/paths.js";
 import { log, errMsg } from "../core/logger.js";
 
 const GITIGNORE_PATH = ".gitignore";
@@ -74,6 +74,8 @@ export const uninstallCommand = new Command("uninstall")
           console.log(chalk.green(`  ✔ ${contextFile} will be restored from base instructions`));
         } else if (hasBackup) {
           console.log(chalk.green(`  ✔ ${contextFile} will be restored from backup`));
+        } else if (fs.existsSync(TEMPLATE_PATH)) {
+          console.log(chalk.green(`  ✔ ${contextFile} will be restored from template (pmd blocks stripped)`));
         } else {
           console.log(chalk.green(`  ✔ ${contextFile} will be kept (pmd blocks stripped)`));
         }
@@ -103,6 +105,7 @@ export const uninstallCommand = new Command("uninstall")
       try { fs.chmodSync(contextFile, 0o644); } catch (err: unknown) { log.debug(`chmod context file: ${errMsg(err)}`); }
 
       const hasBase = fs.existsSync(BASE_PATH);
+      const hasTemplate = fs.existsSync(TEMPLATE_PATH);
 
       if (hasBase) {
         const base = fs.readFileSync(BASE_PATH, "utf-8");
@@ -112,6 +115,16 @@ export const uninstallCommand = new Command("uninstall")
         const backup = fs.readFileSync(BAK_PATH, "utf-8");
         fs.writeFileSync(contextFile, backup, "utf-8");
         console.log(chalk.green(`  ✔ Restored ${contextFile} from backup`));
+      } else if (hasTemplate && !options.deleteContext) {
+        const template = fs.readFileSync(TEMPLATE_PATH, "utf-8");
+        const cleaned = stripPmdBlocks(template);
+        if (cleaned.trim()) {
+          fs.writeFileSync(contextFile, cleaned + "\n", "utf-8");
+          console.log(chalk.green(`  ✔ Restored ${contextFile} from template (pmd blocks stripped)`));
+        } else {
+          fs.unlinkSync(contextFile);
+          console.log(chalk.dim(`  → Removed ${contextFile} (no content outside pmd blocks)`));
+        }
       } else if (!options.deleteContext && fs.existsSync(contextFile)) {
         const content = fs.readFileSync(contextFile, "utf-8");
         const cleaned = stripPmdBlocks(content);
@@ -127,8 +140,9 @@ export const uninstallCommand = new Command("uninstall")
           try {
             fs.unlinkSync(contextFile);
             console.log(chalk.green(`  ✔ Removed ${contextFile}`));
-          } catch (err: any) {
-            console.log(chalk.red(`  ✖ Could not remove ${contextFile}: ${err.message}`));
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.log(chalk.red(`  ✖ Could not remove ${contextFile}: ${msg}`));
           }
         }
       }
@@ -154,8 +168,9 @@ export const uninstallCommand = new Command("uninstall")
     try {
       fs.rmSync(PIPEMD_DIR, { recursive: true, force: true });
       console.log(chalk.green(`  ✔ Removed ${PIPEMD_DIR}/`));
-    } catch (err: any) {
-      console.log(chalk.red(`  ✖ Could not remove ${PIPEMD_DIR}: ${err.message}`));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(chalk.red(`  ✖ Could not remove ${PIPEMD_DIR}: ${msg}`));
     }
 
     const gitignoreEntries = [contextFile, ".pipemd/live/", ".pipemd/crew/", ".pipemd/.daemon.pid"].filter(Boolean) as string[];
