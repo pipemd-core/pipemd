@@ -28,7 +28,7 @@ const INJECT_HOOKS: HookEntry[] = [
   },
   {
     event: "PostToolUse", matcher: "Edit|Write|MultiEdit", injectOnly: true,
-    command: 'pmd inject --trigger after-edit --file "$(jq -r \'.tool_input.file_path // .tool_input.path // empty\' 2>/dev/null)" --async-validate --session "${PMD_SESSION:-}" >/dev/null 2>&1; true',
+    command: 'pmd inject --trigger after-edit --file "$(jq -r \'.tool_input.file_path // .tool_input.path // empty\' 2>/dev/null)" --async-validate --format claude-hook --session "${PMD_SESSION:-}" 2>/dev/null; true',
     timeout: 5, category: "inject",
   },
   {

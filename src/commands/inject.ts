@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from
 import path from "node:path";
 
 import { Command } from "commander";
-import { resolveInjections, triggerAsyncValidation } from "../core/injection-engine.js";
+import { resolveInjections, triggerAsyncValidation, buildPostEditFeedback } from "../core/injection-engine.js";
 import { loadInjectionConfig } from "../core/injection-types.js";
 import type { InjectionTrigger } from "../core/injection-types.js";
 import { isPipemdProject, PIPEMD_DIR } from "../core/crew.js";
@@ -72,6 +72,11 @@ const inject = new Command("inject")
     const trigger = opts.trigger as InjectionTrigger | undefined;
     if (!trigger || !VALID_TRIGGERS.includes(trigger)) return;
 
+    const format: InjectFormat =
+      opts.format === "claude-hook" ? "claude-hook"
+      : opts.format === "gemini-json" ? "gemini-json"
+      : "plain";
+
     if (opts.runValidation && opts.file) {
       await triggerAsyncValidation(opts.file);
       return;
@@ -94,6 +99,21 @@ const inject = new Command("inject")
         windowsHide: true,
       });
       child.unref();
+
+      if (format === "claude-hook" && trigger === "after-edit") {
+        const feedback = await buildPostEditFeedback(opts.file);
+        if (feedback) {
+          const obj = {
+            hookSpecificOutput: {
+              hookEventName: "PostToolUse",
+              additionalContext: feedback,
+            },
+          };
+          process.stdout.write(JSON.stringify(obj) + "\n");
+        } else {
+          process.stdout.write("{}\n");
+        }
+      }
       return;
     }
 
@@ -105,11 +125,6 @@ const inject = new Command("inject")
       }
       return;
     }
-
-    const format: InjectFormat =
-      opts.format === "claude-hook" ? "claude-hook"
-      : opts.format === "gemini-json" ? "gemini-json"
-      : "plain";
 
     const payloads = await resolveInjections(trigger, opts.file, opts.session, opts.verbose);
 

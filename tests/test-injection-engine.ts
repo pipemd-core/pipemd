@@ -83,15 +83,38 @@ describe("before-read", () => {
     assert.equal(payloads.length, 0)
   })
 
-  it("with a session shows session info", async () => {
+  it("with a single session and no conflicts returns empty (solo dev)", async () => {
     clearCrew()
     clearDedup()
     writeCrewSession(makeSession({ id: "cr_alpha", harness: "AlphaAgent" }))
     const payloads = await resolveInjections("before-read", undefined, "sess-2")
+    assert.equal(payloads.length, 0)
+  })
+
+  it("with multiple sessions shows crew status", async () => {
+    clearCrew()
+    clearDedup()
+    writeCrewSession(makeSession({ id: "cr_alpha", harness: "AlphaAgent" }))
+    writeCrewSession(makeSession({ id: "cr_beta", harness: "BetaAgent", pid: 88888 }))
+    const payloads = await resolveInjections("before-read", undefined, "sess-2b")
     assert.equal(payloads.length, 1)
-    assert.ok(payloads[0].content.includes("1 session(s)"))
+    assert.ok(payloads[0].content.includes("2 session(s)"))
     assert.ok(payloads[0].content.includes("AlphaAgent"))
     assert.ok(payloads[0].content.includes("cr_alpha"))
+  })
+
+  it("with remote session shows crew status even with 1 local", async () => {
+    clearCrew()
+    clearDedup()
+    writeCrewSession(makeSession({ id: "cr_local", harness: "LocalAgent" }))
+    const { setRemoteSessions, clearRemoteSessions, invalidateSessionListCache } = await import("../src/core/crew.js")
+    setRemoteSessions([Object.assign(makeSession({ id: "cr_remote", harness: "RemoteAgent" }), { _remote: true, _origin: "other-host" })])
+    invalidateSessionListCache()
+    const payloads = await resolveInjections("before-read", undefined, "sess-2c")
+    assert.equal(payloads.length, 1)
+    assert.ok(payloads[0].content.includes("from other-host"))
+    clearRemoteSessions()
+    invalidateSessionListCache()
   })
 })
 
@@ -171,7 +194,8 @@ describe("dedup", () => {
   it("second call with identical content returns empty", async () => {
     clearCrew()
     clearDedup()
-    writeCrewSession(makeSession({ id: "cr_dedup", harness: "DedupAgent" }))
+    writeCrewSession(makeSession({ id: "cr_dedup1", harness: "DedupAgent1" }))
+    writeCrewSession(makeSession({ id: "cr_dedup2", harness: "DedupAgent2", pid: 88888 }))
     const first = await resolveInjections("before-read", undefined, "sess-dedup")
     assert.equal(first.length, 1)
     const second = await resolveInjections("before-read", undefined, "sess-dedup")
@@ -182,6 +206,7 @@ describe("dedup", () => {
     clearCrew()
     clearDedup()
     writeCrewSession(makeSession({ id: "cr_old", harness: "OldAgent" }))
+    writeCrewSession(makeSession({ id: "cr_dedup3", harness: "DedupAgent3", pid: 77777 }))
     const first = await resolveInjections("before-read", undefined, "sess-dedup2")
     assert.equal(first.length, 1)
     assert.ok(first[0].content.includes("OldAgent"))
@@ -195,6 +220,7 @@ describe("dedup", () => {
     clearCrew()
     clearDedup()
     writeCrewSession(makeSession({ id: "cr_ind", harness: "IndAgent" }))
+    writeCrewSession(makeSession({ id: "cr_ind2", harness: "IndAgent2", pid: 66666 }))
     const first = await resolveInjections("before-read", undefined, "sess-ind-a")
     assert.equal(first.length, 1)
     const second = await resolveInjections("before-read", undefined, "sess-ind-b")
@@ -214,6 +240,7 @@ describe("misc", () => {
     clearCrew()
     clearDedup()
     writeCrewSession(makeSession({ id: "cr_hash", harness: "HashAgent" }))
+    writeCrewSession(makeSession({ id: "cr_hash2", harness: "HashAgent2", pid: 55555 }))
     const payloads = await resolveInjections("before-read", undefined, "sess-hash")
     assert.equal(payloads.length, 1)
     assert.ok(

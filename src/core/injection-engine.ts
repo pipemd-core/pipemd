@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs";
 import path from "node:path";
 import { readCache, writeCache, isFresh, invalidate, DEFAULT_TTLS } from "./cache.js";
 import {
@@ -91,18 +92,23 @@ async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
   const sessions = listSessions();
   if (sessions.length === 0) return "";
 
+  const hasRemote = sessions.some((s) => s._remote);
+  const conflicts = findConflicts(sessions);
+  if (sessions.length === 1 && !hasRemote && conflicts.length === 0) return "";
+
   const lines: string[] = [];
   for (const s of sessions) {
     const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
-    lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})`);
+    const origin = s._origin ? ` from ${s._origin}` : "";
+    lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})${origin}`);
+    if (s.note) lines.push(`  note: ${s.note}`);
   }
 
-  const conflicts = findConflicts(sessions);
   for (const c of conflicts) {
     lines.push(`⚠️ CONFLICT: ${c.path} claimed by ${c.sessionIds.join(", ")}`);
   }
 
-  return lines.slice(0, 5).join("\n");
+  return lines.slice(0, 8).join("\n");
 }
 
 async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
@@ -127,6 +133,22 @@ async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
   return `⚠️ CONFLICT on ${file}: ${ids}`;
 }
 
+async function resolveCrewTodos(_ctx: ResolverContext): Promise<string> {
+  const sessions = listSessions();
+  const hasRemote = sessions.some((s) => s._remote);
+  if (sessions.length < 2 && !hasRemote) return "";
+
+  const entry = readCache("crew-todos");
+  if (!entry || !entry.data) return "";
+
+  try {
+    const todos: Array<{ content: string; status: string; priority: string }> = JSON.parse(entry.data);
+    if (!Array.isArray(todos) || todos.length === 0) return "";
+    const lines = todos.slice(0, 5).map((t) => `${t.status === "in_progress" ? "▶" : "○"} ${t.content} [${t.priority}]`);
+    return lines.join("\n");
+  } catch { return ""; }
+}
+
 async function resolveValidation(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
@@ -147,7 +169,19 @@ async function resolveValidateFile(ctx: ResolverContext): Promise<string> {
 async function resolveGitContext(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
-  if (ctx.trigger === "before-edit") return "";
+
+  if (ctx.trigger === "before-edit") {
+    const cacheKey = `last-read:${ctx.sessionId || ""}:${file}`;
+    const cached = readCache(cacheKey);
+    if (!cached) return "";
+    try {
+      const stat = fs.statSync(file);
+      if (stat.mtimeMs > cached.timestamp) {
+        return `⚠️ ${path.basename(file)} was modified externally since you last read it`;
+      }
+    } catch { return ""; }
+    return "";
+  }
 
   const cacheKey = `git-context:${file}`;
   const cached = readCache(cacheKey);
@@ -282,6 +316,7 @@ async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
 const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
+  "crew-todos": resolveCrewTodos,
   "file-errors": resolveFileErrors,
   "validate-file": resolveValidateFile,
   "git-context": resolveGitContext,
@@ -292,6 +327,44 @@ const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "syntax-check": resolveSyntaxCheck,
   custom: resolveCustom,
 };
+
+const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
+const POST_EDIT_LINT_TIMEOUT_MS = 4000;
+
+export async function buildPostEditFeedback(file: string): Promise<string | null> {
+  if (!file) return null;
+  const parts: string[] = [];
+
+  try {
+    const conflict = await resolveCrewLocks({
+      trigger: "before-edit",
+      targetFile: file,
+      config: loadInjectionConfig(),
+    });
+    if (conflict && conflict.startsWith("⚠️ CONFLICT")) {
+      parts.push(`[pmd] ${conflict}`);
+    }
+  } catch (err: unknown) { log.debug(`buildPostEditFeedback conflict check failed: ${errMsg(err)}`); }
+
+  const ext = path.extname(file).toLowerCase();
+  if (ESLINT_EXTS.has(ext)) {
+    try {
+      const lint = await new Promise<string>((resolve) => {
+        execFile("npx", ["eslint", file, "--no-color"], { timeout: POST_EDIT_LINT_TIMEOUT_MS }, (err, stdout) => {
+          if (err && typeof stdout === "string") {
+            const out = stdout.trim();
+            resolve(out ? out.split("\n").slice(0, 5).join("\n") : "");
+          } else {
+            resolve("");
+          }
+        });
+      });
+      if (lint) parts.push(`[pmd] ⚠ errors in ${file}:\n${lint}`);
+    } catch (err: unknown) { log.debug(`buildPostEditFeedback lint failed: ${errMsg(err)}`); }
+  }
+
+  return parts.length === 0 ? null : parts.join("\n");
+}
 
 function deriveStableSessionId(): string {
   const { pid, harness } = resolveAgentIdentity();

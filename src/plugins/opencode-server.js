@@ -9,8 +9,9 @@
 //   experimental.chat.system.transform → sub-agent detection + LLM context injection
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync, mkdtempSync } from "node:fs";
-import { resolve as resolvePath, join as joinPath } from "node:path";
+import { resolve as resolvePath, join as joinPath, dirname as pathDirname } from "node:path";
 import { tmpdir } from "node:os";
+import crypto from "node:crypto";
 
 const PLUGIN_DIR = joinPath(process.cwd(), ".opencode", "plugin");
 const CONFIG_PATH = joinPath(PLUGIN_DIR, "pmd-config.json");
@@ -90,6 +91,10 @@ let coordinatorOcSessionId = "";
 let activeOcSessionId = "";
 const workerSessions = new Map();
 let lastAgentRefresh = 0;
+let planModeDetected = false;
+let planModeLastCheck = 0;
+let serverUrl = "";
+let serverAuthHeader = "";
 
 function formatTok(n) {
   if (n < 1000) return n + " tok";
@@ -109,8 +114,23 @@ function storePayload(trigger, payload) {
   } catch (e) { logPluginError("storePayload", e); }
 }
 
+const CODE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue", ".svelte", ".astro"]);
+
 function extractFilePath(args) {
   return args.path || args.filePath || args.file_path || "";
+}
+
+const LAST_READ_TTL = 300_000;
+
+function recordLastRead(sessionId, filePath) {
+  try {
+    const dir = joinPath(".pipemd", "cache", "sources");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const safeKey = ("last-read:" + (sessionId || "") + ":" + filePath).replace(/[/\\]/g, "%2F") + ".json";
+    const hash = crypto.createHash("sha256").update(String(Date.now())).digest("hex").slice(0, 8);
+    const entry = JSON.stringify({ key: "last-read", data: "", hash, timestamp: Date.now(), ttl: LAST_READ_TTL });
+    writeFileSync(joinPath(dir, safeKey), entry, "utf-8");
+  } catch {}
 }
 
 function isEditTool(tool) {
@@ -218,6 +238,91 @@ function heartbeat() {
   refreshAgents();
 }
 
+const PLAN_CHECK_INTERVAL = 30_000;
+let lastTodosJson = "";
+
+async function detectPlanMode(ocSessionId) {
+  if (!serverUrl || !ocSessionId) return false;
+  const now = Date.now();
+  if (now - planModeLastCheck < PLAN_CHECK_INTERVAL) return planModeDetected;
+  planModeLastCheck = now;
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (serverAuthHeader) headers["Authorization"] = serverAuthHeader;
+    const resp = await fetch(serverUrl + "/session/" + ocSessionId, { headers, signal: AbortSignal.timeout(2000) });
+    if (!resp.ok) return planModeDetected;
+    const data = await resp.json();
+    const isPlan = data.agent === "plan";
+    if (isPlan !== planModeDetected) {
+      planModeDetected = isPlan;
+      const sid = getActiveCrewSession();
+      if (isPlan) {
+        const planPath = constructPlanPath(data);
+        const noteText = planPath ? `Planning: ${planPath}` : "In plan mode (read-only)";
+        if (sid) pmd(["crew", "note", noteText, "--session", sid]);
+        else pmd(["crew", "note", noteText]);
+      } else {
+        if (sid) pmd(["crew", "note", "", "--session", sid]);
+        else pmd(["crew", "note", ""]);
+      }
+    }
+    return isPlan;
+  } catch {
+    return planModeDetected;
+  }
+}
+
+function constructPlanPath(sessionData) {
+  try {
+    const slug = sessionData.slug || "";
+    const created = sessionData.time && sessionData.time.created;
+    if (!slug || !created) return "";
+    return joinPath(".opencode", "plans", [created, slug].join("-") + ".md");
+  } catch { return ""; }
+}
+
+function captureTodos(toolName, output) {
+  if (toolName !== "todowrite") return;
+  try {
+    const todos = output && output.metadata && output.metadata.todos;
+    if (!Array.isArray(todos)) return;
+    const active = todos.filter(t => t.status === "in_progress" || t.status === "pending");
+    if (active.length === 0) {
+      updateTodoCache([]);
+      updateCrewNoteForTodos([]);
+      return;
+    }
+    const summary = active.slice(0, 5).map(t => `[${t.status}] ${t.content} (${t.priority})`);
+    updateTodoCache(active);
+    updateCrewNoteForTodos(active);
+  } catch {}
+}
+
+function updateTodoCache(activeTodos) {
+  try {
+    const dir = joinPath(".pipemd", "cache", "sources");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const data = JSON.stringify(activeTodos);
+    const hash = crypto.createHash("sha256").update(data).digest("hex").slice(0, 8);
+    const entry = JSON.stringify({ key: "crew-todos", data, hash, timestamp: Date.now(), ttl: 120_000 });
+    writeFileSync(joinPath(dir, "crew-todos.json"), entry, "utf-8");
+    lastTodosJson = data;
+  } catch {}
+}
+
+function updateCrewNoteForTodos(activeTodos) {
+  const sid = getActiveCrewSession();
+  if (!sid) return;
+  if (planModeDetected) return;
+  if (activeTodos.length === 0) {
+    pmd(["crew", "note", "", "--session", sid]);
+    return;
+  }
+  const first = activeTodos[0];
+  const noteText = `Working: ${first.content}` + (activeTodos.length > 1 ? ` (+${activeTodos.length - 1} more)` : "");
+  pmd(["crew", "note", noteText, "--session", sid]);
+}
+
 function getActiveCrewSession() {
   if (activeOcSessionId && workerSessions.has(activeOcSessionId)) {
     return workerSessions.get(activeOcSessionId);
@@ -287,6 +392,10 @@ async function beforeHandler(input, output) {
     const filePath = extractFilePath(args);
     join(); heartbeat();
 
+    if (tool === "read" && filePath) {
+      recordLastRead(getActiveCrewSession(), filePath);
+    }
+
     if (WITH_INJECTION) {
       const sid = getActiveCrewSession();
       try {
@@ -310,6 +419,8 @@ async function beforeHandler(input, output) {
 
 async function buildEditFeedback(filePath) {
   if (!filePath) return null;
+  const ext = (filePath.lastIndexOf(".") >= 0 ? filePath.slice(filePath.lastIndexOf(".")) : "").toLowerCase();
+  if (!CODE_EXTENSIONS.has(ext)) return null;
   const parts = [];
 
   try {
@@ -340,6 +451,7 @@ async function afterHandler(input, output) {
   try {
     cleanupFifoTemp();
     const tool = (input && input.tool) || "";
+    captureTodos(tool, output);
     const isEdit = isEditTool(tool);
     if (isEdit) {
       const args = (output && output.args) || (input && input.args) || {};
@@ -374,6 +486,7 @@ async function systemTransform(input, output) {
   try {
     handleSessionSwitch(input && input.sessionID);
     const sid = getActiveCrewSession();
+    detectPlanMode(input && input.sessionID);
     if (!stableInjected) {
       try {
         const stable = execFileSync(getPmdBin(), ["inject", "--trigger", "on-start", "--session", sid], { encoding: "utf-8", timeout: 5000 });
@@ -426,10 +539,15 @@ setInterval(() => { try { heartbeat(); } catch {} }, 30_000);
 
 export default {
   id: "pmd-crew",
-  server: async () => ({
+  server: async (input) => {
+    if (input && input.serverUrl) {
+      serverUrl = input.serverUrl.origin || input.serverUrl.toString();
+    }
+    return {
     "tool.execute.before": beforeHandler,
     "tool.execute.after": afterHandler,
     "experimental.chat.system.transform": systemTransform,
     "event": eventHandler,
-  }),
+    };
+  },
 };

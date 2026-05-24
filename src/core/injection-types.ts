@@ -11,6 +11,7 @@ export type InjectionTrigger = "before-read" | "before-edit" | "after-edit" | "o
 export type ContextSource =
   | "crew-status"
   | "crew-locks"
+  | "crew-todos"
   | "file-errors"
   | "validate-file"
   | "git-context"
@@ -52,6 +53,7 @@ const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after
 const VALID_SOURCES: ContextSource[] = [
   "crew-status",
   "crew-locks",
+  "crew-todos",
   "file-errors",
   "validate-file",
   "git-context",
@@ -69,6 +71,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
   rules: {
     "before-read": [
       { source: "crew-status", scope: "global", "max-lines": 3 },
+      { source: "crew-todos", scope: "global", "max-lines": 10 },
     ],
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },
@@ -85,8 +88,6 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
       { source: "git-delta", scope: "global", "max-lines": 3 },
     ],
     "on-idle": [
-      { source: "crew-status", scope: "global", "max-lines": 5 },
-      { source: "git-delta", scope: "global", "max-lines": 3 },
       { source: "git-staged", scope: "global", "max-lines": 10 },
     ],
   },
