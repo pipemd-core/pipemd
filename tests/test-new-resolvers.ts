@@ -78,6 +78,7 @@ describe("resolveImportGraph", () => {
       config,
     });
     assert.ok(result.includes("Imports:"), `Expected "Imports:" in result, got: ${result}`);
+    assert.ok(result.includes("dep"), `Expected import specifier "dep" in result, got: ${result}`);
   });
 
   it("detects imported-by relationships", async () => {
@@ -92,6 +93,7 @@ describe("resolveImportGraph", () => {
       config,
     });
     assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+    assert.ok(result.includes("base"), `Expected imported symbol "base" in result, got: ${result}`);
   });
 
   it("does not false-match files with similar basename", async () => {
@@ -138,6 +140,113 @@ describe("resolveImportGraph", () => {
       config,
     });
     assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+  });
+
+  it("shows multiple import specifiers with arrow notation", async () => {
+    fs.writeFileSync(path.join(tmpDir, "src", "multi.ts"), "export const a = 1; export const b = 2;\n");
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "multi-consumer.ts"),
+      `import { a, b } from './multi.js';\n`,
+    );
+    const result = await RESOLVERS["import-graph"]({
+      trigger: "before-edit",
+      targetFile: "src/multi.ts",
+      config,
+    });
+    assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+    assert.ok(result.includes("a, b") || (result.includes("a") && result.includes("b")), `Expected both specifiers in result, got: ${result}`);
+  });
+
+  it("shows import specifiers in Imports section", async () => {
+    fs.writeFileSync(path.join(tmpDir, "src", "lib-a.ts"), "export const la = 1;\n");
+    fs.writeFileSync(path.join(tmpDir, "src", "lib-b.ts"), "export const lb = 2;\n");
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "multi-importer.ts"),
+      `import { la } from './lib-a.js';\nimport { lb } from './lib-b.js';\n`,
+    );
+    const result = await RESOLVERS["import-graph"]({
+      trigger: "before-edit",
+      targetFile: "src/multi-importer.ts",
+      config,
+    });
+    assert.ok(result.includes("Imports:"), `Expected "Imports:" in result, got: ${result}`);
+    assert.ok(result.includes("la"), `Expected specifier "la" in result, got: ${result}`);
+    assert.ok(result.includes("lb"), `Expected specifier "lb" in result, got: ${result}`);
+  });
+});
+
+describe("resolveExports", () => {
+  it("returns empty string when no targetFile", async () => {
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: undefined,
+      config,
+    });
+    assert.equal(result, "");
+  });
+
+  it("returns empty string for unsupported extension", async () => {
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "style.css",
+      config,
+    });
+    assert.equal(result, "");
+  });
+
+  it("returns empty string for file with no exports", async () => {
+    fs.writeFileSync(path.join(tmpDir, "src", "no-export.ts"), "const x = 1;\n");
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/no-export.ts",
+      config,
+    });
+    assert.equal(result, "");
+  });
+
+  it("detects exported functions and constants", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "has-exports.ts"),
+      `export function foo() {}\nexport const bar = 1;\nexport type Baz = string;\n`,
+    );
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/has-exports.ts",
+      config,
+    });
+    assert.ok(result.includes("Exports:"), `Expected "Exports:" in result, got: ${result}`);
+    assert.ok(result.includes("function foo"), `Expected "function foo" in result, got: ${result}`);
+    assert.ok(result.includes("const bar"), `Expected "const bar" in result, got: ${result}`);
+    assert.ok(result.includes("type Baz"), `Expected "type Baz" in result, got: ${result}`);
+  });
+
+  it("detects env var references", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "env-file.ts"),
+      `export const port = process.env.PORT || 3000;\nexport const debug = process.env.DEBUG;\n`,
+    );
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/env-file.ts",
+      config,
+    });
+    assert.ok(result.includes("env refs:"), `Expected "env refs:" in result, got: ${result}`);
+    assert.ok(result.includes("PORT"), `Expected "PORT" in result, got: ${result}`);
+    assert.ok(result.includes("DEBUG"), `Expected "DEBUG" in result, got: ${result}`);
+  });
+
+  it("deduplicates env vars", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "dup-env.ts"),
+      `const a = process.env.API_KEY;\nconst b = process.env.API_KEY;\nexport const c = a + b;\n`,
+    );
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/dup-env.ts",
+      config,
+    });
+    const matches = result.match(/API_KEY/g);
+    assert.ok(matches && matches.length === 1, `Expected exactly 1 occurrence of API_KEY, got ${matches?.length}: ${result}`);
   });
 });
 

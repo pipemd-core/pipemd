@@ -37,6 +37,7 @@ Before writing a single line of code, gather your bearings from the blocks below
 | Architecture / module graph | `arch` | manual file inspection |
 | Dependencies and versions | `deps` | `cat package.json` |
 | Known TODOs, FIXMEs, HACKs | `todos` | `grep -r TODO` |
+| Exported symbols, env vars | `exports` | manual source scan |
 | Recent commits (what changed) | `git-log` | `git log` |
 | Current branch, tracking status | `git-branch` | `git status -b` |
 | Changed / staged / untracked files | `git-status` | `git status` |
@@ -166,6 +167,14 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ### TODOs / FIXMEs
 
 <!-- pmd: todos -->
+```
+
+```
+<!-- /pmd -->
+
+### Exports & Env
+
+<!-- pmd: exports -->
 ```
 
 ```

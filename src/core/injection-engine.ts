@@ -476,6 +476,31 @@ function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
+function extractImportSpecifiers(line: string): string | null {
+  const patterns = [
+    /import\s+\{([^}]+)\}\s+from/,
+    /import\s+type\s+\{([^}]+)\}\s+from/,
+    /import\s+(\w+)\s*,\s*\{([^}]+)\}\s+from/,
+    /import\s+(\w+)\s+from/,
+    /import\s+type\s+(\w+)\s+from/,
+  ];
+  for (const pat of patterns) {
+    const m = line.match(pat);
+    if (!m) continue;
+    const names: string[] = [];
+    if (m[1] && m[1].includes(",")) {
+      names.push(...m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()!.trim()).filter(Boolean));
+    } else if (m[1]) {
+      names.push(m[1].split(/\s+as\s+/).pop()!.trim());
+    }
+    if (m[2]) {
+      names.push(...m[2].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()!.trim()).filter(Boolean));
+    }
+    if (names.length > 0) return names.join(", ");
+  }
+  return null;
+}
+
 async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
@@ -540,7 +565,13 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
     if (confirmed.length > 0) {
       lines.push("Imported by:");
       for (const line of confirmed.slice(0, 15)) {
-        lines.push(`  ${line}`);
+        const specifiers = extractImportSpecifiers(line);
+        const consumerFile = line.split(":")[0];
+        if (specifiers) {
+          lines.push(`  ${consumerFile} → ${specifiers}`);
+        } else {
+          lines.push(`  ${consumerFile}`);
+        }
       }
       if (confirmed.length > 15) lines.push(`  ... +${confirmed.length - 15} more`);
     }
@@ -555,14 +586,88 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
     const imports = stdout.trim().split("\n").filter(Boolean);
     if (imports.length > 0) {
       lines.push("Imports:");
-      const importPaths = new Set<string>();
+      const seen = new Map<string, string[]>();
       for (const line of imports) {
         const m = line.match(/from\s+['"]([^'"]+)['"]/);
-        if (m) importPaths.add(m[1]);
+        if (!m) continue;
+        const importPath = m[1];
+        const specifiers = extractImportSpecifiers(line);
+        const existing = seen.get(importPath);
+        if (existing && specifiers) {
+          for (const s of specifiers.split(", ")) {
+            if (!existing.includes(s)) existing.push(s);
+          }
+        } else if (specifiers) {
+          seen.set(importPath, [specifiers]);
+        } else {
+          if (!seen.has(importPath)) seen.set(importPath, []);
+        }
       }
-      for (const name of [...importPaths].slice(0, 15)) {
-        lines.push(`  ${name}`);
+      let count = 0;
+      for (const [importPath, syms] of seen) {
+        if (count >= 15) break;
+        if (syms.length > 0) {
+          lines.push(`  ${importPath} → ${syms.join(", ")}`);
+        } else {
+          lines.push(`  ${importPath}`);
+        }
+        count++;
       }
+    }
+  } catch { /* no matches */ }
+
+  if (lines.length === 0) return "";
+  const result = lines.join("\n");
+  writeCache(cacheKey, result, DEFAULT_TTLS["git-delta"] ?? 10000);
+  return result;
+}
+
+async function resolveExports(ctx: ResolverContext): Promise<string> {
+  const file = ctx.targetFile;
+  if (!file) return "";
+
+  const cacheKey = `exports:${file}`;
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
+
+  const ext = path.extname(file);
+  const isTS = ext === ".ts" || ext === ".tsx";
+  const isJS = ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs";
+  if (!isTS && !isJS) return "";
+
+  const includeFlags = isTS
+    ? ["--include=*.ts", "--include=*.tsx"]
+    : ["--include=*.js", "--include=*.jsx", "--include=*.mjs"];
+
+  const lines: string[] = [];
+
+  try {
+    const { stdout } = await execFileAsync(
+      "grep",
+      ["-nE", "^export (default |)(function |const |class |type |interface |enum |async function )[A-Za-z_]", ...includeFlags, file],
+      { encoding: "utf-8", timeout: 5000 },
+    );
+    const exports = stdout.trim().split("\n").filter(Boolean);
+    if (exports.length > 0) {
+      lines.push("Exports:");
+      for (const line of exports.slice(0, 20)) {
+        const cleaned = line.replace(/^\d+:/, "").replace(/^export (default )?/, "");
+        lines.push(`  ${cleaned.endsWith(";") ? cleaned.slice(0, -1).trim() : cleaned.trim()}`);
+      }
+      if (exports.length > 20) lines.push(`  ... +${exports.length - 20} more`);
+    }
+  } catch { /* no matches */ }
+
+  try {
+    const { stdout } = await execFileAsync(
+      "grep",
+      ["-noE", "process\\.env\\.[A-Za-z_][A-Za-z0-9_]*", ...includeFlags, file],
+      { encoding: "utf-8", timeout: 5000 },
+    );
+    const envRefs = stdout.trim().split("\n").filter(Boolean);
+    if (envRefs.length > 0) {
+      const unique = [...new Set(envRefs.map((s) => s.replace(/.*process\.env\./, "")))];
+      lines.push(`env refs: ${unique.join(", ")}`);
     }
   } catch { /* no matches */ }
 
@@ -610,6 +715,7 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   handoff: resolveHandoff,
   "import-graph": resolveImportGraph,
   "session-diff": resolveSessionDiff,
+  "exports": resolveExports,
 };
 
 const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);

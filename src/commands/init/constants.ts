@@ -64,7 +64,7 @@ export const TOKEN_PROFILES: Record<TokenProfile, { num: number; den: number; la
 };
 
 export const SCRIPT_MAX_LINES: Record<string, number> = {
-  arch: 100, compose: 150, tree: 50, deps: 40, todos: 20, "git-log": 20, "git-branch": 20,
+  arch: 100, compose: 150, tree: 50, deps: 40, todos: 20, exports: 30, "git-log": 20, "git-branch": 20,
   "git-status": 30, "diff-stat": 30, "type-check": 30, lint: 20,
   "test-summary": 10, prisma: 40, "express-routes": 30, "fastapi-routes": 30,
   "django-models": 40, sqlalchemy: 40, "nest-controllers": 30,
@@ -84,6 +84,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "tree", label: "Project Tree", description: "Directory structure (compact, depth-limited)", command: "bash .pipemd/scripts/project/tree.sh", category: "project", volatile: 1, file: "project/tree.sh" },
     { id: "deps", label: "Dependencies", description: "Direct production dependencies and versions", command: "bash .pipemd/scripts/project/deps.sh", category: "project", volatile: 1, file: "project/deps.sh" },
     { id: "todos", label: "TODOs / FIXMEs", description: "TODO, FIXME, HACK comments in source", command: "bash .pipemd/scripts/project/find-todos.sh", category: "project", volatile: 2, file: "project/find-todos.sh" },
+    { id: "exports", label: "Exports & Env", description: "Exported symbols per module + env var references", command: "bash .pipemd/scripts/project/exports.sh", category: "project", volatile: 1, file: "project/exports.sh" },
   ],
   git: [
     { id: "git-log", label: "Recent Commits", description: "Last 10 commits (hash, date, message)", command: "bash .pipemd/scripts/git/git-log.sh", category: "git", volatile: 2, file: "git/git-log.sh" },

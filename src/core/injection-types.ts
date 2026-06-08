@@ -24,7 +24,8 @@ export type ContextSource =
   | "context-rules"
   | "handoff"
   | "import-graph"
-  | "session-diff";
+  | "session-diff"
+  | "exports";
 
 export type InjectionScope = "target-file" | "global";
 
@@ -78,6 +79,7 @@ const VALID_SOURCES: ContextSource[] = [
   "handoff",
   "import-graph",
   "session-diff",
+  "exports",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
 
@@ -91,6 +93,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },
       { source: "import-graph", scope: "target-file", "max-lines": 25 },
+      { source: "exports", scope: "target-file", "max-lines": 15 },
       { source: "syntax-check", scope: "target-file", "max-lines": 5 },
       { source: "file-errors", scope: "target-file", "max-lines": 15 },
       { source: "git-context", scope: "target-file", "max-lines": 2 },
@@ -288,7 +291,7 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "# sources:  crew-status | crew-locks | file-errors",
     "#           git-context | git-delta | git-staged | git-diff-stat",
     "#           edit-diff | syntax-check | test-failures | custom | context-rules",
-    "#           import-graph | handoff | session-diff",
+    "#           import-graph | handoff | session-diff | exports",
     "# scope:    target-file | global",
     "",
   ].join("\n");

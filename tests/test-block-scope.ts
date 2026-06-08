@@ -22,6 +22,7 @@ describe("getBlockScope", () => {
     assert.equal(getBlockScope("custom"), "local");
     assert.equal(getBlockScope("import-graph"), "local");
     assert.equal(getBlockScope("session-diff"), "local");
+    assert.equal(getBlockScope("exports"), "local");
   });
 
   it("returns 'local' for unknown sources", () => {
@@ -51,7 +52,7 @@ describe("isSharedBlock", () => {
 describe("getAllBlockScopes", () => {
   it("returns a complete scope map", () => {
     const scopes = getAllBlockScopes();
-    assert.equal(Object.keys(scopes).length, 16);
+    assert.equal(Object.keys(scopes).length, 17);
     let shared = 0;
     let local = 0;
     for (const v of Object.values(scopes)) {
@@ -59,7 +60,7 @@ describe("getAllBlockScopes", () => {
       else local++;
     }
     assert.equal(shared, 6);
-    assert.equal(local, 10);
+    assert.equal(local, 11);
   });
 
   it("returns a copy (mutations do not affect source)", () => {

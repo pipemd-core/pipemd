@@ -9,6 +9,8 @@ commands:
     .pipemd/scripts/project/deps.sh
   todos: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/project/find-todos.sh
+  exports: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/project/exports.sh
   git-log: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/git/git-log.sh
   git-branch: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
@@ -43,6 +45,8 @@ pipes:
     command: deps
   - file: todos.md
     command: todos
+  - file: exports.md
+    command: exports
   - file: git-log.md
     command: git-log
   - file: git-branch.md

@@ -17,6 +17,7 @@ export const BLOCK_SOURCES: readonly string[] = [
   "handoff",
   "import-graph",
   "session-diff",
+  "exports",
 ] as const;
 
 const BLOCK_SCOPES: Record<string, BlockScope> = {
@@ -36,6 +37,7 @@ const BLOCK_SCOPES: Record<string, BlockScope> = {
   "custom": "local",
   "import-graph": "local",
   "session-diff": "local",
+  "exports": "local",
 };
 
 export function getBlockScope(source: string): BlockScope {

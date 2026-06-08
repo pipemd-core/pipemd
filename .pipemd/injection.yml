@@ -8,6 +8,7 @@
 # triggers: before-read | before-edit | after-edit | on-idle | on-start
 # sources:  crew-status | crew-locks | file-errors | validate-file
 #           git-context | git-delta | git-staged | git-diff-stat | test-failures | custom | context-rules
+#           import-graph | handoff | session-diff | exports
 # scope:    target-file | global
 delivery: active
 rules:
