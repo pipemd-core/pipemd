@@ -32,10 +32,11 @@ import os, re, ast, sys
 from collections import defaultdict
 
 SRC_DIR = os.environ.get('SRC_DIR_ABS', 'src')
-MAX_MODULES = 40
+MAX_MODULES = 80
 
 SKIP_DIRS = {'__pycache__', 'venv', '.venv', '.mypy_cache', '.tox', 'dist', 'build',
-             '.eggs', '.pytest_cache', 'node_modules', '.git', '.pipemd', 'migrations'}
+             '.eggs', '.pytest_cache', 'node_modules', '.git', '.pipemd', 'migrations',
+             '.cache', '.tox', 'site-packages'}
 
 def module_name(rel_path):
     rel_path = rel_path.replace(os.sep, '/')
@@ -115,8 +116,8 @@ for root, dirs, fnames in os.walk(SRC_DIR):
     for fn in sorted(fnames):
         if fn.endswith('.py') and not fn.startswith('.'):
             files.append(os.path.join(root, fn))
-    if len(files) >= 300:
-        files = files[:300]
+    if len(files) >= 500:
+        files = files[:500]
         break
 
 if not files:

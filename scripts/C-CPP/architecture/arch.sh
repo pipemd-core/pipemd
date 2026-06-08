@@ -18,9 +18,9 @@ python3 -c "
 import os, re, sys
 from collections import defaultdict
 
-MAX_MODULES = 40
+MAX_MODULES = 80
 SKIP_DIRS = {'build', 'cmake-build-debug', 'cmake-build-release', '_deps',
-             'third_party', 'external', '.git', '.pipemd', 'CMakeFiles'}
+             'third_party', 'external', '.git', '.pipemd', 'CMakeFiles', '.cache'}
 
 def module_name(rel_path):
     rel_path = rel_path.replace(os.sep, '/')
@@ -119,8 +119,8 @@ for root, dirs, fnames in os.walk('.'):
         if fn.endswith(('.cpp', '.cc', '.cxx', '.c', '.h', '.hpp', '.hxx', '.hh')):
             if '.test.' not in fn and '.spec.' not in fn:
                 files.append(os.path.join(root, fn))
-    if len(files) >= 300:
-        files = files[:300]
+    if len(files) >= 500:
+        files = files[:500]
         break
 
 if not files:

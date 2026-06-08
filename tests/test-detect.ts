@@ -165,6 +165,13 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.signals.some((s) => s.includes("Angular routing")))
   })
 
+  it("detects Angular standalone routes from angular-standalone-project fixture", () => {
+    const dir = copyFixture("angular-standalone-project")
+    const result = detectProject(dir)
+    assert.ok(result.signals.some((s) => s.includes("Angular routing")))
+    assert.ok(result.recommendedScripts.includes("angular-routes"))
+  })
+
   it("detects React components from react-project fixture", () => {
     const dir = copyFixture("react-project")
     const result = detectProject(dir)

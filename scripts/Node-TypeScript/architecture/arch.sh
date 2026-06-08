@@ -25,10 +25,10 @@ import os, re, json, sys
 from collections import defaultdict
 
 SRC_DIR = os.environ.get('SRC_DIR', 'src')
-MAX_FILES = 300
-MAX_MODULES = 40
+MAX_FILES = 500
+MAX_MODULES = 80
 
-SKIP_DIRS = {'node_modules', 'dist', '.next', 'coverage', 'build', 'out', '.pipemd', '.git', '__tests__', '__test__', '__mocks__', 'test', 'tests', 'spec', 'specs', 'scripts', 'migrations', 'seed', 'public', 'static', 'assets', 'styles', 'views', 'templates'}
+SKIP_DIRS = {'node_modules', 'dist', '.next', 'coverage', 'build', 'out', '.pipemd', '.git', '__tests__', '__test__', '__mocks__', 'test', 'tests', 'spec', 'specs', 'scripts', 'migrations', 'seed', 'public', 'static', 'assets', 'styles', 'views', 'templates', '.angular', '.cache', '.storybook'}
 
 ENTRY_FILES = {'index', 'main', 'app', 'server', 'mod'}
 

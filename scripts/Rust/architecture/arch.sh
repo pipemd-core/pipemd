@@ -32,7 +32,7 @@ import os, re, sys
 from collections import defaultdict
 
 SRC_DIR = os.environ.get('SRC_DIR', 'src')
-MAX_MODULES = 40
+MAX_MODULES = 80
 
 def module_name(rel_path):
     rel_path = rel_path.replace(os.sep, '/')
@@ -85,8 +85,8 @@ for root, dirs, fnames in os.walk(SRC_DIR):
     for fn in fnames:
         if fn.endswith('.rs'):
             files.append(os.path.join(root, fn))
-    if len(files) >= 200:
-        files = files[:200]
+    if len(files) >= 500:
+        files = files[:500]
         break
 
 if not files:

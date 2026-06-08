@@ -63,6 +63,24 @@ function detectProfileFromConfig(config: PipeConfig): TokenProfile {
   return config.settings.tokenProfile || "medium";
 }
 
+function updateHelpers(ecosystem: Ecosystem): number {
+  let updated = 0;
+  for (const helper of ["lib/limit.sh", "lib/limit-core.sh", "architecture/normalize.sh"]) {
+    const bundled = loadScriptContent(ecosystem, helper);
+    if (!bundled) continue;
+    const localPath = path.join(SCRIPTS_DIR, helper);
+    let local: string | null = null;
+    try {
+      local = fs.readFileSync(localPath, "utf-8");
+    } catch (err: unknown) { log.debug(`read helper script: ${errMsg(err)}`); }
+    if (!local || local.trim() !== bundled.trim()) {
+      copyScript(localPath, bundled);
+      updated++;
+    }
+  }
+  return updated;
+}
+
 function analyzeScripts(config: PipeConfig, ecosystem: Ecosystem): ScriptChange[] {
   const allScripts = getAllScripts();
   const scriptMap = new Map(allScripts.map((s) => [s.id, s]));
@@ -195,6 +213,12 @@ export const refreshCommand = new Command("refresh")
     const custom = changes.filter((c): c is ScriptChange & { kind: "custom" } => c.kind === "custom");
 
     if (changed.length === 0 && missing.length === 0 && newAvailable.length === 0) {
+      let anyUpdates = false;
+      const helperUpdates = updateHelpers(ecosystem);
+      if (helperUpdates > 0) {
+        console.log(chalk.dim(`  → Updated ${helperUpdates} helper script(s)`));
+        anyUpdates = true;
+      }
       const addedInjectionSources = mergeInjectionConfig();
       if (addedInjectionSources.length > 0) {
         console.log(chalk.bold("  Injection Rules:"));
@@ -203,15 +227,17 @@ export const refreshCommand = new Command("refresh")
           console.log(chalk.cyan(`  + ${src}`));
         }
         console.log(chalk.green("  → Updated injection.yml"));
+        anyUpdates = true;
+      }
+      if (anyUpdates) {
         console.log();
-        console.log(chalk.green("✔ Refresh complete: injection rules updated."));
+        console.log(chalk.green("✔ Refresh complete: helpers and injection rules updated."));
         console.log();
         console.log(chalk.dim("  Run `pmd restart` to apply changes to a running daemon."));
-        console.log();
       } else {
         console.log(chalk.green("✔ All scripts are up to date."));
-        console.log();
       }
+      console.log();
       return;
     }
 
@@ -317,17 +343,9 @@ export const refreshCommand = new Command("refresh")
       console.log(chalk.cyan(`  + Added: ${s.label}`));
     }
 
-    for (const helper of ["lib/limit.sh", "lib/limit-core.sh", "architecture/normalize.sh"]) {
-      const bundled = loadScriptContent(ecosystem, helper);
-      if (!bundled) continue;
-      const localPath = path.join(SCRIPTS_DIR, helper);
-      let local: string | null = null;
-      try {
-        local = fs.readFileSync(localPath, "utf-8");
-      } catch (err: unknown) { log.debug(`read helper script: ${errMsg(err)}`); }
-      if (!local || local.trim() !== bundled.trim()) {
-        copyScript(localPath, bundled);
-      }
+    const helperUpdates = updateHelpers(ecosystem);
+    if (helperUpdates > 0) {
+      console.log(chalk.dim(`  → Updated ${helperUpdates} helper script(s)`));
     }
 
     const aiSetupSrc = path.join(__dirname, "..", "AI_SETUP_PIPEMD.md");

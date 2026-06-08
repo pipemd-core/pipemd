@@ -274,7 +274,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
       signals.push("React components detected → react-components");
       recommended.push("react-components");
     }
-    if (hasIn("src", /-routing\.module\.ts$/) || hasIn("src", /app-routing/)) {
+    if (hasIn("src", /-routing\.module\.ts$/) || hasIn("src", /app-routing/) || hasIn("src", /\.routes\.ts$/)) {
       signals.push("Angular routing detected → angular-routes");
       recommended.push("angular-routes");
     }

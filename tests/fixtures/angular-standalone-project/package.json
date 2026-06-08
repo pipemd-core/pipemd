@@ -1,0 +1,8 @@
+{
+  "name": "angular-standalone-fixture",
+  "version": "1.0.0",
+  "dependencies": {
+    "@angular/core": "^17.0.0",
+    "@angular/router": "^17.0.0"
+  }
+}

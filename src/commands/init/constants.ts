@@ -110,7 +110,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
   frontend: [
     { id: "nextjs-app-router", label: "Next.js Routes", description: "App Router route tree from page.tsx files", command: "bash .pipemd/scripts/frontend/nextjs-app-router.sh", category: "frontend", volatile: 1, file: "frontend/nextjs-app-router.sh" },
     { id: "react-components", label: "React Components", description: "Exported function components and Props types", command: "bash .pipemd/scripts/frontend/react-components.sh", category: "frontend", volatile: 1, file: "frontend/react-components.sh" },
-    { id: "angular-routes", label: "Angular Routes", description: "Angular route definitions from routing modules", command: "bash .pipemd/scripts/frontend/angular-routes.sh", category: "frontend", volatile: 1, file: "frontend/angular-routes.sh" },
+    { id: "angular-routes", label: "Angular Routes", description: "Angular route definitions (routing modules + standalone routes)", command: "bash .pipemd/scripts/frontend/angular-routes.sh", category: "frontend", volatile: 1, file: "frontend/angular-routes.sh" },
   ],
   cpp: [
     { id: "cmake-targets", label: "CMake Targets", description: "CMake executables, libraries, and link dependencies", command: "bash .pipemd/scripts/project/cmake-targets.sh", category: "cpp", volatile: 1, file: "project/cmake-targets.sh" },
