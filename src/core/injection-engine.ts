@@ -16,10 +16,11 @@ import type {
   ContextFileRule,
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
-import { listSessions, findConflicts, resolveAgentIdentity } from "./crew.js";
+import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
 import { invalidateCachePattern } from "./cache.js";
+import { getTasksForSession, formatTaskBlock } from "./tasks.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -159,11 +160,6 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
 }
 
 async function resolveFileErrors(ctx: ResolverContext): Promise<string> {
-  const result = await resolveValidation(ctx);
-  return result || "";
-}
-
-async function resolveValidateFile(ctx: ResolverContext): Promise<string> {
   return resolveValidation(ctx);
 }
 
@@ -471,12 +467,93 @@ async function resolveContextRules(ctx: ResolverContext): Promise<string> {
   return parts.length > 0 ? parts.join("\n\n") : "";
 }
 
-const RESOLVERS: Record<ContextSource, SourceResolver> = {
+async function resolveHandoff(_ctx: ResolverContext): Promise<string> {
+  const tasks = getTasksForSession();
+  return formatTaskBlock(tasks);
+}
+
+async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
+  const file = ctx.targetFile;
+  if (!file) return "";
+
+  const cacheKey = `import-graph:${file}`;
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
+
+  const ext = path.extname(file);
+  const importPatterns: Record<string, (f: string) => string[][]> = {
+    ".ts": (f) => [["grep", "-rn", `from.*['"].*${path.basename(f, ext)}`, "--include=*.ts", "--include=*.tsx", "src/"], ["grep", "-rn", `from.*['"]`, "--include=*.ts", "--include=*.tsx", f]],
+    ".js": (f) => [["grep", "-rn", `from.*['"].*${path.basename(f, ext)}`, "--include=*.js", "--include=*.jsx", "src/"], ["grep", "-rn", `from.*['"]`, "--include=*.js", "--include=*.jsx", f]],
+    ".py": (f) => [["grep", "-rn", `import.*${path.basename(f, ext)}`, "--include=*.py", "."], ["grep", "-rn", `from.*${path.basename(f, ext)}`, "--include=*.py", "."]],
+  };
+
+  const generator = importPatterns[ext];
+  if (!generator) return "";
+
+  const lines: string[] = [];
+
+  const [importedByArgs, importsArgs] = generator(file);
+
+  try {
+    const { stdout: importedBy } = await execFileAsync(importedByArgs[0], importedByArgs.slice(1), { encoding: "utf-8", timeout: 5000 });
+    const whoImports = importedBy.trim().split("\n").filter(Boolean);
+    if (whoImports.length > 0) {
+      lines.push("Imported by:");
+      for (const line of whoImports.slice(0, 15)) {
+        lines.push(`  ${line}`);
+      }
+      if (whoImports.length > 15) lines.push(`  ... +${whoImports.length - 15} more`);
+    }
+  } catch { /* no matches */ }
+
+  try {
+    const { stdout: imports } = await execFileAsync(importsArgs[0], importsArgs.slice(1), { encoding: "utf-8", timeout: 5000 });
+    const whatImports = imports.trim().split("\n").filter(Boolean);
+    if (whatImports.length > 0) {
+      lines.push("Imports:");
+      const importNames = new Set<string>();
+      for (const line of whatImports) {
+        const m = line.match(/from\s+['"]([^'"]+)['"]/);
+        if (m) importNames.add(m[1]);
+      }
+      for (const name of [...importNames].slice(0, 15)) {
+        lines.push(`  ${name}`);
+      }
+    }
+  } catch { /* no matches */ }
+
+  if (lines.length === 0) return "";
+  const result = lines.join("\n");
+  writeCache(cacheKey, result, DEFAULT_TTLS["git-delta"] ?? 10000);
+  return result;
+}
+
+async function resolveSessionDiff(_ctx: ResolverContext): Promise<string> {
+  const session = resolveActiveSession();
+  if (!session || session.claimedFiles.length === 0) return "";
+
+  const files = session.claimedFiles.map((c) => c.path);
+  try {
+    const { stdout } = await execFileAsync("git", ["diff", "--stat", "--", ...files], {
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    if (!stdout.trim()) return "";
+    const lines = stdout.trim().split("\n");
+    return lines.length > 20
+      ? lines.slice(0, 20).join("\n") + `\n... (+${lines.length - 20} more)`
+      : lines.join("\n");
+  } catch (err: unknown) {
+    log.debug(`resolveSessionDiff failed: ${errMsg(err)}`);
+    return "";
+  }
+}
+
+export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
   "crew-todos": resolveCrewTodos,
   "file-errors": resolveFileErrors,
-  "validate-file": resolveValidateFile,
   "git-context": resolveGitContext,
   "git-delta": resolveGitDelta,
   "git-staged": resolveGitStaged,
@@ -486,6 +563,9 @@ const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "test-failures": resolveTestFailures,
   custom: resolveCustom,
   "context-rules": resolveContextRules,
+  handoff: resolveHandoff,
+  "import-graph": resolveImportGraph,
+  "session-diff": resolveSessionDiff,
 };
 
 const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
@@ -545,6 +625,12 @@ export async function resolveInjections(
     return []
   }
 
+  const activeSession = resolveActiveSession();
+  const sessionSources = activeSession?.sources;
+  const sourceFilter = sessionSources?.length
+    ? new Set(sessionSources)
+    : null;
+
   const payloads: InjectionPayload[] = []
   const resolverStart = Date.now()
 
@@ -563,6 +649,8 @@ export async function resolveInjections(
 
     const resolver = RESOLVERS[rule.source];
     if (!resolver) continue;
+
+    if (sourceFilter && !sourceFilter.has(rule.source)) continue;
 
     const content = await resolver(ctx);
 
@@ -665,5 +753,4 @@ export {
   RATE_LIMIT_WINDOW_MS,
   MAX_INJECTIONS_PER_WINDOW,
   RESOLVER_TOTAL_BUDGET_MS,
-  RESOLVERS,
 }

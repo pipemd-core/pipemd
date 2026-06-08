@@ -20,7 +20,7 @@
     "test:compose": "bash tests/e2e-compose.sh",
     "test:crew": "bash tests/e2e-crew.sh",
     "test:inject": "bash tests/e2e-inject.sh",
-    "test:unit": "npx tsx tests/test-ttl-cache.ts && npx tsx tests/test-detect.ts && npx tsx tests/test-crew-render.ts && npx tsx tests/test-daemon-core.ts && npx tsx tests/test-reverse-inject.ts && node tests/test-link.mjs && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts && npx tsx tests/test-resolvers.ts",
+    "test:unit": "npx tsx tests/test-ttl-cache.ts && npx tsx tests/test-detect.ts && npx tsx tests/test-crew-render.ts && npx tsx tests/test-daemon-core.ts && npx tsx tests/test-reverse-inject.ts && npx tsx tests/test-link.ts && npx tsx tests/test-crew.ts && npx tsx tests/test-injection-types.ts && npx tsx tests/test-injection-engine.ts && npx tsx tests/test-resolvers.ts && npx tsx tests/test-json-utils.ts && npx tsx tests/test-statusline-data.ts && npx tsx tests/test-daemon-write-back.ts && npx tsx tests/test-injector.ts && npx tsx tests/test-daemon-config.ts && npx tsx tests/test-dedup.ts && npx tsx tests/test-cache.ts && npx tsx tests/test-relay.ts && npx tsx tests/test-daemon-client.ts && npx tsx tests/test-block-scope.ts && npx tsx tests/test-source-filter.ts && npx tsx tests/test-tasks.ts && npx tsx tests/test-p5-gaps.ts && npx tsx tests/test-new-resolvers.ts",
     "test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage pnpm test:unit",
     "test:link": "bash tests/e2e-link.sh",
     "test": "pnpm test:unit && pnpm test:e2e && pnpm test:bidir && pnpm test:scripts && pnpm test:arch && pnpm test:compose && pnpm test:crew && pnpm test:inject && pnpm test:link"
@@ -64,15 +64,16 @@
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "prompts": "^2.4.2",
-    "yaml": "^2.8.4"
+    "yaml": "^2.8.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.6.0",
     "@types/prompts": "^2.4.9",
+    "c8": "^10.1.3",
     "eslint": "^10.4.0",
     "tsup": "^8.5.1",
-    "c8": "^10.1.3",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4"

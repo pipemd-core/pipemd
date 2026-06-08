@@ -13,7 +13,6 @@ export type ContextSource =
   | "crew-locks"
   | "crew-todos"
   | "file-errors"
-  | "validate-file"
   | "git-context"
   | "git-delta"
   | "git-staged"
@@ -22,7 +21,10 @@ export type ContextSource =
   | "syntax-check"
   | "test-failures"
   | "custom"
-  | "context-rules";
+  | "context-rules"
+  | "handoff"
+  | "import-graph"
+  | "session-diff";
 
 export type InjectionScope = "target-file" | "global";
 
@@ -64,7 +66,6 @@ const VALID_SOURCES: ContextSource[] = [
   "crew-locks",
   "crew-todos",
   "file-errors",
-  "validate-file",
   "git-context",
   "git-delta",
   "git-staged",
@@ -74,6 +75,9 @@ const VALID_SOURCES: ContextSource[] = [
   "test-failures",
   "custom",
   "context-rules",
+  "handoff",
+  "import-graph",
+  "session-diff",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
 
@@ -86,6 +90,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     ],
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },
+      { source: "import-graph", scope: "target-file", "max-lines": 20 },
       { source: "syntax-check", scope: "target-file", "max-lines": 5 },
       { source: "file-errors", scope: "target-file", "max-lines": 15 },
       { source: "git-context", scope: "target-file", "max-lines": 2 },
@@ -93,13 +98,16 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     "after-edit": [
       { source: "edit-diff", scope: "target-file", async: true, "max-lines": 20 },
       { source: "syntax-check", scope: "target-file", async: true, "max-lines": 5 },
-      { source: "validate-file", scope: "target-file", async: true, "max-lines": 15 },
+      { source: "file-errors", scope: "target-file", async: true, "max-lines": 15 },
     ],
     "on-start": [
       { source: "git-delta", scope: "global", "max-lines": 3 },
+      { source: "handoff", scope: "global", "max-lines": 30 },
     ],
     "on-idle": [
       { source: "git-staged", scope: "global", "max-lines": 10 },
+      { source: "session-diff", scope: "global", "max-lines": 15 },
+      { source: "handoff", scope: "global", "max-lines": 30 },
     ],
   },
 };
@@ -277,7 +285,7 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "#   expert  = full customization of injection rules",
     "#",
     "# triggers: before-read | before-edit | after-edit | on-idle | on-start",
-    "# sources:  crew-status | crew-locks | file-errors | validate-file",
+    "# sources:  crew-status | crew-locks | file-errors",
     "#           git-context | git-delta | git-staged | git-diff-stat",
     "#           edit-diff | syntax-check | test-failures | custom | context-rules",
     "# scope:    target-file | global",

@@ -10,6 +10,9 @@ import {
   type SyncMessage,
   type PeerConfig,
   type RelayStatus,
+  type BlockPushMessage,
+  type BlockEntry,
+  type BlockFetchRequest,
   DEFAULT_PORT,
   POLL_INTERVAL_MS,
   SESSION_EXPIRY_MS,
@@ -21,6 +24,11 @@ const peerLastSync = new Map<string, number>();
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let server: http.Server | null = null;
+
+type BlockKey = `${string}:${string}:${string}`;
+const blockStore = new Map<BlockKey, BlockEntry>();
+const BLOCK_STORE_TTL_MS = 30 * 60 * 1000;
+const BLOCK_STORE_MAX = 1000;
 
 function hostname(): string {
   return os.hostname();
@@ -95,6 +103,22 @@ function expireStaleGroups() {
     }
     if (origins.size === 0) {
       store.delete(group);
+    }
+  }
+}
+
+function expireBlockStore() {
+  const now = Date.now();
+  for (const [key, entry] of blockStore) {
+    if (now - entry.timestamp > BLOCK_STORE_TTL_MS) {
+      blockStore.delete(key);
+    }
+  }
+  if (blockStore.size > BLOCK_STORE_MAX) {
+    const entries = [...blockStore.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const excess = blockStore.size - BLOCK_STORE_MAX;
+    for (let i = 0; i < excess; i++) {
+      blockStore.delete(entries[i][0]);
     }
   }
 }
@@ -284,11 +308,67 @@ function handleStatus(_req: http.IncomingMessage, res: http.ServerResponse) {
   jsonResponse(res, 200, { ok: true, hostname: myHost, groups, peers });
 }
 
+function handleBlocksPush(req: http.IncomingMessage, res: http.ServerResponse) {
+  if (!isLocalhost(req)) {
+    jsonResponse(res, 403, { error: "forbidden: /blocks is localhost-only" });
+    return;
+  }
+
+  readBody(req)
+    .then((raw) => {
+      const msg = JSON.parse(raw) as BlockPushMessage;
+      if (!msg.group || !msg.hostname || !msg.commitSha || !Array.isArray(msg.blocks)) {
+        jsonResponse(res, 400, { error: "missing fields: group, hostname, commitSha, blocks" });
+        return;
+      }
+
+      let stored = 0;
+      for (const block of msg.blocks) {
+        const key: BlockKey = `${msg.group}:${msg.commitSha}:${block.source}`;
+        blockStore.set(key, { source: block.source, data: block.data, timestamp: block.timestamp, hash: block.hash });
+        stored++;
+      }
+      log.info(`Relay: stored ${stored} block(s) for ${msg.group}@${msg.commitSha.substring(0, 8)} from ${msg.hostname}`);
+      jsonResponse(res, 200, { ok: true, stored });
+    })
+    .catch(() => jsonResponse(res, 400, { error: "invalid body" }));
+}
+
+function handleBlocksFetch(req: http.IncomingMessage, res: http.ServerResponse) {
+  if (!isLocalhost(req)) {
+    jsonResponse(res, 403, { error: "forbidden: /blocks is localhost-only" });
+    return;
+  }
+
+  const url = new URL(req.url || "/", "http://localhost");
+  const group = url.searchParams.get("group");
+  const commitSha = url.searchParams.get("commitSha");
+
+  if (!group || !commitSha) {
+    jsonResponse(res, 400, { error: "missing query params: group, commitSha" });
+    return;
+  }
+
+  const prefix: string = `${group}:${commitSha}:`;
+  const blocks: BlockEntry[] = [];
+  for (const [key, entry] of blockStore) {
+    if (key.startsWith(prefix)) {
+      blocks.push(entry);
+    }
+  }
+
+  jsonResponse(res, 200, { blocks, hostname: hostname() });
+}
+
 function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
   if (req.method === "POST" && req.url === "/crew") {
     handleCrew(req, res);
   } else if (req.method === "POST" && req.url === "/sync") {
     handleSync(req, res);
+  } else if (req.method === "POST" && req.url === "/blocks") {
+    handleBlocksPush(req, res);
+  } else if (req.method === "GET" && req.url?.startsWith("/blocks")) {
+    handleBlocksFetch(req, res);
   } else if (req.method === "GET" && req.url === "/status") {
     handleStatus(req, res);
   } else if (req.method === "GET" && req.url === "/health") {
@@ -317,7 +397,7 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       log.info(`Relay listening on port ${actualPort}`);
 
       syncTimer = setInterval(syncWithPeers, POLL_INTERVAL_MS);
-      expiryTimer = setInterval(expireStaleGroups, POLL_INTERVAL_MS * 3);
+      expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); }, POLL_INTERVAL_MS * 3);
 
       resolve(actualPort);
     });
@@ -337,6 +417,7 @@ export function stopRelay() {
     server.close();
     server = null;
   }
+  blockStore.clear();
   log.info("Relay stopped");
 }
 

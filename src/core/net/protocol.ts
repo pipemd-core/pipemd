@@ -8,6 +8,32 @@ export interface CrewMessage {
   group: string;
   hostname: string;
   sessions: CrewSession[];
+  commitSha?: string;
+}
+
+export interface BlockPushMessage {
+  group: string;
+  hostname: string;
+  commitSha: string;
+  blocks: BlockEntry[];
+}
+
+export interface BlockEntry {
+  source: string;
+  data: string;
+  timestamp: number;
+  hash: string;
+}
+
+export interface BlockFetchRequest {
+  group: string;
+  commitSha: string;
+  sources?: string[];
+}
+
+export interface BlockFetchResponse {
+  blocks: BlockEntry[];
+  hostname: string;
 }
 
 export interface SyncMessage {

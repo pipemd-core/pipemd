@@ -1,145 +1,303 @@
 # PipeMD Roadmap
 
-*Last updated: 2026-05-24*
+*Last updated: 2026-05-26*
 
-> **PipeMD is for AI-augmented developers who want their agents — solo or in teams — to share grounded, up-to-date project context.**
+> **PipeMD is a context provider. Its job: resolve fresh, relevant context and push it to AI agents faster than anything else.**
 
-## The Promise
+## The Product
 
-**Today:** Always-fresh project context, injected on every tool call, with zero git churn.
+The injection engine IS the product. Named-pipe PUSH (sub-ms, kernel-level). Hook-based active injection on every tool call. Bidirectional write-back. Everything else exists to feed or deliver that engine.
 
-**The Vision:** A distributed network of agents effortlessly sharing context across machines.
-
-The gap between today and the vision is bridged by making the core unbreakable, the context undeniable, and local coordination proven — *before* we distribute it across a network.
-
-## Who Benefits When
-
-| Phase | Persona | Headline Benefit |
-|-------|---------|------------------|
-| **1. Core & DX** | Solo developers using any agent | Agents stop hallucinating — they read live project state on every tool call |
-| **2. Local Swarms** | Small teams running parallel agents | Multiple agents work in parallel without stepping on each other |
-| **3. Distributed** | Fleet operators with distributed infrastructure | Agents across machines share one source of truth |
-
----
+The moat: cross-harness, sub-ms context delivery via named pipes. No other tool does this.
 
 ## Scorecard
 
-| Phase | Exit Criterion | Rough Size | Status |
-|-------|---------------|------------|--------|
-| **1a. Adapter & Visibility** | New harness = <1 new file, <100 LOC. | Small | In Progress |
-| **1b. Block Library & DX** | `test-failures` + `context-rules` blocks ship. Cursor + Aider supported. `pmd run` CI-ready. | Medium | Planned |
-| **2. Local Swarms** | Crew supports 3+ coordination patterns. 3+ documented teams running multi-agent crew daily. | Medium | Planned |
-| **3. Distributed** | Power users explicitly request cross-machine crew sync. Relay ships with auth + persistence. | Large | Paused |
+| Phase | Exit Criterion | Status |
+|-------|---------------|--------|
+| **0. Stabilize** | Zero dead resolvers. Zero broken resolvers. Every default rule produces non-empty output in the happy path. | **In Progress** |
+| **1. Trim** | Remove every LOC that doesn't produce or deliver context. MCP server is read-only. Task CLI gone. | Planned |
+| **2. Harden** | Every default rule produces fresh, relevant context for solo + crew agents. Ecosystem-aware syntax checking. Per-resolver timeouts. | Planned |
+| **3. Inter-Harness** | Two different harnesses on the same machine share context seamlessly via relay. | Planned |
+| **4. Network** | Multi-machine relay. Context sharing, not orchestration. Gated on Phases 0-3 being perfect. | Paused |
 
 ---
 
-## Phase 1a: Adapter Refactor & Dev Visibility
-*Unblock the ecosystem. Required before anything else.*
+## Current State: Honest Inventory
 
-If adding a new AI agent takes touching 5 files and 900 lines of string concatenation, the ecosystem won't grow. Phase 1a is the gate — everything else depends on a clean Adapter API.
+### Codebase (10,525 LOC)
 
-- **Harness Adapter Refactor:**
-  - Dismantle `opencode-hooks.ts` string-template codegen (914 lines of string concatenation — the project's largest technical debt).
-  - Formalize the Adapter API so adding a new harness is one file, under 100 lines.
-- **Dev Visibility:**
-  - Improve CLI output so developers see *what* context is injected and *when*.
-  - Provide debugging tools to visualize the named-pipe payload at any moment.
+| Concern | LOC | Verdict |
+|---|---|---|
+| Block rendering / injection pipeline | 2,090 | **The product. Keep.** |
+| Hook adapters (Claude/Gemini/OpenCode) | 686 | **Delivery mechanism. Keep.** |
+| Daemon lifecycle | 367 | **Keep.** |
+| Detection (ecosystem/harness) | 632 | **Keep.** |
+| Tracing / dashboard | 662 | Debug tooling. Shrink. |
+| Statusline | 153 | Keep. |
+| Utilities | 142 | Keep. |
+| Crew sessions | 706 | Split — claim/lock IS context. join/leave is mechanism. Keep mechanism minimal. |
+| MCP server | 568 | **Gut.** Zero production consumers. 12 tools no agent calls. |
+| Network/relay | 764 | Freeze. Works, don't extend. |
+| Tasks CLI | 164 | **Cut.** WritBase territory. `tasks.ts` stays (handoff reads it). |
 
-## Phase 1b: Context Block Library & Developer Experience
-*Ship continuously after 1a lands.*
+### Resolver Health (18 registered)
 
-Blocks are the atomic unit of PipeMD's value. Each block is one emitter — a bash script, a file read, or a path-matching rule — that feeds the injection pipeline. No architectural change per block. The community contributes more via block emitters.
+| Status | Count | Resolvers |
+|---|---|---|
+| **Working** | 8 | `crew-status`, `crew-locks`, `git-delta`, `git-staged`, `edit-diff`, `handoff`, `import-graph`, `session-diff` |
+| **Incomplete** | 4 | `file-errors`/`validate-file` (only work after async validation populates cache), `syntax-check` (JS-only, no TS), `test-failures` (slow, not in defaults) |
+| **Dead** | 3 | `crew-todos` (cache never written), `claimed-errors` (cache never written), `git-context` before-edit (`last-read:` cache never written) |
+| **Niche** | 3 | `custom`, `git-diff-stat`, `context-rules` (all work, expert-only) |
 
-- **Flagship Blocks (ship first):**
-  - **`test-failures`** — live tail of failing tests + assertion diff. The agent sees red tests on its next tool call and fixes them without being asked. Closes the TDD loop. Proves the pipeline is live, not just a file reader.
-  - **`context-rules`** — *Right context, right place, zero token waste.* Glob patterns in `injection.yml` map file paths to relevant architecture decisions, style guides, or API contracts. The agent only sees the rules that apply to *where it's working*. This is a category-defining feature — no other context tool delivers spatially-aware injection.
+### Test Totals
 
-    ```yaml
-    # .pipemd/injection.yml
-    context-rules:
-      - pattern: "src/billing/**"
-        inject: "docs/ADR-004-stripe-webhooks.md"
-      - pattern: "src/ui/**"
-        inject: "docs/tailwind-guidelines.md"
-    ```
+27 suites, 439 tests, 0 failures, 0 typecheck errors, 0 lint errors.
 
-  - **`auto-docs`** — TypeScript `.d.ts` extraction for npm dependencies. Compact, greppable API surfaces injected as `<!-- pmd: docs:<package> -->` blocks. Agents stop guessing library signatures.
+---
 
-- **Block Library Candidates (community-contributable):**
-  - `runtime-errors` — dev server stderr / browser console errors.
-  - `issue` — issue body auto-detected from branch name (GitHub, Linear, Jira).
-  - `review` — open PR review comments on current branch.
-  - `schema` — current DB schema + pending migrations.
-  - `build-status` — last CI run state + failing step tail.
-  - `handoff` — cross-agent notes ("Agent A: done with auth.ts, B start tests").
-  - `audit` — dependency vulnerability report.
+## Phase 0: Stabilize
 
-  Each is one file, one emitter, no architectural change.
+**Goal:** Every resolver in `DEFAULT_ACTIVE_RULES` produces non-empty output in the happy path. Zero dead resolvers.
 
-- **Ecosystem Expansion:**
-  - Ship scaffold + detect for **Cursor** and **Aider** in `pmd init`.
-  - Feature parity with Claude/Gemini/OpenCode hooks.
+### 0.1 Kill dead resolvers
 
-- **First-Class CI/CD (`pmd run`):**
-  - Polish one-shot, daemon-less runs for automated pipelines.
+| Action | File | Detail |
+|---|---|---|
+| Remove `crew-todos` resolver | `injection-engine.ts` | Cache key `"crew-todos"` never written by any production code. Handoff resolver already provides task context via `tasks.json`. |
+| Remove `crew-todos` from defaults | `injection-types.ts` | Drop from `DEFAULT_ACTIVE_RULES`, `VALID_SOURCES`, `ContextSource` |
+| Remove `crew-todos` from scope map | `block-scope.ts` | Drop from `BLOCK_SOURCES` + `BLOCK_SCOPES` |
+| Remove `claimed-errors` resolver | `injection-engine.ts` | Cache key `"claimed-errors"` never written. Will be rebuilt in Phase 2 as `session-validate` (with a producer). |
+| Remove `claimed-errors` from defaults | `injection-types.ts` + `block-scope.ts` | Same pattern as crew-todos |
 
-## Phase 2: Local Swarms (Crew & Multi-Agent)
-*Prove coordination on a single machine before distributing it.*
+**Verify:** typecheck + lint + 439 tests pass (minus removed resolver tests).
 
-Crew coordination already ships (file claims, status broadcasts, sub-agent hierarchies). Phase 2 makes it production-grade and validates that multi-agent workflows are a real use case — not just a demo.
+### 0.2 Fix syntax-check for TypeScript
 
-- **Crew Coordination Patterns (building on shipped primitives):**
-  - Claim TTL tuning — auto-release stale claims after configurable timeout.
-  - `pmd crew watch` — live TUI showing session tree, file locks, and injection events.
-  - Cross-harness conflict resolution with real-time UI in `pmd trace`.
-  - `handoff` block — cross-agent notes for task transfer between agents.
-- **Use-Case Validation:**
-  - Document 3+ real teams running multi-agent crew daily (frontend/backend splits, research/coder splits, test/implementation splits).
-  - Gather feedback on conflict resolution patterns and missing coordination primitives.
+| Action | Detail |
+|---|---|
+| Add `.ts`/`.tsx` to `SYNTAX_EXT_MAP` | Use `tsc --noEmit {file}` instead of `node --check`. Fall back to `npx tsc` if not global. |
+| Use ecosystem detection | `detect.ts` already knows the ecosystem. Thread `SYNTAX_EXT_MAP` extension: `.py` → `python -m py_compile`, `.go` → `go vet`, `.rs` → `cargo check --message-format=short` |
+| Cache results | Same pattern as existing JS syntax check |
 
-## Phase 3: The Distributed Future (`pmd link`)
-*Expand to the network when the design is proven and the use case is clear.*
+**Verify:** `resolveSyntaxCheck("src/foo.ts")` returns errors for a file with type errors.
 
-The in-memory relay exists today (~840 LOC in `src/core/net/`) with plain HTTP, bearer-token auth between peers, and no persistence. It works for LAN demos.
+### 0.3 Fix git-context before-edit (stale-read detection)
 
-Open design questions that must be resolved before active development:
-- **Cross-branch coordination**: agents on different machines may work different branches — how does the fleet share a coherent view?
-- **Shared vs. dedicated objectives**: should fleet agents share one task queue or work independent goals?
-- **Block sharing vs. session-only**: should the relay share rendered blocks (full context) or just crew sessions (coordination)?
-- **Discovery**: mDNS for LAN? Manual peers? A registry service?
+| Action | Detail |
+|---|---|
+| Write `last-read` cache in before-read path | When `resolveInjections("before-read", file)` runs, write `writeCache("last-read:{session}:{file}", Date.now(), 60000)` |
+| Read it in before-edit | `resolveGitContext` already checks this cache — it just needs a producer |
 
-- **Market Signal Requirement:** Resume active development when the design questions above have answers validated by real usage.
-- **Evolution Path (when triggered):**
-  - Block sharing via relay (agents on remote machines see full project context).
-  - Encrypted peer sync (TLS, not plain HTTP).
-  - Discovery protocol (mDNS for LAN, manual for WAN).
-  - Conflict resolution across machines.
+**Verify:** Edit a file externally, then before-edit shows stale-read warning.
+
+### 0.4 Per-resolver timeout
+
+| Action | Detail |
+|---|---|
+| Wrap each resolver in `Promise.race([resolver(ctx), timeout(2000)])` | Slow resolver gets killed, chain continues. No silent budget starvation. |
+| Log timeout events | `log.warn("resolver {source} timed out after 2000ms")` |
+
+**Verify:** A resolver that sleeps 5s doesn't block others.
+
+### 0.5 Wire `triggerAsyncValidation` to on-idle
+
+| Action | Detail |
+|---|---|
+| Add `triggerAsyncValidation()` call in the on-idle resolver cycle | Ensures `file-errors`/`validate-file` caches are populated even when hooks don't fire `--async-validate` |
+
+**Verify:** `file-errors` returns content after an idle tick without any prior after-edit hook.
+
+### Phase 0 Success Criteria
+
+- [ ] 0 dead resolvers (was 3)
+- [ ] `syntax-check` works for `.ts`/`.tsx` (was JS-only)
+- [ ] `git-context` before-edit shows stale-read warnings (was dead)
+- [ ] No resolver can starve the 5s budget (was possible)
+- [ ] `file-errors`/`validate-file` populated by on-idle (was hook-dependent)
+- [ ] All tests pass
+
+---
+
+## Phase 1: Trim
+
+**Goal:** Remove every LOC that doesn't produce or deliver context.
+
+### 1.1 Gut MCP server
+
+The MCP server is 568 LOC. No agent autonomously calls MCP tools in 2026. Keep the thin read layer; remove management.
+
+| Keep (read-only) | Remove (management) |
+|---|---|
+| 6 resource templates (`pmd://blocks`, `pmd://blocks/{source}`, `pmd://crew/status`, `pmd://tasks`, `pmd://tasks/{id}`, `pmd://crew/locks/{path}`) | `pmd_task_create`, `pmd_task_update` |
+| `pmd_blocks_execute` (resolves blocks, is a read operation) | `pmd_task_claim_next` |
+| `pmd_validate_file` (produces context via validation cache) | `pmd_crew_claim`, `pmd_crew_release` |
+| | `pmd_crew_join`, `pmd_crew_leave`, `pmd_crew_note` |
+| | `pmd_cache_invalidate` |
+
+**Verify:** MCP server starts, resources work, 9 management tools gone. ~250 LOC removed.
+
+### 1.2 Remove `pmd task` CLI
+
+The handoff resolver reads `tasks.json` — that's context. The CRUD CLI that manages it is orchestration.
+
+| Keep | Remove |
+|---|---|
+| `src/core/tasks.ts` (164 LOC) — handoff resolver reads it | `src/commands/task.ts` (146 LOC) |
+| `tasks.json` file format | `pmd task` CLI registration in `src/index.ts` |
+| | Task-related MCP tools (already removed in 1.1) |
+
+Tasks can be managed by any external tool (WritBase, orchestrator, manual JSON edit). The handoff resolver reads whatever is there.
+
+**Verify:** `pmd task` command gone. Handoff resolver still injects task context when `tasks.json` exists.
+
+### 1.3 Strip dead exports
+
+- Remove task-related imports from `mcp-server.ts`
+- Remove unused crew imports from `mcp-server.ts`
+- Clean up `package.json` if task-related deps exist
+
+**Verify:** `npx tsc --noEmit` clean. `npx eslint src/core/mcp-server.ts` clean.
+
+### Phase 1 Success Criteria
+
+- [ ] ~400 LOC removed
+- [ ] MCP server is read-only (6 resources + 2 tools)
+- [ ] `pmd task` CLI removed
+- [ ] Zero dead imports/exports
+- [ ] All tests pass
+
+---
+
+## Phase 2: Harden
+
+**Goal:** Every default rule produces fresh, relevant context. The injection pipeline is bulletproof for single machine with 1-5 agents.
+
+### 2.1 Rebuild `session-validate` resolver
+
+Replace the dead `claimed-errors` with a resolver that actually RUNS validation.
+
+| Action | Detail |
+|---|---|
+| New `session-validate` resolver | Resolves active session's claimed files. Runs `eslint --no-error-on-unmatched-pattern {files}` with 4s timeout. Caches result keyed by `session-validate:{sessionId}`. |
+| Register in defaults | `after-edit` (global, async, max-lines 20) + `on-idle` (global, max-lines 20) |
+| Scope | `local` — tied to session's claimed files |
+
+**Verify:** Agent claims 3 files, introduces a lint error → session-validate shows only errors from those 3 files.
+
+### 2.2 Wire `test-failures` into on-idle
+
+| Action | Detail |
+|---|---|
+| Add `test-failures` to on-idle defaults | `on-idle: { source: "test-failures", scope: "global", "max-lines": 10 }` |
+| Individual timeout | 15s budget for test-failures (won't starve others with per-resolver timeout from Phase 0.4) |
+
+**Verify:** Failing test injected on idle tick without starving other resolvers.
+
+### 2.3 Ecosystem-aware syntax checking
+
+| Action | Detail |
+|---|---|
+| Use `detect.ts` output | At daemon start, detect ecosystem and configure `SYNTAX_EXT_MAP` accordingly |
+| `.ts`/`.tsx` → `tsc --noEmit` | Already done in Phase 0.2 |
+| `.py` → `python -m py_compile` | Only if ecosystem is Python |
+| `.go` → `go vet` | Only if ecosystem is Go |
+| `.rs` → `cargo check --message-format=short 2>&1` | Only if ecosystem is Rust |
+
+**Verify:** Syntax errors detected for each ecosystem's primary language.
+
+### 2.4 `pmd doctor` validates resolver health
+
+| Action | Detail |
+|---|---|
+| Add resolver health check to `pmd doctor` | For each source in `DEFAULT_ACTIVE_RULES`, run the resolver and check it returns non-empty (or at least doesn't throw) |
+| Report dead resolvers | `"⚠️ import-graph: returned empty (no target file — ok if no hooks fired)"` |
+
+**Verify:** `pmd doctor` reports resolver health status.
+
+### Phase 2 Success Criteria
+
+- [ ] `session-validate` replaces `claimed-errors` (producer + consumer)
+- [ ] `test-failures` in default on-idle rules
+- [ ] Syntax checking works for TS/Python/Go/Rust
+- [ ] `pmd doctor` validates resolver health
+- [ ] All default rules produce context in the happy path
+- [ ] All tests pass
+
+---
+
+## Phase 3: Inter-Harness Context
+
+**Goal:** Two different harnesses on the same machine share context seamlessly.
+
+**Prerequisite:** Phases 0-2 complete. Zero dead resolvers. Zero broken resolvers.
+
+### 3.1 Wire shared blocks into daemon periodic cycle
+
+| Action | Detail |
+|---|---|
+| Push shared blocks every 30s | Daemon already has a relay client. Add periodic `pushBlocks()` for shared sources (test-failures, git-delta, git-staged, context-rules, handoff) |
+| Fetch shared blocks every 30s | Existing `fetchBlocks()` already does this. Wire into injection pipeline so remote blocks are available to resolvers. |
+| Shared block injection | When `resolveTestFailures` runs, check both local cache AND remote blocks from relay. Prefer freshest. |
+
+**Verify:** Claude Code + OpenCode both see each other's crew status via relay blocks.
+
+### 3.2 Cross-harness injection rules
+
+| Action | Detail |
+|---|---|
+| Injection config supports remote sources | `"when on-idle, if remote sessions exist, inject their test-failures"` |
+| Conditional injection | Only inject remote blocks when remote sessions are detected (avoid noise for solo dev) |
+
+**Verify:** Agent sees test failures from a different harness's session.
+
+### Phase 3 Success Criteria
+
+- [ ] Two harnesses on same machine share shared blocks via relay
+- [ ] No code changes needed — works with existing `pmd link` setup
+- [ ] Solo dev sees zero overhead (no remote blocks when no remote sessions)
+- [ ] All tests pass
+
+---
+
+## Phase 4: Network
+
+**Gated on Phases 0-3 being perfect. Not started until single-machine experience is flawless.**
+
+Multi-machine relay. Same principle — context sharing, not orchestration.
+
+- Encrypted peer sync (TLS, not plain HTTP)
+- Discovery protocol (mDNS for LAN, manual for WAN)
+- Conflict resolution across machines
 
 ---
 
 ## What We're Not Doing
 
-Explicitly deprioritized to protect focus:
-
 | Item | Status | Why |
 |------|--------|-----|
-| Link relay persistence | Paused | Phase 3 is gated on market signal |
-| Mesh gossip protocol | Cut | Premature — star topology suffices |
-| SSH tunnel management | Cut | Users can compose with existing tools |
+| MCP management tools | **Cut** | No agent autonomously calls MCP tools in 2026. Read-only MCP is sufficient. |
+| `pmd task` CLI | **Cut** | Orchestration, not context. `tasks.json` stays (handoff reads it). External tools manage it. |
+| Link relay persistence | Paused | Phase 4 is gated on Phase 3 proof |
+| Mesh gossip protocol | Cut | Star topology suffices |
+| SSH tunnel management | Cut | Users compose with existing tools |
 | Team mode / RBAC | Cut | Single-user DX must be flawless first |
-| Auto-docs for non-TS ecosystems | Deferred | TS `.d.ts` extraction is the MVP; other ecosystems are community blocks |
-| Custom DSL or sandboxing | Cut | Blocks are bash scripts. No new runtime, no new language. |
+| Custom DSL or sandboxing | Cut | Blocks are bash scripts. No new runtime. |
 | Editor integrations (cursor position, selection) | Cut | Different product surface. PipeMD injects on tool calls, not keystrokes. |
+| Agent fleet orchestration | **Cut** | CAO/Weave territory. PipeMD provides context, not task assignment or scheduling. |
 
-The 7 ecosystem script directories (C-CPP, Rust, Python, Go, Node-TypeScript, Generic, DevOps) ship with `pmd init` and are community-maintainable. They prove the injection model works across ecosystems — they are not a core development priority.
+## Design Principles
 
----
+1. **Everything produces or delivers context.** If a feature doesn't feed the injection engine or deliver its output to an agent, it doesn't belong in PipeMD.
+2. **Resolver-first.** Build resolvers (work via hooks immediately). Expose via MCP later (when ecosystem catches up).
+3. **No new config files.** Everything stays in `injection.yml` and CLI flags.
+4. **Read orchestration state, don't manage it.** PipeMD reads crew sessions, tasks, and git state to produce context. It doesn't assign tasks, schedule agents, or manage fleets.
+5. **Every resolver must have a producer.** A resolver that reads from a cache key that nothing writes is dead code. Kill it or build the producer.
 
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| **Agent vendors ship native injection** (e.g., Claude Code reads git status natively) | Medium | PipeMD's moat is cross-agent universality. Vendor-native solutions fragment across ecosystems. Stay harness-agnostic. |
-| **Context tools ship blocks first** (Context7, Repomix) | Medium | Individual blocks are easy to replicate. The injection pipeline + adapter API is the product. Blocks are inputs, not the moat. |
-| **Solo agents dominate, crew has zero pull** | Medium-High | Phase 2 is validation-gated. If multi-agent workflows don't materialize, skip to Phase 3 (distributed single-agent context sync) or pivot. |
-| **Named pipes break on new platforms** (Windows, containers) | Low | Legacy mode (file watcher) is a first-class fallback, not a second-class citizen. |
+| Agent vendors ship native injection | Medium | PipeMD's moat is cross-agent universality + named-pipe PUSH speed. Vendor solutions fragment across ecosystems. |
+| Solo agents dominate, crew has zero pull | Medium-High | Phases 0-2 serve solo agents perfectly. Crew is additive, not required. |
+| Named pipes break on new platforms | Low | Legacy mode (file watcher) is first-class fallback. |
+| MCP adoption remains low | High | MCP server is already trimmed to read-only. Minimal investment. The hook/plugin path is the working delivery mechanism. |

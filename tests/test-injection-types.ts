@@ -180,7 +180,7 @@ describe("parseInjectionConfig", () => {
       delivery: "expert",
       rules: {
         "before-read": [{ source: "custom", scope: "global" }],
-        "after-edit": [{ source: "validate-file", scope: "target-file", "max-lines": 10 }],
+        "after-edit": [{ source: "file-errors", scope: "target-file", "max-lines": 10 }],
         "on-idle": [{ source: "git-delta", scope: "global" }],
       },
     })

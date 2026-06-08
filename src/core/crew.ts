@@ -31,6 +31,7 @@ export interface CrewSession {
   coordinatorId: string | null;
   claimedFiles: CrewClaim[];
   note?: string;
+  sources?: string[];
   startedAt: string;
   lastHeartbeat: string;
   cwd: string;
@@ -216,6 +217,7 @@ export interface JoinOptions {
   coordinatorId?: string;
   harness?: string;
   label?: string;
+  sources?: string[];
 }
 
 export function joinSession(opts: JoinOptions): CrewSession {
@@ -271,6 +273,7 @@ export function joinSession(opts: JoinOptions): CrewSession {
     coordinatorId,
     claimedFiles: existing?.claimedFiles ?? [],
     note: existing?.note,
+    sources: opts.sources ?? existing?.sources,
     startedAt: existing?.startedAt ?? now,
     lastHeartbeat: now,
     cwd: process.cwd(),

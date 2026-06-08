@@ -43,7 +43,9 @@ export function installHooks(
 ): HookInstallResult {
   try {
     const adapter = adapters.get(harness);
-    if (adapter) return adapter.installHooks(cwd, delivery, dryRun, force);
+    if (adapter) {
+      return adapter.installHooks(cwd, delivery, dryRun, force);
+    }
     if (INSTRUCTION_ONLY.includes(harness)) {
       return {
         harness,

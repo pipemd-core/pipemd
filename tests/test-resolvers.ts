@@ -181,9 +181,6 @@ describe("updated defaults", () => {
     assert.ok(afterEdit, "after-edit rules should exist")
     const editDiff = afterEdit.find((r) => r.source === "edit-diff")
     assert.ok(editDiff, "edit-diff rule should exist in after-edit")
-    const validateFile = afterEdit.find((r) => r.source === "validate-file")
-    assert.ok(validateFile, "validate-file rule should exist in after-edit")
-    assert.equal(validateFile["max-lines"], 15)
 
     process.chdir(tmpDir)
   })

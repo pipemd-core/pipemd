@@ -128,6 +128,7 @@ program.addCommand(crewCommand);
 program.addCommand(traceCommand);
 program.addCommand(linkCommand);
 program.addCommand(injectCommand, { hidden: true });
+
 program.addCommand(validateCommand, { hidden: true });
 program.addCommand(statuslineCommand, { hidden: true });
 

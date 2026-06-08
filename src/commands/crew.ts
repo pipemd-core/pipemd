@@ -88,16 +88,19 @@ crew
   .option("--coordinator <id>", "coordinator session id (for workers)")
   .option("--harness <name>", "harness name override")
   .option("--label <text>", "human-readable label for this session")
-  .action((opts: { role?: string; coordinator?: string; harness?: string; label?: string }) => {
+  .option("--sources <list>", "comma-separated list of block sources to receive (e.g. test-failures,git-delta)")
+  .action((opts: { role?: string; coordinator?: string; harness?: string; label?: string; sources?: string }) => {
     if (!requireProjectOrExit()) return;
     const role =
       opts.role === "coordinator" || opts.role === "worker" ? (opts.role as CrewRole) : undefined;
+    const sources = opts.sources ? opts.sources.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     const existingSession = resolveActiveSession();
     const session = joinSession({
       role,
       coordinatorId: opts.coordinator,
       harness: opts.harness,
       label: opts.label,
+      sources,
     });
     if (!existingSession) {
       log.info(`Crew: auto-joined ${session.role} ${session.id} (${session.harness})`);
