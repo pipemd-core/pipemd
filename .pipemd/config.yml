@@ -63,3 +63,5 @@ settings:
   debounceMs: 3000
   reServeDelayMs: 1000
   tokenProfile: high
+commandTimeouts:
+  test-summary: 60000

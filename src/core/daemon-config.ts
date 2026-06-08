@@ -66,6 +66,18 @@ export function validateConfig(raw: unknown): PipeConfig {
     settings.tokenProfile = "medium";
   }
 
+  if (cfg.commandTimeouts && typeof cfg.commandTimeouts === "object" && !Array.isArray(cfg.commandTimeouts)) {
+    const timeouts: Record<string, number> = {};
+    for (const [key, val] of Object.entries(cfg.commandTimeouts as Record<string, unknown>)) {
+      if (typeof val === "number" && val > 0) {
+        timeouts[key] = val;
+      }
+    }
+    cfg.commandTimeouts = timeouts;
+  } else {
+    cfg.commandTimeouts = {};
+  }
+
   return cfg as unknown as PipeConfig;
 }
 

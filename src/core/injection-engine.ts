@@ -472,6 +472,10 @@ async function resolveHandoff(_ctx: ResolverContext): Promise<string> {
   return formatTaskBlock(tasks);
 }
 
+function toPosix(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
@@ -481,42 +485,82 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
   if (cached && cached.data) return cached.data;
 
   const ext = path.extname(file);
-  const importPatterns: Record<string, (f: string) => string[][]> = {
-    ".ts": (f) => [["grep", "-rn", `from.*['"].*${path.basename(f, ext)}`, "--include=*.ts", "--include=*.tsx", "src/"], ["grep", "-rn", `from.*['"]`, "--include=*.ts", "--include=*.tsx", f]],
-    ".js": (f) => [["grep", "-rn", `from.*['"].*${path.basename(f, ext)}`, "--include=*.js", "--include=*.jsx", "src/"], ["grep", "-rn", `from.*['"]`, "--include=*.js", "--include=*.jsx", f]],
-    ".py": (f) => [["grep", "-rn", `import.*${path.basename(f, ext)}`, "--include=*.py", "."], ["grep", "-rn", `from.*${path.basename(f, ext)}`, "--include=*.py", "."]],
-  };
+  const isTS = ext === ".ts" || ext === ".tsx";
+  const isJS = ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs";
 
-  const generator = importPatterns[ext];
-  if (!generator) return "";
+  if (!isTS && !isJS) return "";
+
+  const includeFlags = isTS
+    ? ["--include=*.ts", "--include=*.tsx"]
+    : ["--include=*.js", "--include=*.jsx", "--include=*.mjs"];
+
+  const relPath = toPosix(file.replace(/^\.\//, ""));
+  const withoutExt = relPath.replace(/\.\w+$/, "");
+  const baseName = path.basename(file, ext);
 
   const lines: string[] = [];
 
-  const [importedByArgs, importsArgs] = generator(file);
+  const escapedBase = baseName.replace(/\./g, "\\.");
+  const sq = "'";
+  const dq = '"';
+  const importPattern = `from\\s+(${sq}[^${sq}]*${escapedBase}[^${sq}]*${sq}|${dq}[^${dq}]*${escapedBase}[^${dq}]*${dq})`;
+  const validTargets = new Set([
+    withoutExt,
+    relPath,
+    withoutExt + ext,
+    withoutExt + ".js",
+    withoutExt + ".ts",
+    withoutExt + ".tsx",
+    withoutExt + ".jsx",
+    withoutExt + ".mjs",
+    withoutExt + ".cjs",
+  ]);
 
   try {
-    const { stdout: importedBy } = await execFileAsync(importedByArgs[0], importedByArgs.slice(1), { encoding: "utf-8", timeout: 5000 });
+    const { stdout: importedBy } = await execFileAsync(
+      "grep",
+      ["-rnE", importPattern, ...includeFlags, "src/"],
+      { encoding: "utf-8", timeout: 5000 },
+    );
     const whoImports = importedBy.trim().split("\n").filter(Boolean);
-    if (whoImports.length > 0) {
+    const confirmed: string[] = [];
+    for (const line of whoImports) {
+      const m = line.match(/from\s+['"]([^'"]+)['"]/);
+      if (!m) continue;
+      const importSpec = m[1];
+      if (!importSpec.startsWith(".")) continue;
+      const consumerFile = line.split(":")[0];
+      const consumerDir = toPosix(path.dirname(consumerFile));
+      const resolved = toPosix(path.normalize(path.join(consumerDir, importSpec)));
+      const resolvedNoExt = resolved.replace(/\.\w+$/, "");
+      if (validTargets.has(resolved) || validTargets.has(resolvedNoExt)) {
+        confirmed.push(line);
+      }
+    }
+    if (confirmed.length > 0) {
       lines.push("Imported by:");
-      for (const line of whoImports.slice(0, 15)) {
+      for (const line of confirmed.slice(0, 15)) {
         lines.push(`  ${line}`);
       }
-      if (whoImports.length > 15) lines.push(`  ... +${whoImports.length - 15} more`);
+      if (confirmed.length > 15) lines.push(`  ... +${confirmed.length - 15} more`);
     }
   } catch { /* no matches */ }
 
   try {
-    const { stdout: imports } = await execFileAsync(importsArgs[0], importsArgs.slice(1), { encoding: "utf-8", timeout: 5000 });
-    const whatImports = imports.trim().split("\n").filter(Boolean);
-    if (whatImports.length > 0) {
+    const { stdout } = await execFileAsync(
+      "grep",
+      ["-rnE", "from\\s+['\"]", ...includeFlags, file],
+      { encoding: "utf-8", timeout: 5000 },
+    );
+    const imports = stdout.trim().split("\n").filter(Boolean);
+    if (imports.length > 0) {
       lines.push("Imports:");
-      const importNames = new Set<string>();
-      for (const line of whatImports) {
+      const importPaths = new Set<string>();
+      for (const line of imports) {
         const m = line.match(/from\s+['"]([^'"]+)['"]/);
-        if (m) importNames.add(m[1]);
+        if (m) importPaths.add(m[1]);
       }
-      for (const name of [...importNames].slice(0, 15)) {
+      for (const name of [...importPaths].slice(0, 15)) {
         lines.push(`  ${name}`);
       }
     }

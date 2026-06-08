@@ -177,9 +177,10 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
       }
 
       const { bin, args: binArgs, env: cmdEnv } = parseCommand(cmd);
+      const timeout = config.commandTimeouts?.[command] ?? COMMAND_TIMEOUT_MS;
       execFileAsync(bin, binArgs, {
         encoding: "utf-8",
-        timeout: COMMAND_TIMEOUT_MS,
+        timeout,
         cwd: process.cwd(),
         env: { ...process.env, ...cmdEnv },
       }).then(({ stdout }) => {

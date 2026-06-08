@@ -43,7 +43,7 @@ export function injectContent(content: string, config: PipeConfig): string | nul
   const result = content.replace(BLOCK_RE, (_match, commandName: string, _inner: string) => {
     const cmd = config.commands[commandName];
     if (!cmd) return _match;
-    const output = runCommandSync(commandName, cmd);
+    const output = runCommandSync(commandName, cmd, config);
     const replacement = buildBlock(commandName, output);
     if (replacement !== _match) {
       changed = true;
@@ -74,7 +74,8 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
       }
       try {
         const { bin, args, env: cmdEnv } = parseCommand(cmd);
-        const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
+        const timeout = config.commandTimeouts?.[name] ?? COMMAND_TIMEOUT_MS;
+        const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout, cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
@@ -108,13 +109,11 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
   return trimmed;
 }
 
-function runCommandSync(commandName: string, cmd: string): string {
-  // Legacy sync path — used by injectContent() for file-watcher mode.
-  // Cannot be made async because injectContent() is called synchronously
-  // by the legacy watcher. See renderContentAsync() for the async equivalent.
+function runCommandSync(commandName: string, cmd: string, config?: PipeConfig): string {
   try {
     const { bin, args, env: cmdEnv } = parseCommand(cmd);
-    const out = execFileSync(bin, args, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
+    const timeout = config?.commandTimeouts?.[commandName] ?? COMMAND_TIMEOUT_MS;
+    const out = execFileSync(bin, args, { encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
     return out.trimEnd();
   } catch (err: unknown) {
     const execErr = err as { stderr?: string; message?: string } | null;

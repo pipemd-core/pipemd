@@ -90,7 +90,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     ],
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },
-      { source: "import-graph", scope: "target-file", "max-lines": 20 },
+      { source: "import-graph", scope: "target-file", "max-lines": 25 },
       { source: "syntax-check", scope: "target-file", "max-lines": 5 },
       { source: "file-errors", scope: "target-file", "max-lines": 15 },
       { source: "git-context", scope: "target-file", "max-lines": 2 },
@@ -288,6 +288,7 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "# sources:  crew-status | crew-locks | file-errors",
     "#           git-context | git-delta | git-staged | git-diff-stat",
     "#           edit-diff | syntax-check | test-failures | custom | context-rules",
+    "#           import-graph | handoff | session-diff",
     "# scope:    target-file | global",
     "",
   ].join("\n");

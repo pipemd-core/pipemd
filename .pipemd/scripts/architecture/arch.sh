@@ -3,7 +3,9 @@ set -uo pipefail
 # Architecture map — Node/TypeScript module dependencies
 source "$(dirname "$0")/../lib/limit.sh"
 
-: "${MAX_ARCH:=100}"
+if [ "$MAX_ARCH" -le 120 ]; then
+  MAX_ARCH=150
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/normalize.sh"
@@ -26,7 +28,7 @@ from collections import defaultdict
 
 SRC_DIR = os.environ.get('SRC_DIR', 'src')
 MAX_FILES = 300
-MAX_MODULES = 40
+MAX_MODULES = 80
 
 SKIP_DIRS = {'node_modules', 'dist', '.next', 'coverage', 'build', 'out', '.pipemd', '.git', '__tests__', '__test__', '__mocks__', 'test', 'tests', 'spec', 'specs', 'scripts', 'migrations', 'seed', 'public', 'static', 'assets', 'styles', 'views', 'templates'}
 
@@ -42,7 +44,7 @@ def should_skip_file(f):
         return True
     return False
 
-def module_name(rel_path):
+def module_name(rel_path, total_files=999):
     parts = rel_path.replace(os.sep, '/').split('/')
     filename = os.path.splitext(parts[-1])[0] if parts else ''
     dirpath = parts[:-1] if len(parts) > 1 else []
@@ -52,15 +54,14 @@ def module_name(rel_path):
 
     last_dir = dirpath[-1]
 
-    # If there's only one significant file in this dir-level, use the dir name
-    # If the file is an entry point (index/main), use the dir name
     if filename in ENTRY_FILES or filename == last_dir:
+        if total_files <= MAX_MODULES:
+            return '/'.join(dirpath) + '/' + filename if dirpath else filename
         return last_dir
 
-    # Otherwise use dir/file to preserve detail
     return last_dir + '/' + filename
 
-def resolve_relative(import_path, file_rel, src_dir):
+def resolve_relative(import_path, file_rel, src_dir, total_files=999):
     file_dir = os.path.dirname(file_rel)
     resolved = os.path.normpath(os.path.join(file_dir, import_path))
     resolved = resolved.replace(os.sep, '/')
@@ -68,7 +69,7 @@ def resolve_relative(import_path, file_rel, src_dir):
         resolved = resolved[len(src_dir) + 1:]
     elif resolved == src_dir:
         return None
-    return module_name(resolved)
+    return module_name(resolved, total_files)
 
 def load_external_deps():
     ext = set()
@@ -113,6 +114,8 @@ for root, dirs, filenames in os.walk(SRC_DIR):
 if not files:
     sys.exit(0)
 
+total_files = len(files)
+
 # Count files per directory to decide grouping
 dir_counts = defaultdict(list)
 for fpath in files:
@@ -120,16 +123,13 @@ for fpath in files:
     d = os.path.dirname(rel) if '/' in rel else '.'
     dir_counts[d].append(fpath)
 
-# Build a set of modules — prefer dir-level for dirs with 1-2 files,
-# file-level for dirs with many files or entry points
 module_set = set()
 for fpath in files:
     rel = os.path.relpath(fpath, SRC_DIR).replace(os.sep, '/')
-    mod = module_name(rel)
+    mod = module_name(rel, total_files)
     if mod:
         module_set.add(mod)
 
-# If too many modules, collapse file-level back to dir-level
 if len(module_set) > MAX_MODULES:
     module_set = set()
     for fpath in files:
@@ -144,7 +144,7 @@ edges = set()
 
 for fpath in files:
     rel = os.path.relpath(fpath, SRC_DIR).replace(os.sep, '/')
-    src_mod = module_name(rel)
+    src_mod = module_name(rel, total_files)
     if not src_mod or src_mod not in module_set:
         continue
 
@@ -160,7 +160,7 @@ for fpath in files:
             continue
 
         if spec.startswith('.'):
-            target = resolve_relative(spec, rel, SRC_DIR)
+            target = resolve_relative(spec, rel, SRC_DIR, total_files)
             if target and target in module_set and target != src_mod:
                 edges.add((src_mod, target))
         else:

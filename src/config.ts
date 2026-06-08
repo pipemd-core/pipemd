@@ -21,6 +21,7 @@ export interface PipeConfig {
   delivery?: DeliveryMode;
   base?: string;
   commands: Record<string, string>;
+  commandTimeouts?: Record<string, number>;
   injected: { file: string; watch: boolean }[];
   pipes: { file: string; command?: string; render?: string; mode?: PipeMode }[];
   link?: {

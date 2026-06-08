@@ -103,9 +103,9 @@ END {
 
     # Progressive simplification when over budget
     skip_intra = 0
-    if (est > max_arch * 1.3) skip_intra = 1
+    if (est > max_arch * 2.5) skip_intra = 1
     reduce_ext = 0
-    if (est > max_arch * 1.6) { reduce_ext = 1; n_show_ext = (n_show_ext > 5) ? 5 : n_show_ext; for (i = 1; i <= n_show_ext; i++) show_ext[extn[i]] = 1 }
+    if (est > max_arch * 3) { reduce_ext = 1; n_show_ext = (n_show_ext > 5) ? 5 : n_show_ext; for (i = 1; i <= n_show_ext; i++) show_ext[extn[i]] = 1 }
 
     # Count group sizes
     for (i = 1; i <= ni; i++) {
@@ -148,24 +148,37 @@ END {
         print "    end"
     }
 
-    # Edges
+    # Edges — output intra-group first (most valuable), then cross-group
     edge_count = 0
+    n_intra = 0; n_cross = 0
     for (i = 1; i <= ne; i++) {
         s = esrc[i]; d = edst[i]
 
         if (s ~ /^ext:/) { n = substr(s, 5); if (!(n in show_ext)) continue }
         if (d ~ /^ext:/) { n = substr(d, 5); if (!(n in show_ext)) continue }
 
-        # Skip same-group internal edges if over budget
         if (skip_intra && !(s ~ /^ext:/) && !(d ~ /^ext:/) && igrp[s] != "" && igrp[s] == igrp[d]) continue
 
         sid = (s ~ /^ext:/) ? "ext_" safe_id(substr(s, 5)) : safe_id(s)
         did = (d ~ /^ext:/) ? "ext_" safe_id(substr(d, 5)) : safe_id(d)
 
-        printf "    %s --> %s\n", sid, did
-        edge_count++
+        if (!(s ~ /^ext:/) && !(d ~ /^ext:/) && igrp[s] != "" && igrp[s] == igrp[d]) {
+            n_intra++
+            intra_s[n_intra] = sid; intra_d[n_intra] = did
+        } else {
+            n_cross++
+            cross_s[n_cross] = sid; cross_d[n_cross] = did
+        }
+    }
 
+    for (i = 1; i <= n_intra; i++) {
+        printf "    %s --> %s\n", intra_s[i], intra_d[i]
+        edge_count++
+    }
+    for (i = 1; i <= n_cross; i++) {
         if (edge_count >= max_arch) break
+        printf "    %s --> %s\n", cross_s[i], cross_d[i]
+        edge_count++
     }
 
     # Summary comment

@@ -145,6 +145,9 @@ const inject = new Command("inject")
       const header = p.targetFile
         ? `[pmd:${p.source} \u2192 ${p.targetFile}]`
         : `[pmd:${p.source}]`;
+      if (trigger === "before-edit" && p.targetFile) {
+        return `${header}\nFile: ${p.targetFile}\n${"---"}\n${p.content}`;
+      }
       return `${header}\n${p.content}`;
     });
 

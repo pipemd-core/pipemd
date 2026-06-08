@@ -93,6 +93,52 @@ describe("resolveImportGraph", () => {
     });
     assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
   });
+
+  it("does not false-match files with similar basename", async () => {
+    fs.writeFileSync(path.join(tmpDir, "src", "cache.ts"), "export const cache = 1;\n");
+    fs.writeFileSync(path.join(tmpDir, "src", "some-cache.ts"), "export const sc = 2;\n");
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "consumer-a.ts"),
+      `import { cache } from './cache.js';\n`,
+    );
+    const result = await RESOLVERS["import-graph"]({
+      trigger: "before-edit",
+      targetFile: "src/cache.ts",
+      config,
+    });
+    assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+    assert.ok(!result.includes("some-cache"), `Should not match some-cache, got: ${result}`);
+  });
+
+  it("detects imports from subdirectory", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src", "sub"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "src", "sub", "mod.ts"), "export const mod = 1;\n");
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "sub", "index.ts"),
+      `export { mod } from './mod.js';\n`,
+    );
+    const result = await RESOLVERS["import-graph"]({
+      trigger: "before-edit",
+      targetFile: "src/sub/mod.ts",
+      config,
+    });
+    assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+    assert.ok(result.includes("index.ts"), `Expected "index.ts" in result, got: ${result}`);
+  });
+
+  it("detects double-quote imports", async () => {
+    fs.writeFileSync(path.join(tmpDir, "src", "dq-target.ts"), "export const dq = 1;\n");
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "dq-consumer.ts"),
+      `import { dq } from "./dq-target.js";\n`,
+    );
+    const result = await RESOLVERS["import-graph"]({
+      trigger: "before-edit",
+      targetFile: "src/dq-target.ts",
+      config,
+    });
+    assert.ok(result.includes("Imported by:"), `Expected "Imported by:" in result, got: ${result}`);
+  });
 });
 
 describe("resolveSessionDiff", () => {
