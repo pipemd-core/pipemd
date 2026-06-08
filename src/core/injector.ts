@@ -7,6 +7,20 @@ import type { PipeConfig } from "../config.js";
 
 const execFileAsync = promisify(execFile);
 
+const ENV_ASSIGN_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+export function parseCommand(cmd: string): { bin: string; args: string[]; env: Record<string, string> } {
+  const parts = cmd.split(/\s+/);
+  const env: Record<string, string> = {};
+  let i = 0;
+  while (i < parts.length && ENV_ASSIGN_RE.test(parts[i])) {
+    const eq = parts[i].indexOf("=");
+    env[parts[i].slice(0, eq)] = parts[i].slice(eq + 1);
+    i++;
+  }
+  return { bin: parts[i], args: parts.slice(i + 1), env };
+}
+
 const BLOCK_RE = /<!--\s*pmd:\s*([\w-]+)\s*-->\n?([\s\S]*?)<!--\s*\/pmd\s*-->/g;
 
 const ERROR_BLOCK = (commandName: string, cmd: string, detail: string) =>
@@ -59,10 +73,8 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         return;
       }
       try {
-        const parts = cmd.split(/\s+/);
-        const bin = parts[0];
-        const binArgs = parts.slice(1);
-        const { stdout } = await execFileAsync(bin, binArgs, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd() });
+        const { bin, args, env: cmdEnv } = parseCommand(cmd);
+        const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
@@ -101,10 +113,8 @@ function runCommandSync(commandName: string, cmd: string): string {
   // Cannot be made async because injectContent() is called synchronously
   // by the legacy watcher. See renderContentAsync() for the async equivalent.
   try {
-    const parts = cmd.split(/\s+/);
-    const bin = parts[0];
-    const binArgs = parts.slice(1);
-    const out = execFileSync(bin, binArgs, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd() });
+    const { bin, args, env: cmdEnv } = parseCommand(cmd);
+    const out = execFileSync(bin, args, { encoding: "utf-8", timeout: COMMAND_TIMEOUT_MS, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
     return out.trimEnd();
   } catch (err: unknown) {
     const execErr = err as { stderr?: string; message?: string } | null;

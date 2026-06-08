@@ -1,15 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { exec, execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { renderContentAsync } from "./injector.js";
+import { renderContentAsync, parseCommand } from "./injector.js";
 import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-back.js";
 import { log, errMsg } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { LIVE_DIR, STATUS_FILE } from "./paths.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export const ENXIO_MAX_RETRIES = 100;
 export const ENXIO_RETRY_WINDOW_MS = 60000;
@@ -176,10 +176,12 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
         return;
       }
 
-      execAsync(cmd, {
+      const { bin, args: binArgs, env: cmdEnv } = parseCommand(cmd);
+      execFileAsync(bin, binArgs, {
         encoding: "utf-8",
         timeout: COMMAND_TIMEOUT_MS,
         cwd: process.cwd(),
+        env: { ...process.env, ...cmdEnv },
       }).then(({ stdout }) => {
         const md = `\`\`\`\n${stdout.trimEnd()}\n\`\`\``;
         writeSafe(writeFd, md);
