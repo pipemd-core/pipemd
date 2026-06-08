@@ -215,9 +215,9 @@ describe("resolveExports", () => {
       config,
     });
     assert.ok(result.includes("Exports:"), `Expected "Exports:" in result, got: ${result}`);
-    assert.ok(result.includes("function foo"), `Expected "function foo" in result, got: ${result}`);
-    assert.ok(result.includes("const bar"), `Expected "const bar" in result, got: ${result}`);
-    assert.ok(result.includes("type Baz"), `Expected "type Baz" in result, got: ${result}`);
+    assert.ok(result.includes("function foo()"), `Expected "function foo()" in result, got: ${result}`);
+    assert.ok(result.includes("const bar = 1"), `Expected "const bar = 1" in result, got: ${result}`);
+    assert.ok(result.includes("type Baz = string"), `Expected "type Baz = string" in result, got: ${result}`);
   });
 
   it("detects env var references", async () => {
@@ -247,6 +247,32 @@ describe("resolveExports", () => {
     });
     const matches = result.match(/API_KEY/g);
     assert.ok(matches && matches.length === 1, `Expected exactly 1 occurrence of API_KEY, got ${matches?.length}: ${result}`);
+  });
+
+  it("shows full function signatures with parameters", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "sig-file.ts"),
+      `export function greet(name: string, age: number): string { return name; }\nexport const add = (a: number, b: number): number => a + b;\n`,
+    );
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/sig-file.ts",
+      config,
+    });
+    assert.ok(result.includes("function greet(name: string, age: number): string"), `Expected full signature in result, got: ${result}`);
+  });
+
+  it("marks default exports", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "default-export.ts"),
+      `export default function main() {}\n`,
+    );
+    const result = await RESOLVERS["exports"]({
+      trigger: "before-edit",
+      targetFile: "src/default-export.ts",
+      config,
+    });
+    assert.ok(result.includes("default function main"), `Expected "default" marker in result, got: ${result}`);
   });
 });
 

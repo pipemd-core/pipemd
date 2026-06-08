@@ -642,26 +642,34 @@ async function resolveExports(ctx: ResolverContext): Promise<string> {
   const lines: string[] = [];
 
   try {
-    const { stdout } = await execFileAsync(
-      "grep",
-      ["-nE", "^export (default |)(function |const |class |type |interface |enum |async function )[A-Za-z_]", ...includeFlags, file],
-      { encoding: "utf-8", timeout: 5000 },
-    );
-    const exports = stdout.trim().split("\n").filter(Boolean);
-    if (exports.length > 0) {
-      lines.push("Exports:");
-      for (const line of exports.slice(0, 20)) {
-        const cleaned = line.replace(/^\d+:/, "").replace(/^export (default )?/, "");
-        lines.push(`  ${cleaned.endsWith(";") ? cleaned.slice(0, -1).trim() : cleaned.trim()}`);
+    const fileContent = fs.readFileSync(file, "utf-8");
+    const fileLines = fileContent.split("\n");
+    const exportLines: string[] = [];
+    for (const fl of fileLines) {
+      const trimmed = fl.trim();
+      if (/^export (default |)(function |const |class |type |interface |enum |async function )[A-Za-z_]/.test(trimmed)) {
+        const sig = trimmed
+          .replace(/^export /, "")
+          .replace(/;$/, "")
+          .replace(/\{$/, "")
+          .trim();
+        const display = sig.length > 80 ? sig.slice(0, 77) + "..." : sig;
+        exportLines.push(display);
       }
-      if (exports.length > 20) lines.push(`  ... +${exports.length - 20} more`);
     }
-  } catch { /* no matches */ }
+    if (exportLines.length > 0) {
+      lines.push("Exports:");
+      for (const sig of exportLines.slice(0, 20)) {
+        lines.push(`  ${sig}`);
+      }
+      if (exportLines.length > 20) lines.push(`  ... +${exportLines.length - 20} more`);
+    }
+  } catch { /* no file */ }
 
   try {
     const { stdout } = await execFileAsync(
       "grep",
-      ["-noE", "process\\.env\\.[A-Za-z_][A-Za-z0-9_]*", ...includeFlags, file],
+      ["-oE", "process\\.env\\.[A-Za-z_][A-Za-z0-9_]*", ...includeFlags, file],
       { encoding: "utf-8", timeout: 5000 },
     );
     const envRefs = stdout.trim().split("\n").filter(Boolean);
