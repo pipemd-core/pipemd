@@ -18,6 +18,12 @@ import { PIPEMD_DIR, CONFIG_PATH, SCRIPTS_DIR, TEMPLATE_PATH } from "../core/pat
 import { log, errMsg } from "../core/logger.js";
 import { UserError } from "../core/errors.js";
 import { loadConfig, ConfigError } from "../core/daemon-config.js";
+import {
+  type InjectionTrigger,
+  DEFAULT_ACTIVE_RULES,
+  loadInjectionConfig,
+  generateInjectionYml,
+} from "../core/injection-types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -119,6 +125,38 @@ function buildCommand(script: ScriptDef, ecosystem: Ecosystem, profile: TokenPro
   return `${profileEnv} ${ecoEnv} ${script.command}`;
 }
 
+function mergeInjectionConfig(): string[] {
+  const injectionPath = path.join(PIPEMD_DIR, "injection.yml");
+  if (!fs.existsSync(injectionPath)) return [];
+
+  const existing = loadInjectionConfig();
+  if (existing.delivery === "passive") return [];
+
+  const defaults = DEFAULT_ACTIVE_RULES;
+  const addedSources: string[] = [];
+
+  for (const trigger of Object.keys(defaults.rules) as InjectionTrigger[]) {
+    const defaultRules = defaults.rules[trigger];
+    if (!defaultRules) continue;
+
+    const existingRules = existing.rules[trigger] || [];
+    const existingSources = new Set(existingRules.map((r) => r.source));
+
+    const missing = defaultRules.filter((r) => !existingSources.has(r.source));
+    if (missing.length > 0) {
+      existing.rules[trigger] = [...existingRules, ...missing];
+      addedSources.push(...missing.map((r) => `${trigger}: ${r.source}`));
+    }
+  }
+
+  if (addedSources.length === 0) return [];
+
+  const updated = generateInjectionYml(existing);
+  fs.writeFileSync(injectionPath, updated, "utf-8");
+
+  return addedSources;
+}
+
 export const refreshCommand = new Command("refresh")
   .description("Update scripts to latest bundled versions")
   .option("-y, --yes", "Non-interactive: update all changed, add recommended new scripts")
@@ -157,8 +195,23 @@ export const refreshCommand = new Command("refresh")
     const custom = changes.filter((c): c is ScriptChange & { kind: "custom" } => c.kind === "custom");
 
     if (changed.length === 0 && missing.length === 0 && newAvailable.length === 0) {
-      console.log(chalk.green("✔ All scripts are up to date."));
-      console.log();
+      const addedInjectionSources = mergeInjectionConfig();
+      if (addedInjectionSources.length > 0) {
+        console.log(chalk.bold("  Injection Rules:"));
+        console.log();
+        for (const src of addedInjectionSources) {
+          console.log(chalk.cyan(`  + ${src}`));
+        }
+        console.log(chalk.green("  → Updated injection.yml"));
+        console.log();
+        console.log(chalk.green("✔ Refresh complete: injection rules updated."));
+        console.log();
+        console.log(chalk.dim("  Run `pmd restart` to apply changes to a running daemon."));
+        console.log();
+      } else {
+        console.log(chalk.green("✔ All scripts are up to date."));
+        console.log();
+      }
       return;
     }
 
@@ -264,7 +317,7 @@ export const refreshCommand = new Command("refresh")
       console.log(chalk.cyan(`  + Added: ${s.label}`));
     }
 
-    for (const helper of ["lib/limit.sh", "architecture/normalize.sh"]) {
+    for (const helper of ["lib/limit.sh", "lib/limit-core.sh", "architecture/normalize.sh"]) {
       const bundled = loadScriptContent(ecosystem, helper);
       if (!bundled) continue;
       const localPath = path.join(SCRIPTS_DIR, helper);
@@ -289,6 +342,14 @@ export const refreshCommand = new Command("refresh")
         fs.writeFileSync(aiSetupDest, bundled, "utf-8");
         console.log(chalk.dim("  → Updated .pipemd/AI_SETUP_PIPEMD.md"));
       }
+    }
+
+    const addedInjectionSources = mergeInjectionConfig();
+    if (addedInjectionSources.length > 0) {
+      for (const src of addedInjectionSources) {
+        console.log(chalk.cyan(`  + Injection rule: ${src}`));
+      }
+      console.log(chalk.green("  → Updated injection.yml"));
     }
 
     for (const s of allToUpdate) {
