@@ -37,7 +37,7 @@ if [ -n "$route_files" ]; then
   all_paths=""
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    paths=$(grep -oP "path:\s*['\"]([^'\"]+)['\"]" "$f" 2>/dev/null | sed "s/.*path:\s*['\"]//;s/['\"]//" | grep -v '^\*\*' | grep -v '^$')
+    paths=$(sed -n "s/.*path:[[:space:]]*['\"]\\([^'\"]*\\)['\"].*/\\1/p" "$f" 2>/dev/null | grep -v '^\*\*' | grep -v '^$')
     if [ -n "$paths" ]; then
       while IFS= read -r p; do
         entry="  /$p"

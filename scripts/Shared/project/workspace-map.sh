@@ -87,7 +87,7 @@ fi
 # ── Cargo workspace ──
 if [ -f "Cargo.toml" ] && grep -q '\[workspace\]' Cargo.toml 2>/dev/null; then
   echo "Cargo workspace:"
-  sed -n '/\[workspace\]/,/^\[/p' Cargo.toml | grep -oP 'members\s*=\s*\[([^\]]*)\]' | head -1 | sed 's/members\s*=\s*\[//;s/\]//' | tr -d '"' | tr ',' '\n' | sed 's/^[[:space:]]*//' | grep -v '^$' | while IFS= read -r m; do
+  sed -n '/\[workspace\]/,/^\[/p' Cargo.toml | sed -n 's/.*members[[:space:]]*=[[:space:]]*\[\([^]]*\)\].*/\1/p' | head -1 | tr -d '"' | tr ',' '\n' | sed 's/^[[:space:]]*//' | grep -v '^$' | while IFS= read -r m; do
     [ -z "$m" ] && continue
     toml="${m}/Cargo.toml"
     if [ -f "$toml" ]; then
@@ -103,7 +103,7 @@ fi
 # ── Go workspace ──
 if [ -f "go.work" ]; then
   echo "Go workspace:"
-  grep -oP 'use\s*\(([^)]*)\)' go.work 2>/dev/null | sed 's/use\s*(//;s/)//' | tr '\n' ' ' | sed 's/"/ /g' | tr ' ' '\n' | grep -v '^$' | while IFS= read -r dir; do
+  sed -n 's/.*use[[:space:]]*(\([^)]*\)).*/\1/p' go.work 2>/dev/null | tr '\n' ' ' | sed 's/"/ /g' | tr ' ' '\n' | grep -v '^$' | while IFS= read -r dir; do
     [ -z "$dir" ] && continue
     mod="${dir}/go.mod"
     if [ -f "$mod" ]; then
