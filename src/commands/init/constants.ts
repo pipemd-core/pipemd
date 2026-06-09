@@ -68,11 +68,11 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   "git-status": 30, "diff-stat": 30, "type-check": 30, lint: 20,
   "test-summary": 10, prisma: 40, "express-routes": 30, "fastapi-routes": 30,
   "django-models": 40, sqlalchemy: 40, "nest-controllers": 30,
-  "nextjs-app-router": 30, "react-components": 30, "angular-routes": 30,
+  "nextjs-app-router": 30, "react-components": 30, "angular-routes": 30, "angular-structure": 40,
   "cmake-targets": 40, "class-diagram": 40, interfaces: 30, "include-graph": 40,
   "cargo-deps": 40, "cargo-features": 20, "go-packages": 40, "go-interfaces": 30,
   "docker-stats": 30, "k8s-unhealthy": 20, "tf-state": 40, "aws-context": 10,
-  crew: 40,
+  crew: 40, "workspace-map": 60, "django-urls": 40,
 };
 
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
@@ -85,6 +85,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "deps", label: "Dependencies", description: "Direct production dependencies and versions", command: "bash .pipemd/scripts/project/deps.sh", category: "project", volatile: 1, file: "project/deps.sh" },
     { id: "todos", label: "TODOs / FIXMEs", description: "TODO, FIXME, HACK comments in source", command: "bash .pipemd/scripts/project/find-todos.sh", category: "project", volatile: 2, file: "project/find-todos.sh" },
     { id: "exports", label: "Exports & Env", description: "Exported symbols per module + env var references", command: "bash .pipemd/scripts/project/exports.sh", category: "project", volatile: 1, file: "project/exports.sh" },
+    { id: "workspace-map", label: "Workspace Map", description: "Monorepo workspace members and inter-package dependencies", command: "bash .pipemd/scripts/project/workspace-map.sh", category: "project", volatile: 1, file: "project/workspace-map.sh" },
   ],
   git: [
     { id: "git-log", label: "Recent Commits", description: "Last 10 commits (hash, date, message)", command: "bash .pipemd/scripts/git/git-log.sh", category: "git", volatile: 2, file: "git/git-log.sh" },
@@ -106,11 +107,13 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "express-routes", label: "Express Routes", description: "Express route method + path signatures", command: "bash .pipemd/scripts/api/express-routes.sh", category: "api", volatile: 1, file: "api/express-routes.sh" },
     { id: "fastapi-routes", label: "FastAPI Routes", description: "FastAPI endpoint signatures", command: "bash .pipemd/scripts/api/fastapi-routes.sh", category: "api", volatile: 1, file: "api/fastapi-routes.sh" },
     { id: "nest-controllers", label: "NestJS Controllers", description: "NestJS controller decorators and routes", command: "bash .pipemd/scripts/api/nest-controllers.sh", category: "api", volatile: 1, file: "api/nest-controllers.sh" },
+    { id: "django-urls", label: "Django URLs", description: "Django URL patterns from urls.py files", command: "bash .pipemd/scripts/api/django-urls.sh", category: "api", volatile: 1, file: "api/django-urls.sh" },
   ],
   frontend: [
     { id: "nextjs-app-router", label: "Next.js Routes", description: "App Router route tree from page.tsx files", command: "bash .pipemd/scripts/frontend/nextjs-app-router.sh", category: "frontend", volatile: 1, file: "frontend/nextjs-app-router.sh" },
     { id: "react-components", label: "React Components", description: "Exported function components and Props types", command: "bash .pipemd/scripts/frontend/react-components.sh", category: "frontend", volatile: 1, file: "frontend/react-components.sh" },
     { id: "angular-routes", label: "Angular Routes", description: "Angular route definitions (routing modules + standalone routes)", command: "bash .pipemd/scripts/frontend/angular-routes.sh", category: "frontend", volatile: 1, file: "frontend/angular-routes.sh" },
+    { id: "angular-structure", label: "Angular Structure", description: "Routes, components, services, module type, key directories", command: "bash .pipemd/scripts/frontend/angular-structure.sh", category: "frontend", volatile: 1, file: "frontend/angular-structure.sh" },
   ],
   cpp: [
     { id: "cmake-targets", label: "CMake Targets", description: "CMake executables, libraries, and link dependencies", command: "bash .pipemd/scripts/project/cmake-targets.sh", category: "cpp", volatile: 1, file: "project/cmake-targets.sh" },

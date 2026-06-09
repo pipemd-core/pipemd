@@ -59,12 +59,13 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     ecosystem = "Go";
     signals.push("go.mod → Go");
     recommended.push("go-packages", "go-interfaces");
-  } else if (has("pyproject.toml") || has("requirements.txt") || has("setup.py") || has("Pipfile") || has("poetry.lock")) {
+  } else if (has("pyproject.toml") || has("requirements.txt") || has("setup.py") || has("Pipfile") || has("poetry.lock") || has("manage.py")) {
     ecosystem = "Python";
     const found = has("pyproject.toml") ? "pyproject.toml"
       : has("poetry.lock") ? "poetry.lock"
       : has("Pipfile") ? "Pipfile"
       : has("requirements.txt") ? "requirements.txt"
+      : has("manage.py") ? "manage.py"
       : "setup.py";
     signals.push(`${found} → Python`);
     recommended.push("deps");
@@ -160,6 +161,10 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
   if (ecosystem === "Python" && hasIn(".", /models\.py/)) {
     signals.push("models.py → django-models");
     recommended.push("django-models");
+  }
+  if (ecosystem === "Python" && hasIn(".", /urls\.py/) && hasIn(".", /models\.py/)) {
+    signals.push("urls.py → django-urls");
+    recommended.push("django-urls");
   }
   if (ecosystem === "Python" && has("pyproject.toml")) {
     try {
@@ -274,9 +279,9 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
       signals.push("React components detected → react-components");
       recommended.push("react-components");
     }
-    if (hasIn("src", /-routing\.module\.ts$/) || hasIn("src", /app-routing/) || hasIn("src", /\.routes\.ts$/)) {
-      signals.push("Angular routing detected → angular-routes");
-      recommended.push("angular-routes");
+    if (hasIn("src", /-routing\.module\.ts$/) || hasIn("src", /app-routing/) || hasIn("src", /\.routes\.ts$/) || has("angular.json")) {
+      signals.push("Angular detected → angular-structure");
+      recommended.push("angular-structure");
     }
   }
 
@@ -354,6 +359,22 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
       signals.push(`${subReadmeCount} sub-directory READMEs → compose`);
     }
     recommended.push("compose");
+    recommended.push("workspace-map");
+  }
+
+  if (ecosystem === "Rust" && has("Cargo.toml")) {
+    try {
+      const cargoContent = fs.readFileSync(path.join(cwd, "Cargo.toml"), "utf-8");
+      if (cargoContent.includes("[workspace]")) {
+        signals.push("Cargo workspace → workspace-map");
+        recommended.push("workspace-map");
+      }
+    } catch (err: unknown) { log.debug(`Cargo.toml workspace check failed: ${errMsg(err)}`); }
+  }
+
+  if (ecosystem === "Go" && has("go.work")) {
+    signals.push("go.work → workspace-map");
+    recommended.push("workspace-map");
   }
 
   return {
