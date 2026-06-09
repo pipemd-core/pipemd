@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getStatusJson } from "./crew-render.js";
 import { atomicWrite } from "./fs-utils.js";
-import { PIPEMD_DIR, STATUS_FILE, PID_FILE, INJECT_STATS_FILE, TUI_STATS_FILE, CONTEXT_FILES } from "./paths.js";
+import { PIPEMD_DIR, PID_FILE, TUI_STATS_FILE } from "./paths.js";
 import { tryReadJson, isPidAlive } from "./json-utils.js";
 import { findContextBytes, readInjectStats } from "./statusline-data.js";
 import { log, errMsg } from "./logger.js";

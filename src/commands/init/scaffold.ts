@@ -18,15 +18,10 @@ import type { HarnessName } from "../../core/detectHarness.js";
 import type { Ecosystem } from "../../core/detect.js";
 import {
   loadTemplate,
-  estimateTokens,
-  TOKEN_PROFILES,
-  SCRIPT_MAX_LINES,
-  isTrimmed,
   contextFileName,
-  HARNESS_DESCRIPTIONS,
   HARNESS_USAGE_TIPS,
 } from "./constants.js";
-import type { ScriptDef, RunResult, AiAgent, Harness } from "./constants.js";
+import type { ScriptDef, AiAgent } from "./constants.js";
 import { loadScriptContent, getAllScripts } from "./scripts.js";
 
 const __filename = fileURLToPath(import.meta.url);

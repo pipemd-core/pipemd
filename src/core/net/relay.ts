@@ -12,7 +12,6 @@ import {
   type RelayStatus,
   type BlockPushMessage,
   type BlockEntry,
-  type BlockFetchRequest,
   DEFAULT_PORT,
   POLL_INTERVAL_MS,
   SESSION_EXPIRY_MS,

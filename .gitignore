@@ -44,9 +44,11 @@ coverage/
 
 # Debug
 node_modules/.cache/
+/0
 
 # PipeMD ephemeral context files
 AGENTS.md
 CLAUDE.md
 .pipemd/live/
 .pipemd/.daemon.pid
+AI_CONTEXT.md

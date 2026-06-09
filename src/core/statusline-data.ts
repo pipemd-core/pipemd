@@ -11,10 +11,7 @@ import { log, errMsg } from "./logger.js";
 import { tryReadJson, readInjectStats as readInjectStatsFromUtils } from "./json-utils.js";
 import { atomicWrite } from "./fs-utils.js";
 import { DEFAULT_STALE_MS } from "./crew.js";
-import {
-  INJECT_STATS_FILE as INJECT_STATS_PATH,
-  CONTEXT_FILES,
-} from "./paths.js";
+import { CONTEXT_FILES } from "./paths.js";
 
 export const STATUS_FILE = ".status.json";
 const INJECT_STATS_FILE = ".inject-stats.json";

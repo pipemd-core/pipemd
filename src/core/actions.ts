@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import YAML from "yaml";
-import type { PipeConfig } from "../config.js";
 import { readPidFile, writePidFile } from "./daemon.js";
 import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE } from "./paths.js";
 import { UserError } from "./errors.js";

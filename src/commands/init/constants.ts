@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Ecosystem } from "../../core/detect.js";
 import type { HarnessName } from "../../core/detectHarness.js";
-import type { PipeConfig, PipeMode, PmdMode, TokenProfile } from "../../config.js";
+import type { TokenProfile } from "../../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const SCRIPTS_ROOT = path.join(__dirname, "..", "scripts");

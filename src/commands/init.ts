@@ -14,13 +14,12 @@ import {
   VALID_HARNESSES,
   TOKEN_PROFILES,
   HARNESS_DESCRIPTIONS,
-  HARNESS_USAGE_TIPS,
   estimateTokens,
   SCRIPT_MAX_LINES,
 } from "./init/constants.js";
 import type { AiAgent, Harness } from "./init/constants.js";
 import { getAllScripts, testRunScripts, aiValidateScripts } from "./init/scripts.js";
-import { runInit, runInitFile, installHooksForHarnesses, printHarnessRouting, ensurePmdTags } from "./init/scaffold.js";
+import { runInit, runInitFile, installHooksForHarnesses, printHarnessRouting } from "./init/scaffold.js";
 import { renderPromptBlueprint, runHarness } from "./init/ui.js";
 import { UserError } from "../core/errors.js";
 

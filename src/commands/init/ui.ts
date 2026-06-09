@@ -9,9 +9,6 @@ import {
   estimateTokens,
   isTrimmed,
   HARNESS_CLI,
-  HARNESS_DESCRIPTIONS,
-  AGENT_CLI,
-  TOKENS_PER_LINE,
 } from "./constants.js";
 import type { ScriptDef, RunResult, AiAgent, Harness } from "./constants.js";
 import { getAllScripts } from "./scripts.js";

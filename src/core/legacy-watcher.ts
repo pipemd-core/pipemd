@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import { randomBytes } from "node:crypto";
 import chokidar from "chokidar";
 import { injectFile } from "./injector.js";

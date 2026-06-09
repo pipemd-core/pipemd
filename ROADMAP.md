@@ -1,6 +1,6 @@
 # PipeMD Roadmap
 
-*Last updated: 2026-05-26*
+*Last updated: 2026-06-09*
 
 > **PipeMD is a context provider. Its job: resolve fresh, relevant context and push it to AI agents faster than anything else.**
 
@@ -14,163 +14,96 @@ The moat: cross-harness, sub-ms context delivery via named pipes. No other tool 
 
 | Phase | Exit Criterion | Status |
 |-------|---------------|--------|
-| **0. Stabilize** | Zero dead resolvers. Zero broken resolvers. Every default rule produces non-empty output in the happy path. | **In Progress** |
-| **1. Trim** | Remove every LOC that doesn't produce or deliver context. MCP server is read-only. Task CLI gone. | Planned |
-| **2. Harden** | Every default rule produces fresh, relevant context for solo + crew agents. Ecosystem-aware syntax checking. Per-resolver timeouts. | Planned |
+| **0. Stabilize** | Zero dead resolvers. Zero broken resolvers. Every default rule produces non-empty output in the happy path. | **Done** (8719fab) |
+| **1. Trim** | Remove every LOC that doesn't produce or deliver context. MCP server gone. Task CLI gone. Dead resolvers gone. | **Done** (8719fab) |
+| **2. Harden** | Rich ecosystem-specific blocks. Compact quality summaries. Per-command timeouts. Token budgets enforced. | **In Progress** |
+| **2B. Measure** | Every resolver has a measurable token cost, latency, and accuracy contract. Regressions caught by CI. | Planned |
 | **3. Inter-Harness** | Two different harnesses on the same machine share context seamlessly via relay. | Planned |
-| **4. Network** | Multi-machine relay. Context sharing, not orchestration. Gated on Phases 0-3 being perfect. | Paused |
+| **4. Network** | Multi-machine relay. Context sharing, not orchestration. Gated on Phases 2-3 being perfect. | Paused |
+
+---
+
+## Completed Phases
+
+### Phase 0: Stabilize — Done
+
+Dead resolvers removed (`crew-todos`, `claimed-errors`, `git-context` before-edit). Per-resolver timeouts implemented. `triggerAsyncValidation` wired to on-idle.
+
+### Phase 1: Trim — Done
+
+- MCP server removed entirely (was 568 LOC, zero production consumers)
+- `pmd task` CLI removed (was 146 LOC, orchestration not context)
+- Dead resolvers killed (~836 LOC removed total)
+- `tasks.ts` kept — handoff resolver reads `tasks.json`
+
+### Phase 2 Progress (June 8-9)
+
+| Shipped | Commit | Detail |
+|---------|--------|--------|
+| Ecosystem-specific script blocks | 15e7835 | 20+ resolvers via bash scripts, ecosystem detection, SCRIPT_LIBRARY |
+| Exports block + env vars | 15e7835 | Per-module exported symbols + env var references |
+| Import-graph with symbol names | c36f588 | Module dependency graph with imported symbol names |
+| Per-command timeouts | c36f588 | Individual timeout budgets per resolver command |
+| Test-summary caching | c36f588 | Avoid re-running test suites on every injection |
+| Compact lint summaries | caa1fa5 | Rule frequency, severity split, `PMD_LINT_SEVERITY` env var |
+| Workspace-map block | 4caf297 | Monorepo member detection (pnpm/npm/yarn/cargo/go) |
+| Angular-structure block | 4caf297 | Standalone vs NgModule, routes, inventory, key dirs |
+| Django-urls block | 4caf297 | URL patterns from `urls.py` files |
+| Detection fixes | 4caf297 | manage.py, angular.json, Cargo workspace, go.work |
+| Dead import cleanup | — | 35 unused imports removed across 18 files |
 
 ---
 
 ## Current State: Honest Inventory
 
-### Codebase (10,525 LOC)
+### Codebase (~9,800 LOC)
 
 | Concern | LOC | Verdict |
 |---|---|---|
-| Block rendering / injection pipeline | 2,090 | **The product. Keep.** |
-| Hook adapters (Claude/Gemini/OpenCode) | 686 | **Delivery mechanism. Keep.** |
-| Daemon lifecycle | 367 | **Keep.** |
-| Detection (ecosystem/harness) | 632 | **Keep.** |
+| Block rendering / injection pipeline | 2,090 | **The product.** |
+| Hook adapters (Claude/Gemini/OpenCode) | 686 | **Delivery mechanism.** |
+| Daemon lifecycle | 367 | Keep. |
+| Detection (ecosystem/harness) | 632 | Keep. |
 | Tracing / dashboard | 662 | Debug tooling. Shrink. |
 | Statusline | 153 | Keep. |
 | Utilities | 142 | Keep. |
-| Crew sessions | 706 | Split — claim/lock IS context. join/leave is mechanism. Keep mechanism minimal. |
-| MCP server | 568 | **Gut.** Zero production consumers. 12 tools no agent calls. |
+| Crew sessions | 706 | Keep mechanism minimal. |
 | Network/relay | 764 | Freeze. Works, don't extend. |
-| Tasks CLI | 164 | **Cut.** WritBase territory. `tasks.ts` stays (handoff reads it). |
+| Bash scripts (resolvers) | ~1,200 | **The content.** Growing per ecosystem. |
 
-### Resolver Health (18 registered)
+### Script-Based Resolvers (30+)
 
-| Status | Count | Resolvers |
-|---|---|---|
-| **Working** | 8 | `crew-status`, `crew-locks`, `git-delta`, `git-staged`, `edit-diff`, `handoff`, `import-graph`, `session-diff` |
-| **Incomplete** | 4 | `file-errors`/`validate-file` (only work after async validation populates cache), `syntax-check` (JS-only, no TS), `test-failures` (slow, not in defaults) |
-| **Dead** | 3 | `crew-todos` (cache never written), `claimed-errors` (cache never written), `git-context` before-edit (`last-read:` cache never written) |
-| **Niche** | 3 | `custom`, `git-diff-stat`, `context-rules` (all work, expert-only) |
+| Category | Blocks |
+|----------|--------|
+| **Architecture** | `arch`, `deps`, `tree` |
+| **Project** | `todos`, `exports`, `workspace-map` |
+| **Quality** | `lint`, `type-check`, `test-summary` |
+| **Git** | `git-log`, `git-branch`, `git-status`, `diff-stat` |
+| **API** | `express-routes`, `nest-controllers`, `fastapi-routes`, `django-urls` |
+| **Frontend** | `nextjs-app-router`, `react-components`, `angular-routes`, `angular-structure` |
+| **Backend** | `prisma-schema`, `django-models`, `sqlalchemy-models` |
+| **Systems** | `cargo-deps`, `cargo-features`, `go-packages`, `go-interfaces` |
+| **DevOps** | `docker-stats`, `compose`, `cmake-targets` |
+| **Crew** | `crew` |
 
 ### Test Totals
 
-27 suites, 439 tests, 0 failures, 0 typecheck errors, 0 lint errors.
+33 tests, 0 failures, 0 typecheck errors, 7 lint warnings (all `no-explicit-any`), build clean.
+
+### Quality Gate Status
+
+| Gate | Status |
+|------|--------|
+| `pnpm build` | Clean |
+| `tsc --noEmit` | 0 errors |
+| `eslint src/` | 7 warnings (all `no-explicit-any`) |
+| Test suite | 33/33 pass |
 
 ---
 
-## Phase 0: Stabilize
+## Phase 2: Harden (Remaining)
 
-**Goal:** Every resolver in `DEFAULT_ACTIVE_RULES` produces non-empty output in the happy path. Zero dead resolvers.
-
-### 0.1 Kill dead resolvers
-
-| Action | File | Detail |
-|---|---|---|
-| Remove `crew-todos` resolver | `injection-engine.ts` | Cache key `"crew-todos"` never written by any production code. Handoff resolver already provides task context via `tasks.json`. |
-| Remove `crew-todos` from defaults | `injection-types.ts` | Drop from `DEFAULT_ACTIVE_RULES`, `VALID_SOURCES`, `ContextSource` |
-| Remove `crew-todos` from scope map | `block-scope.ts` | Drop from `BLOCK_SOURCES` + `BLOCK_SCOPES` |
-| Remove `claimed-errors` resolver | `injection-engine.ts` | Cache key `"claimed-errors"` never written. Will be rebuilt in Phase 2 as `session-validate` (with a producer). |
-| Remove `claimed-errors` from defaults | `injection-types.ts` + `block-scope.ts` | Same pattern as crew-todos |
-
-**Verify:** typecheck + lint + 439 tests pass (minus removed resolver tests).
-
-### 0.2 Fix syntax-check for TypeScript
-
-| Action | Detail |
-|---|---|
-| Add `.ts`/`.tsx` to `SYNTAX_EXT_MAP` | Use `tsc --noEmit {file}` instead of `node --check`. Fall back to `npx tsc` if not global. |
-| Use ecosystem detection | `detect.ts` already knows the ecosystem. Thread `SYNTAX_EXT_MAP` extension: `.py` → `python -m py_compile`, `.go` → `go vet`, `.rs` → `cargo check --message-format=short` |
-| Cache results | Same pattern as existing JS syntax check |
-
-**Verify:** `resolveSyntaxCheck("src/foo.ts")` returns errors for a file with type errors.
-
-### 0.3 Fix git-context before-edit (stale-read detection)
-
-| Action | Detail |
-|---|---|
-| Write `last-read` cache in before-read path | When `resolveInjections("before-read", file)` runs, write `writeCache("last-read:{session}:{file}", Date.now(), 60000)` |
-| Read it in before-edit | `resolveGitContext` already checks this cache — it just needs a producer |
-
-**Verify:** Edit a file externally, then before-edit shows stale-read warning.
-
-### 0.4 Per-resolver timeout
-
-| Action | Detail |
-|---|---|
-| Wrap each resolver in `Promise.race([resolver(ctx), timeout(2000)])` | Slow resolver gets killed, chain continues. No silent budget starvation. |
-| Log timeout events | `log.warn("resolver {source} timed out after 2000ms")` |
-
-**Verify:** A resolver that sleeps 5s doesn't block others.
-
-### 0.5 Wire `triggerAsyncValidation` to on-idle
-
-| Action | Detail |
-|---|---|
-| Add `triggerAsyncValidation()` call in the on-idle resolver cycle | Ensures `file-errors`/`validate-file` caches are populated even when hooks don't fire `--async-validate` |
-
-**Verify:** `file-errors` returns content after an idle tick without any prior after-edit hook.
-
-### Phase 0 Success Criteria
-
-- [ ] 0 dead resolvers (was 3)
-- [ ] `syntax-check` works for `.ts`/`.tsx` (was JS-only)
-- [ ] `git-context` before-edit shows stale-read warnings (was dead)
-- [ ] No resolver can starve the 5s budget (was possible)
-- [ ] `file-errors`/`validate-file` populated by on-idle (was hook-dependent)
-- [ ] All tests pass
-
----
-
-## Phase 1: Trim
-
-**Goal:** Remove every LOC that doesn't produce or deliver context.
-
-### 1.1 Gut MCP server
-
-The MCP server is 568 LOC. No agent autonomously calls MCP tools in 2026. Keep the thin read layer; remove management.
-
-| Keep (read-only) | Remove (management) |
-|---|---|
-| 6 resource templates (`pmd://blocks`, `pmd://blocks/{source}`, `pmd://crew/status`, `pmd://tasks`, `pmd://tasks/{id}`, `pmd://crew/locks/{path}`) | `pmd_task_create`, `pmd_task_update` |
-| `pmd_blocks_execute` (resolves blocks, is a read operation) | `pmd_task_claim_next` |
-| `pmd_validate_file` (produces context via validation cache) | `pmd_crew_claim`, `pmd_crew_release` |
-| | `pmd_crew_join`, `pmd_crew_leave`, `pmd_crew_note` |
-| | `pmd_cache_invalidate` |
-
-**Verify:** MCP server starts, resources work, 9 management tools gone. ~250 LOC removed.
-
-### 1.2 Remove `pmd task` CLI
-
-The handoff resolver reads `tasks.json` — that's context. The CRUD CLI that manages it is orchestration.
-
-| Keep | Remove |
-|---|---|
-| `src/core/tasks.ts` (164 LOC) — handoff resolver reads it | `src/commands/task.ts` (146 LOC) |
-| `tasks.json` file format | `pmd task` CLI registration in `src/index.ts` |
-| | Task-related MCP tools (already removed in 1.1) |
-
-Tasks can be managed by any external tool (WritBase, orchestrator, manual JSON edit). The handoff resolver reads whatever is there.
-
-**Verify:** `pmd task` command gone. Handoff resolver still injects task context when `tasks.json` exists.
-
-### 1.3 Strip dead exports
-
-- Remove task-related imports from `mcp-server.ts`
-- Remove unused crew imports from `mcp-server.ts`
-- Clean up `package.json` if task-related deps exist
-
-**Verify:** `npx tsc --noEmit` clean. `npx eslint src/core/mcp-server.ts` clean.
-
-### Phase 1 Success Criteria
-
-- [ ] ~400 LOC removed
-- [ ] MCP server is read-only (6 resources + 2 tools)
-- [ ] `pmd task` CLI removed
-- [ ] Zero dead imports/exports
-- [ ] All tests pass
-
----
-
-## Phase 2: Harden
-
-**Goal:** Every default rule produces fresh, relevant context. The injection pipeline is bulletproof for single machine with 1-5 agents.
+**Goal:** Every default rule produces fresh, relevant context. The injection pipeline is bulletproof for single machine.
 
 ### 2.1 Rebuild `session-validate` resolver
 
@@ -178,50 +111,79 @@ Replace the dead `claimed-errors` with a resolver that actually RUNS validation.
 
 | Action | Detail |
 |---|---|
-| New `session-validate` resolver | Resolves active session's claimed files. Runs `eslint --no-error-on-unmatched-pattern {files}` with 4s timeout. Caches result keyed by `session-validate:{sessionId}`. |
+| New `session-validate` resolver | Resolves active session's claimed files. Runs `eslint --no-error-on-unmatched-pattern {files}` with 4s timeout. |
 | Register in defaults | `after-edit` (global, async, max-lines 20) + `on-idle` (global, max-lines 20) |
 | Scope | `local` — tied to session's claimed files |
 
-**Verify:** Agent claims 3 files, introduces a lint error → session-validate shows only errors from those 3 files.
-
-### 2.2 Wire `test-failures` into on-idle
+### 2.2 Ecosystem-aware syntax checking
 
 | Action | Detail |
 |---|---|
-| Add `test-failures` to on-idle defaults | `on-idle: { source: "test-failures", scope: "global", "max-lines": 10 }` |
-| Individual timeout | 15s budget for test-failures (won't starve others with per-resolver timeout from Phase 0.4) |
-
-**Verify:** Failing test injected on idle tick without starving other resolvers.
-
-### 2.3 Ecosystem-aware syntax checking
-
-| Action | Detail |
-|---|---|
-| Use `detect.ts` output | At daemon start, detect ecosystem and configure `SYNTAX_EXT_MAP` accordingly |
-| `.ts`/`.tsx` → `tsc --noEmit` | Already done in Phase 0.2 |
+| `.ts`/`.tsx` → `tsc --noEmit` | Use ecosystem detection from `detect.ts` |
 | `.py` → `python -m py_compile` | Only if ecosystem is Python |
 | `.go` → `go vet` | Only if ecosystem is Go |
-| `.rs` → `cargo check --message-format=short 2>&1` | Only if ecosystem is Rust |
+| `.rs` → `cargo check` | Only if ecosystem is Rust |
 
-**Verify:** Syntax errors detected for each ecosystem's primary language.
-
-### 2.4 `pmd doctor` validates resolver health
+### 2.3 `pmd doctor` validates resolver health
 
 | Action | Detail |
 |---|---|
-| Add resolver health check to `pmd doctor` | For each source in `DEFAULT_ACTIVE_RULES`, run the resolver and check it returns non-empty (or at least doesn't throw) |
-| Report dead resolvers | `"⚠️ import-graph: returned empty (no target file — ok if no hooks fired)"` |
-
-**Verify:** `pmd doctor` reports resolver health status.
+| Run each resolver | For each source in `DEFAULT_ACTIVE_RULES`, run and check non-empty or doesn't throw |
+| Report dead resolvers | `"⚠️ import-graph: returned empty"` |
 
 ### Phase 2 Success Criteria
 
 - [ ] `session-validate` replaces `claimed-errors` (producer + consumer)
-- [ ] `test-failures` in default on-idle rules
 - [ ] Syntax checking works for TS/Python/Go/Rust
 - [ ] `pmd doctor` validates resolver health
 - [ ] All default rules produce context in the happy path
-- [ ] All tests pass
+
+---
+
+## Phase 2B: Measure
+
+**Goal:** Every resolver has a measurable token cost, latency, and accuracy contract. Regressions caught by CI, not by agents.
+
+### Core insight
+
+PipeMD's claim: the block is cheaper and fresher than the shell command it replaces. Two measurable axes:
+
+- **Efficiency** = information delivered / tokens spent
+- **Accuracy** = does the block match ground truth right now?
+
+### 2B.1 Intrinsic benchmark harness
+
+| Action | Detail |
+|---|---|
+| Create `bench/` directory | One test file per ecosystem, running each ecosystem's resolvers against its fixture |
+| Token snapshot | For each fixture x resolver: run script, estimate tokens via `estimateTokens()`, record in `BENCHMARKS.md` |
+| Latency snapshot | Wall-clock time per resolver. Fail if exceeds `commandTimeouts` budget |
+| Accuracy golden | For structural resolvers (arch, exports, workspace-map): compare output against committed golden file |
+| CI gate | `pnpm bench` runs on every PR. Fail if any resolver: empty output, exceeds token budget, exceeds timeout, golden mismatch |
+
+### 2B.2 Resolver contract tests
+
+| Action | Detail |
+|---|---|
+| Every fixture x every applicable resolver | Non-empty output, under token limit, under timeout |
+| Grow fixture corpus | 5-8 fixtures per ecosystem (vendor trimmed copies of real OSS repos) |
+| Refresh integration test | Copy fixture -> `pmd refresh` -> assert all configured blocks produce non-empty output |
+
+### 2B.3 Token ratchet
+
+| Action | Detail |
+|---|---|
+| Snapshot current token counts per block | Committed baseline in `BENCHMARKS.md` |
+| Fail CI if any block grows >15% | Prevents silent token bloat |
+| Fail CI if any block shrinks >50% | Catches silent failures (empty output that passes "non-empty" by having a header) |
+
+### Phase 2B Success Criteria
+
+- [ ] `pnpm bench` runs in <30s across all fixtures
+- [ ] Every default resolver has a committed token + latency baseline
+- [ ] Golden files exist for structural resolvers (arch, exports, workspace-map)
+- [ ] Token ratchet catches >15% growth
+- [ ] Refresh integration test covers at least 3 ecosystems
 
 ---
 
@@ -229,39 +191,34 @@ Replace the dead `claimed-errors` with a resolver that actually RUNS validation.
 
 **Goal:** Two different harnesses on the same machine share context seamlessly.
 
-**Prerequisite:** Phases 0-2 complete. Zero dead resolvers. Zero broken resolvers.
+**Prerequisite:** Phases 2-2B complete. Zero dead resolvers. Measurable quality.
 
 ### 3.1 Wire shared blocks into daemon periodic cycle
 
 | Action | Detail |
 |---|---|
-| Push shared blocks every 30s | Daemon already has a relay client. Add periodic `pushBlocks()` for shared sources (test-failures, git-delta, git-staged, context-rules, handoff) |
-| Fetch shared blocks every 30s | Existing `fetchBlocks()` already does this. Wire into injection pipeline so remote blocks are available to resolvers. |
-| Shared block injection | When `resolveTestFailures` runs, check both local cache AND remote blocks from relay. Prefer freshest. |
-
-**Verify:** Claude Code + OpenCode both see each other's crew status via relay blocks.
+| Push shared blocks every 30s | Daemon already has a relay client. Add periodic `pushBlocks()` for shared sources |
+| Fetch shared blocks every 30s | Existing `fetchBlocks()` already does this. Wire into injection pipeline |
+| Shared block injection | Check both local cache AND remote blocks. Prefer freshest. |
 
 ### 3.2 Cross-harness injection rules
 
 | Action | Detail |
 |---|---|
 | Injection config supports remote sources | `"when on-idle, if remote sessions exist, inject their test-failures"` |
-| Conditional injection | Only inject remote blocks when remote sessions are detected (avoid noise for solo dev) |
-
-**Verify:** Agent sees test failures from a different harness's session.
+| Conditional injection | Only inject remote blocks when remote sessions detected (avoid noise for solo dev) |
 
 ### Phase 3 Success Criteria
 
 - [ ] Two harnesses on same machine share shared blocks via relay
 - [ ] No code changes needed — works with existing `pmd link` setup
 - [ ] Solo dev sees zero overhead (no remote blocks when no remote sessions)
-- [ ] All tests pass
 
 ---
 
 ## Phase 4: Network
 
-**Gated on Phases 0-3 being perfect. Not started until single-machine experience is flawless.**
+**Gated on Phases 2-3 being perfect. Not started until single-machine experience is flawless.**
 
 Multi-machine relay. Same principle — context sharing, not orchestration.
 
@@ -275,29 +232,30 @@ Multi-machine relay. Same principle — context sharing, not orchestration.
 
 | Item | Status | Why |
 |------|--------|-----|
-| MCP management tools | **Cut** | No agent autonomously calls MCP tools in 2026. Read-only MCP is sufficient. |
-| `pmd task` CLI | **Cut** | Orchestration, not context. `tasks.json` stays (handoff reads it). External tools manage it. |
+| MCP server | **Cut** | Zero production consumers. Hook/plugin path is the working delivery mechanism. |
+| `pmd task` CLI | **Cut** | Orchestration, not context. `tasks.json` stays (handoff reads it). |
 | Link relay persistence | Paused | Phase 4 is gated on Phase 3 proof |
 | Mesh gossip protocol | Cut | Star topology suffices |
 | SSH tunnel management | Cut | Users compose with existing tools |
 | Team mode / RBAC | Cut | Single-user DX must be flawless first |
 | Custom DSL or sandboxing | Cut | Blocks are bash scripts. No new runtime. |
-| Editor integrations (cursor position, selection) | Cut | Different product surface. PipeMD injects on tool calls, not keystrokes. |
-| Agent fleet orchestration | **Cut** | CAO/Weave territory. PipeMD provides context, not task assignment or scheduling. |
+| Editor integrations | Cut | Different product surface. PipeMD injects on tool calls, not keystrokes. |
+| Agent fleet orchestration | **Cut** | CAO/Weave territory. PipeMD provides context, not task assignment. |
 
 ## Design Principles
 
 1. **Everything produces or delivers context.** If a feature doesn't feed the injection engine or deliver its output to an agent, it doesn't belong in PipeMD.
-2. **Resolver-first.** Build resolvers (work via hooks immediately). Expose via MCP later (when ecosystem catches up).
+2. **Resolver-first.** Build resolvers (work via hooks immediately). Expose via other surfaces later.
 3. **No new config files.** Everything stays in `injection.yml` and CLI flags.
 4. **Read orchestration state, don't manage it.** PipeMD reads crew sessions, tasks, and git state to produce context. It doesn't assign tasks, schedule agents, or manage fleets.
 5. **Every resolver must have a producer.** A resolver that reads from a cache key that nothing writes is dead code. Kill it or build the producer.
+6. **Measure, don't guess.** Every block has a token cost, a latency budget, and an accuracy contract. Regressions are caught by machines, not by agents.
 
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| Agent vendors ship native injection | Medium | PipeMD's moat is cross-agent universality + named-pipe PUSH speed. Vendor solutions fragment across ecosystems. |
-| Solo agents dominate, crew has zero pull | Medium-High | Phases 0-2 serve solo agents perfectly. Crew is additive, not required. |
+| Agent vendors ship native injection | Medium | PipeMD's moat is cross-agent universality + named-pipe PUSH speed. |
+| Solo agents dominate, crew has zero pull | Medium-High | Phases 2-2B serve solo agents perfectly. Crew is additive. |
 | Named pipes break on new platforms | Low | Legacy mode (file watcher) is first-class fallback. |
-| MCP adoption remains low | High | MCP server is already trimmed to read-only. Minimal investment. The hook/plugin path is the working delivery mechanism. |
+| Token bloat from rich blocks | Medium | Token ratchet (Phase 2B) catches growth before it compounds. |

@@ -20,7 +20,7 @@ import {
   DEFAULT_STALE_MS,
   type CrewRole,
 } from "../core/crew.js";
-import { installHooks, removeHooks } from "../core/hooks.js";
+import { installHooks } from "../core/hooks.js";
 import { clearSessionRecords } from "../core/dedup.js";
 import { detectHarnesses } from "../core/detectHarness.js";
 import { log, errMsg } from "../core/logger.js";

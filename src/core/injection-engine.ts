@@ -19,7 +19,6 @@ import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession } from "./crew.js";
 import { formatTimeAgo } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
-import { invalidateCachePattern } from "./cache.js";
 import { getTasksForSession, formatTaskBlock } from "./tasks.js";
 
 const execFileAsync = promisify(execFile);

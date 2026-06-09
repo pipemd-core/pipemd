@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import chalk from "chalk";
 import { log, errMsg } from "../../core/logger.js";
 import type { Ecosystem } from "../../core/detect.js";
-import type { TokenProfile } from "../../config.js";
 import {
   SCRIPTS_ROOT,
   SCRIPT_LIBRARY,

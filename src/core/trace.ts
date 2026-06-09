@@ -4,7 +4,7 @@ import chalk from "chalk";
 import { listSessions } from "./crew.js";
 import type { CrewSession } from "./crew.js";
 import { INJECTED_DIR } from "./dedup.js";
-import { CREW_DIR, INJECTION_LOG_DIR, TUI_STATS_FILE, INJECT_STATS_FILE } from "./paths.js";
+import { INJECTION_LOG_DIR, TUI_STATS_FILE, INJECT_STATS_FILE } from "./paths.js";
 import { log, errMsg } from "./logger.js";
 import { tryReadJson, isPidAlive, readInjectStats, formatTimeAgo } from "./json-utils.js";
 
@@ -170,7 +170,7 @@ function readOrphanedDedup(crewIds: Set<string>): string[] {
 function enrichSession(
   raw: CrewSession,
   events: Record<string, unknown>[],
-  crewMap: Map<string, CrewSession>,
+  _crewMap: Map<string, CrewSession>,
 ): TraceSession {
   const alive = isPidAlive(raw.pid);
   const staleMs = Date.now() - new Date(raw.lastHeartbeat).getTime();
@@ -178,7 +178,7 @@ function enrichSession(
 
   let injectionCount = 0;
   let dedupCount = 0;
-  for (const entry of Object.values(dedupSources)) {
+  for (const _entry of Object.values(dedupSources)) {
     injectionCount++;
   }
 

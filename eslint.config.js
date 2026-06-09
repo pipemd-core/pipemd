@@ -14,12 +14,33 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-empty": "off",
       "no-control-regex": "off",
     },
   },
   {
-    ignores: ["dist/", "tests/", "scripts/", "*.mjs", "*.js", "src/plugins/"],
+    files: [".opencode/**/*.js"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        require: "readonly",
+        fetch: "readonly",
+        AbortSignal: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        module: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-require-imports": "off",
+      "no-empty": "off",
+      "no-undef": "off",
+    },
+  },
+  {
+    ignores: ["dist/", "tests/", "scripts/", "*.mjs", "src/plugins/"],
   },
 );

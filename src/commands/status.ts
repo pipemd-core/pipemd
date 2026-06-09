@@ -4,7 +4,7 @@ import path from "node:path";
 import chalk from "chalk";
 import { readPidFile } from "../core/daemon.js";
 import { log, tailLog, errMsg } from "../core/logger.js";
-import { PIPEMD_DIR, STATUS_FILE, LIVE_DIR, INJECT_STATS_FILE } from "../core/paths.js";
+import { STATUS_FILE, LIVE_DIR, INJECT_STATS_FILE } from "../core/paths.js";
 import { loadConfig, ConfigError } from "../core/daemon-config.js";
 import { readInjectStats } from "../core/json-utils.js";
 import { formatTimeAgo } from "../core/json-utils.js";
@@ -41,7 +41,7 @@ export const statusCommand = new Command("status")
         if (status.error) {
           console.log(chalk.red(`  Last Error:  ${status.error}`));
         }
-      } catch (e) {
+      } catch {
         log.error("Error reading status file");
       }
     }

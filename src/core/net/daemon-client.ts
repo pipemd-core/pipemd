@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { CrewSession } from "../crew.js";
 import { setRemoteSessions as setCrewRemoteSessions } from "../crew.js";
-import { readCache, DEFAULT_TTLS } from "../cache.js";
+import { readCache } from "../cache.js";
 import { BLOCK_SOURCES, isSharedBlock } from "../block-scope.js";
 import { log } from "../logger.js";
 import { type CrewMessage, type BlockPushMessage, type BlockEntry, POLL_INTERVAL_MS } from "./protocol.js";
@@ -178,7 +178,7 @@ export async function fetchBlocks(group: string, commitSha: string): Promise<Blo
     const url = new URL(urlStr);
     const path = `/blocks?group=${encodeURIComponent(group)}&commitSha=${encodeURIComponent(commitSha)}`;
 
-    return await new Promise<BlockEntry[]>((resolve, reject) => {
+    return await new Promise<BlockEntry[]>((resolve, _reject) => {
       const req = http.request(
         { hostname: url.hostname, port: url.port || 9741, path, method: "GET", timeout: 5000 },
         (res) => {

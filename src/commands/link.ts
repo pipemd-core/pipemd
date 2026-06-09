@@ -153,7 +153,7 @@ async function doStart(): Promise<string | null> {
   }
 
   ensureLinkDir();
-  const pid = startRelayProcess();
+  const _pid = startRelayProcess();
 
   for (let i = 0; i < 20; i++) {
     const check = readRelayPid();
