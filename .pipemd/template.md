@@ -249,3 +249,51 @@ Every change must be verified. Weak success criteria ("make it work") require co
 
 ```
 <!-- /pmd -->
+
+<!-- pmd: git-log -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: git-branch -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: git-status -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: diff-stat -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: type-check -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: express-routes -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: docker-stats -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: tf-state -->
+```
+
+```
+<!-- /pmd -->

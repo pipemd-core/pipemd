@@ -6,8 +6,9 @@
 #   expert  = full customization of injection rules
 #
 # triggers: before-read | before-edit | after-edit | on-idle | on-start
-# sources:  crew-status | crew-locks | file-errors | validate-file
-#           git-context | git-delta | git-staged | git-diff-stat | test-failures | custom | context-rules
+# sources:  crew-status | crew-locks | file-errors
+#           git-context | git-delta | git-staged | git-diff-stat
+#           edit-diff | syntax-check | test-failures | custom | context-rules
 #           import-graph | handoff | session-diff | exports
 # scope:    target-file | global
 delivery: active
@@ -16,9 +17,6 @@ rules:
     - source: crew-status
       scope: global
       max-lines: 3
-    - source: crew-todos
-      scope: global
-      max-lines: 10
     - source: context-rules
       scope: global
       max-lines: 50
@@ -31,10 +29,14 @@ rules:
     - source: git-context
       scope: target-file
       max-lines: 2
-  after-edit:
-    - source: validate-file
+    - source: import-graph
       scope: target-file
-      async: true
+      max-lines: 25
+    - source: exports
+      scope: target-file
+      max-lines: 15
+    - source: syntax-check
+      scope: target-file
       max-lines: 5
   on-start:
     - source: git-delta
@@ -43,14 +45,36 @@ rules:
     - source: test-failures
       scope: global
       max-lines: 15
+    - source: handoff
+      scope: global
+      max-lines: 30
   on-idle:
     - source: git-staged
       scope: global
       max-lines: 10
+    - source: session-diff
+      scope: global
+      max-lines: 15
+    - source: handoff
+      scope: global
+      max-lines: 30
+  after-edit:
+    - source: edit-diff
+      scope: target-file
+      async: true
+      max-lines: 20
+    - source: syntax-check
+      scope: target-file
+      async: true
+      max-lines: 5
+    - source: file-errors
+      scope: target-file
+      async: true
+      max-lines: 15
 context-files:
-  - glob: "AGENTS.md"
+  - glob: AGENTS.md
     trigger: on-start
     max-lines: 200
-  - glob: "src/**/*.ts"
+  - glob: src/**/*.ts
     trigger: before-read
     max-lines: 30
