@@ -42,6 +42,7 @@ Before writing a single line of code, gather your bearings from the blocks below
 | Current branch, tracking status | `git-branch` | `git status -b` |
 | Changed / staged / untracked files | `git-status` | `git status` |
 | Diff summary (+/- lines) | `diff-stat` | `git diff --stat` |
+| Change hotspots (where bugs live) | `hotspots` | `git log --numstat` |
 | Type errors | `type-check` | `tsc --noEmit` |
 | Lint errors | `lint` | `eslint .` |
 | Test pass/fail summary | `test-summary` | full test run |
@@ -245,6 +246,14 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ### Diff Stats
 
 <!-- pmd: diff-stat -->
+```
+
+```
+<!-- /pmd -->
+
+### Churn Hotspots
+
+<!-- pmd: hotspots -->
 ```
 
 ```

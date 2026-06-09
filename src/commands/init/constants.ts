@@ -72,7 +72,7 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   "cmake-targets": 40, "class-diagram": 40, interfaces: 30, "include-graph": 40,
   "cargo-deps": 40, "cargo-features": 20, "go-packages": 40, "go-interfaces": 30,
   "docker-stats": 30, "k8s-unhealthy": 20, "tf-state": 40, "aws-context": 10,
-  crew: 40, "workspace-map": 60, "django-urls": 40,
+  crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15,
 };
 
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
@@ -92,6 +92,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "git-branch", label: "Branch & Tracking", description: "Current branch, upstream, ahead/behind", command: "bash .pipemd/scripts/git/git-branch.sh", category: "git", volatile: 2, file: "git/git-branch.sh" },
     { id: "git-status", label: "Git Status", description: "Changed, staged, and untracked files", command: "bash .pipemd/scripts/git/git-status.sh", category: "git", volatile: 3, file: "git/git-status.sh" },
     { id: "diff-stat", label: "Diff Stats", description: "File change summary (additions/deletions)", command: "bash .pipemd/scripts/git/diff-stat.sh", category: "git", volatile: 4, file: "git/diff-stat.sh" },
+    { id: "hotspots", label: "Churn Hotspots", description: "Files with highest change frequency and churn volume", command: "bash .pipemd/scripts/git/hotspots.sh", category: "git", volatile: 2, file: "git/hotspots.sh" },
   ],
   quality: [
     { id: "type-check", label: "Type Errors", description: "Static type errors (tsc, mypy, etc.)", command: "bash .pipemd/scripts/quality/type-check.sh", category: "quality", volatile: 2, file: "quality/type-check.sh" },

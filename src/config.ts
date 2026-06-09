@@ -53,6 +53,7 @@ export const DEFAULT_CONFIG: PipeConfig = {
     tree: "bash .pipemd/scripts/project/tree.sh",
     "git-status": "bash .pipemd/scripts/git/git-status.sh",
     "diff-stat": "bash .pipemd/scripts/git/diff-stat.sh",
+    hotspots: "bash .pipemd/scripts/git/hotspots.sh",
     todos: "bash .pipemd/scripts/project/find-todos.sh",
   },
   injected: [{ file: ".pipemd/template.md", watch: true }],

@@ -105,7 +105,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
 
   if (has(".git")) {
     signals.push(".git → git scripts");
-    recommended.push("git-log", "git-branch", "git-status", "diff-stat");
+    recommended.push("git-log", "git-branch", "git-status", "diff-stat", "hotspots");
   }
 
   // ── DevOps Detection (supplementary — adds scripts to any ecosystem) ──

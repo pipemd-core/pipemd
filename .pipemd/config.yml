@@ -19,6 +19,8 @@ commands:
     .pipemd/scripts/git/git-status.sh
   diff-stat: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/git/diff-stat.sh
+  hotspots: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/git/hotspots.sh
   type-check: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/quality/type-check.sh
   lint: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
@@ -27,6 +29,8 @@ commands:
     .pipemd/scripts/crew/crew.sh
   test-summary: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/quality/test-summary.sh
+  express-routes: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/api/express-routes.sh
 injected:
   - file: .pipemd/template.md
     watch: true
@@ -63,6 +67,13 @@ pipes:
     command: crew
   - file: test-summary.md
     command: test-summary
+  - file: AI_CONTEXT.md
+    render: .pipemd/template.md
+    mode: pipe
+  - file: express-routes.md
+    command: express-routes
+  - file: hotspots.md
+    command: hotspots
 settings:
   debounceMs: 3000
   reServeDelayMs: 1000
