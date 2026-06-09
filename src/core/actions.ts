@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import YAML from "yaml";
 import { readPidFile, writePidFile } from "./daemon.js";
-import { PIPEMD_DIR, LIVE_DIR, CONFIG_PATH, PID_FILE } from "./paths.js";
+import { LIVE_DIR, CONFIG_PATH, PID_FILE } from "./paths.js";
 import { UserError } from "./errors.js";
 
 export function isDaemonRunning(pid: number): boolean {

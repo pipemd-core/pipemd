@@ -14,90 +14,89 @@ The moat: cross-harness, sub-ms context delivery via named pipes. No other tool 
 
 | Phase | Exit Criterion | Status |
 |-------|---------------|--------|
-| **0. Stabilize** | Zero dead resolvers. Zero broken resolvers. Every default rule produces non-empty output in the happy path. | **Done** (8719fab) |
-| **1. Trim** | Remove every LOC that doesn't produce or deliver context. MCP server gone. Task CLI gone. Dead resolvers gone. | **Done** (8719fab) |
-| **2. Harden** | Rich ecosystem-specific blocks. Compact quality summaries. Per-command timeouts. Token budgets enforced. | **In Progress** |
-| **2B. Measure** | Every resolver has a measurable token cost, latency, and accuracy contract. Regressions caught by CI. | Planned |
-| **3. Inter-Harness** | Two different harnesses on the same machine share context seamlessly via relay. | Planned |
-| **4. Network** | Multi-machine relay. Context sharing, not orchestration. Gated on Phases 2-3 being perfect. | Paused |
+| **0. Stabilize** | Zero dead resolvers. Per-resolver timeouts. | **Done** (`8719fab`) |
+| **1. Trim** | MCP server gone. Task CLI gone. ~836 LOC removed. | **Done** (`8719fab`) |
+| **2. Harden** | 38 block types across 7 ecosystems. Compact quality summaries. Token budgets enforced. | **In Progress** |
+| **2B. Measure** | Token cost, latency, and accuracy contracts per resolver. CI ratchet. | Planned |
+| **3. Inter-Harness** | Two harnesses, same machine, shared context via relay. | Planned |
+| **4. Network** | Multi-machine relay. Gated on Phases 2-3. | Paused |
 
 ---
 
-## Completed Phases
+## Completed Work
 
-### Phase 0: Stabilize — Done
+### Phase 0 + 1: Stabilize & Trim — `8719fab` (2026-06-08)
 
-Dead resolvers removed (`crew-todos`, `claimed-errors`, `git-context` before-edit). Per-resolver timeouts implemented. `triggerAsyncValidation` wired to on-idle.
+One commit that cut scope rather than adding it. Removed:
 
-### Phase 1: Trim — Done
+- MCP server (568 LOC) — zero production consumers, no agent calls any of the 12 tools
+- `pmd task` CLI (146 LOC) — orchestration, not context
+- Dead resolvers: `crew-todos` (cache never written), `claimed-errors` (cache never written), `git-context` before-edit (`last-read:` cache never written)
+- Net: ~836 LOC removed, one dependency dropped
 
-- MCP server removed entirely (was 568 LOC, zero production consumers)
-- `pmd task` CLI removed (was 146 LOC, orchestration not context)
-- Dead resolvers killed (~836 LOC removed total)
-- `tasks.ts` kept — handoff resolver reads `tasks.json`
+Kept: `tasks.ts` (handoff resolver reads `tasks.json`), relay (works, don't extend), crew mechanism.
 
-### Phase 2 Progress (June 8-9)
+### Phase 2 Progress (2026-06-08 to 2026-06-09)
 
 | Shipped | Commit | Detail |
 |---------|--------|--------|
-| Ecosystem-specific script blocks | 15e7835 | 20+ resolvers via bash scripts, ecosystem detection, SCRIPT_LIBRARY |
-| Exports block + env vars | 15e7835 | Per-module exported symbols + env var references |
-| Import-graph with symbol names | c36f588 | Module dependency graph with imported symbol names |
-| Per-command timeouts | c36f588 | Individual timeout budgets per resolver command |
-| Test-summary caching | c36f588 | Avoid re-running test suites on every injection |
-| Compact lint summaries | caa1fa5 | Rule frequency, severity split, `PMD_LINT_SEVERITY` env var |
-| Workspace-map block | 4caf297 | Monorepo member detection (pnpm/npm/yarn/cargo/go) |
-| Angular-structure block | 4caf297 | Standalone vs NgModule, routes, inventory, key dirs |
-| Django-urls block | 4caf297 | URL patterns from `urls.py` files |
-| Detection fixes | 4caf297 | manage.py, angular.json, Cargo workspace, go.work |
-| Dead import cleanup | — | 35 unused imports removed across 18 files |
+| Script-based resolver system | `15e7835` | Bash scripts per ecosystem, SCRIPT_LIBRARY registry, 7 ecosystems detected |
+| Exports block | `15e7835` | Per-module exported symbols + env var references |
+| Import-graph rewrite | `c36f588` | Module dependency graph with imported symbol names |
+| Per-command timeouts | `c36f588` | Individual timeout budgets per resolver command |
+| Test-summary caching | `c36f588` | Avoid re-running test suites on every injection |
+| Compact lint summaries | `caa1fa5` | Rule frequency, severity split, `PMD_LINT_SEVERITY` env var |
+| Workspace-map block | `4caf297` | Monorepo member detection (pnpm/npm/yarn/cargo/go) |
+| Angular-structure block | `4caf297` | Standalone vs NgModule, routes, inventory, key dirs |
+| Django-urls block | `4caf297` | URL patterns from `urls.py` files |
+| Detection fixes | `4caf297` | manage.py → Python, angular.json → Angular, Cargo workspace + go.work → workspace-map |
+| Dead import cleanup | `0ee95e1` | 30 unused imports removed, duplicate import fixed, eslint env for plugin |
 
 ---
 
-## Current State: Honest Inventory
+## Current State
 
-### Codebase (~9,800 LOC)
+### Codebase — 10,900 LOC (src/) + 4,864 LOC (scripts/)
 
 | Concern | LOC | Verdict |
 |---|---|---|
-| Block rendering / injection pipeline | 2,090 | **The product.** |
-| Hook adapters (Claude/Gemini/OpenCode) | 686 | **Delivery mechanism.** |
-| Daemon lifecycle | 367 | Keep. |
-| Detection (ecosystem/harness) | 632 | Keep. |
-| Tracing / dashboard | 662 | Debug tooling. Shrink. |
-| Statusline | 153 | Keep. |
-| Utilities | 142 | Keep. |
-| Crew sessions | 706 | Keep mechanism minimal. |
-| Network/relay | 764 | Freeze. Works, don't extend. |
-| Bash scripts (resolvers) | ~1,200 | **The content.** Growing per ecosystem. |
+| Injection pipeline | 2,458 | **The product.** |
+| Hook adapters (Claude/Gemini/OpenCode) + plugins | 2,082 | **Delivery mechanism.** |
+| Commands + init system | 2,836 + 1,390 | CLI surface. |
+| Detection (ecosystem/harness) | 651 | Keep. |
+| Tracing / dashboard | 662 | Debug tooling. Shrink when Phase 2B ships real numbers. |
+| Network/relay | 763 | Freeze. |
+| Daemon lifecycle | 527 | Keep. |
+| Statusline | 332 | Keep. |
+| Crew sessions | 308 | Minimal mechanism. |
+| Utilities | 321 | Keep. |
+| Bash scripts | 4,864 | **The content.** 81 resolver scripts (57 ecosystem + 24 shared), 10 library scripts. |
 
-### Script-Based Resolvers (30+)
+### 38 Block Types
 
 | Category | Blocks |
 |----------|--------|
-| **Architecture** | `arch`, `deps`, `tree` |
-| **Project** | `todos`, `exports`, `workspace-map` |
+| **Architecture** | `arch` |
+| **Project** | `tree`, `deps`, `todos`, `exports`, `workspace-map` |
 | **Quality** | `lint`, `type-check`, `test-summary` |
 | **Git** | `git-log`, `git-branch`, `git-status`, `diff-stat` |
 | **API** | `express-routes`, `nest-controllers`, `fastapi-routes`, `django-urls` |
 | **Frontend** | `nextjs-app-router`, `react-components`, `angular-routes`, `angular-structure` |
-| **Backend** | `prisma-schema`, `django-models`, `sqlalchemy-models` |
-| **Systems** | `cargo-deps`, `cargo-features`, `go-packages`, `go-interfaces` |
-| **DevOps** | `docker-stats`, `compose`, `cmake-targets` |
+| **Database** | `prisma-schema` (via compose), `django-models`, `sqlalchemy` |
+| **Systems** | `cargo-deps`, `cargo-features`, `go-packages`, `go-interfaces`, `cmake-targets`, `class-diagram`, `interfaces`, `include-graph` |
+| **DevOps** | `docker-stats`, `compose`, `k8s-unhealthy`, `tf-state`, `aws-context` |
 | **Crew** | `crew` |
 
-### Test Totals
+### Test & Quality
 
-33 tests, 0 failures, 0 typecheck errors, 7 lint warnings (all `no-explicit-any`), build clean.
-
-### Quality Gate Status
-
-| Gate | Status |
+| Gate | Result |
 |------|--------|
-| `pnpm build` | Clean |
+| `pnpm build` | Clean (319 KB) |
 | `tsc --noEmit` | 0 errors |
-| `eslint src/` | 7 warnings (all `no-explicit-any`) |
+| `eslint src/` | 0 errors, 7 warnings (all `no-explicit-any`) |
 | Test suite | 33/33 pass |
+| Fixtures | 15 (6 ecosystems + DevOps + monorepo) |
+| Test files | 24 |
 
 ---
 
@@ -151,6 +150,8 @@ PipeMD's claim: the block is cheaper and fresher than the shell command it repla
 - **Efficiency** = information delivered / tokens spent
 - **Accuracy** = does the block match ground truth right now?
 
+And one earned axis: **exploration reduction** = tool calls an agent didn't have to make.
+
 ### 2B.1 Intrinsic benchmark harness
 
 | Action | Detail |
@@ -185,13 +186,17 @@ PipeMD's claim: the block is cheaper and fresher than the shell command it repla
 - [ ] Token ratchet catches >15% growth
 - [ ] Refresh integration test covers at least 3 ecosystems
 
+### Why Layer 2 first (not agent benchmarks)
+
+Agent-level A/B tests ("PipeMD on vs off") are seductive but high-variance and expensive. The intrinsic bench gives 80% of the regression protection at 5% of the cost. Ship it first, prove stability, then measure agent impact if the numbers don't convince.
+
 ---
 
 ## Phase 3: Inter-Harness Context
 
 **Goal:** Two different harnesses on the same machine share context seamlessly.
 
-**Prerequisite:** Phases 2-2B complete. Zero dead resolvers. Measurable quality.
+**Prerequisite:** Phases 2-2B complete. Measurable quality.
 
 ### 3.1 Wire shared blocks into daemon periodic cycle
 
@@ -218,9 +223,9 @@ PipeMD's claim: the block is cheaper and fresher than the shell command it repla
 
 ## Phase 4: Network
 
-**Gated on Phases 2-3 being perfect. Not started until single-machine experience is flawless.**
+**Gated on Phases 2-3. Not started until single-machine experience is flawless.**
 
-Multi-machine relay. Same principle — context sharing, not orchestration.
+Multi-machine relay. Context sharing, not orchestration.
 
 - Encrypted peer sync (TLS, not plain HTTP)
 - Discovery protocol (mDNS for LAN, manual for WAN)
