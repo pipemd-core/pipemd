@@ -451,6 +451,15 @@ async function afterHandler(input, output) {
     const tool = (input && input.tool) || "";
     captureTodos(tool, output);
     const isEdit = isEditTool(tool);
+
+    if (WITH_INJECTION && lastInjection && typeof (output && output.output) === "string") {
+      output.output += "\n\n" + lastInjection.payload;
+      stats.injectionsDelivered++;
+      storePayload(lastInjection.trigger + "-inline", lastInjection.payload);
+      pushEvent(lastInjection.trigger + "-inline", tool, lastInjection.file || "", "injected-inline", lastInjection.bytes);
+      lastInjection = null;
+    }
+
     if (isEdit) {
       const args = (output && output.args) || (input && input.args) || {};
       const filePath = extractFilePath(args);

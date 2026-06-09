@@ -1,81 +1,66 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# Auto-detect linter and run, prioritizing detected ecosystem
+# Auto-detect linter and run, compact summary-first format
 source "$(dirname "$0")/../lib/limit.sh"
+source "$(dirname "$0")/../lib/lint-compact.sh"
 
 eco="${PMD_ECOSYSTEM:-}"
 
 case "$eco" in
   Node-TypeScript)
     if compgen -G ".eslintrc.*" &>/dev/null || compgen -G "eslint.config.*" &>/dev/null; then
-      out=$(npx eslint . --format=stylish 2>&1 | grep -v "^$" | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
-      exit 0
+      compact_eslint "$MAX_LINT"
+    else
+      echo "No ESLint configuration found"
     fi
-    echo "No ESLint configuration found"
-    exit 0
     ;;
   Python)
     if command -v ruff &>/dev/null; then
-      out=$(ruff check . 2>&1 | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
-      exit 0
+      compact_ruff "$MAX_LINT"
     elif command -v flake8 &>/dev/null; then
-      out=$(flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1 | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more flake8 errors')"
-      exit 0
+      compact_flake8 "$MAX_LINT"
+    else
+      echo "No Python linter found"
     fi
-    echo "No Python linter found"
-    exit 0
     ;;
   C-CPP)
     if command -v clang-tidy &>/dev/null; then
-      out=$(clang-tidy --checks='-*,bugprone-*,modernize-*,readability-*' -p build . 2>&1 | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more clang-tidy warnings')"
-      exit 0
+      compact_clang_tidy "$MAX_LINT"
+    elif command -v cppcheck &>/dev/null; then
+      compact_cppcheck "$MAX_LINT"
+    else
+      echo "No C/C++ linter found"
     fi
-    echo "No clang-tidy found"
-    exit 0
     ;;
   Rust)
     if command -v cargo &>/dev/null && [ -f Cargo.toml ]; then
-      out=$(cargo clippy --message-format=short 2>&1 | grep -E '^(error|warning)\[' | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more clippy warnings')"
-      exit 0
+      compact_clippy "$MAX_LINT"
+    else
+      echo "No cargo found"
     fi
-    echo "No cargo found"
-    exit 0
     ;;
   Go)
     if command -v go &>/dev/null && [ -f go.mod ]; then
-      out=$(go vet ./... 2>&1 | head -30)
-      limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more go vet warnings')"
-      exit 0
+      compact_go_vet "$MAX_LINT"
+    else
+      echo "No go found"
     fi
-    echo "No go found"
-    exit 0
+    ;;
+  *)
+    if compgen -G ".eslintrc.*" &>/dev/null || compgen -G "eslint.config.*" &>/dev/null; then
+      compact_eslint "$MAX_LINT"
+    elif command -v ruff &>/dev/null; then
+      compact_ruff "$MAX_LINT"
+    elif command -v flake8 &>/dev/null; then
+      compact_flake8 "$MAX_LINT"
+    elif command -v clang-tidy &>/dev/null; then
+      compact_clang_tidy "$MAX_LINT"
+    elif command -v cargo &>/dev/null && [ -f Cargo.toml ]; then
+      compact_clippy "$MAX_LINT"
+    elif command -v go &>/dev/null && [ -f go.mod ]; then
+      compact_go_vet "$MAX_LINT"
+    else
+      echo "No linter configured for this ecosystem"
+    fi
     ;;
 esac
-
-# Generic: auto-detect
-if compgen -G ".eslintrc.*" &>/dev/null || compgen -G "eslint.config.*" &>/dev/null; then
-  out=$(npx eslint . --format=stylish 2>&1 | grep -v "^$" | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
-elif command -v ruff &>/dev/null; then
-  out=$(ruff check . 2>&1 | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more lint issues')"
-elif command -v flake8 &>/dev/null; then
-  out=$(flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1 | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more flake8 errors')"
-elif command -v clang-tidy &>/dev/null; then
-  out=$(clang-tidy --checks='-*,bugprone-*,modernize-*,readability-*' -p build . 2>&1 | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more clang-tidy warnings')"
-elif command -v cargo &>/dev/null && [ -f Cargo.toml ]; then
-  out=$(cargo clippy --message-format=short 2>&1 | grep -E '^(error|warning)\[' | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more clippy warnings')"
-elif command -v go &>/dev/null && [ -f go.mod ]; then
-  out=$(go vet ./... 2>&1 | head -30)
-  limit_output "$out" "$MAX_LINT" "$(echo "$out" | head -3 && echo '... more go vet warnings')"
-else
-  echo "No linter configured for this ecosystem"
-fi

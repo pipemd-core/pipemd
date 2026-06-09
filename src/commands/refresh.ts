@@ -65,7 +65,7 @@ function detectProfileFromConfig(config: PipeConfig): TokenProfile {
 
 function updateHelpers(ecosystem: Ecosystem): number {
   let updated = 0;
-  for (const helper of ["lib/limit.sh", "lib/limit-core.sh", "architecture/normalize.sh"]) {
+  for (const helper of ["lib/limit.sh", "lib/limit-core.sh", "lib/lint-compact.sh", "architecture/normalize.sh"]) {
     const bundled = loadScriptContent(ecosystem, helper);
     if (!bundled) continue;
     const localPath = path.join(SCRIPTS_DIR, helper);
@@ -312,8 +312,14 @@ export const refreshCommand = new Command("refresh")
 
     const allToUpdate = [...toUpdate, ...missing];
 
+    const helperUpdates = updateHelpers(ecosystem);
+
     if (allToUpdate.length === 0 && toAdd.length === 0) {
-      console.log(chalk.dim("Nothing to update."));
+      if (helperUpdates > 0) {
+        console.log(chalk.dim(`  → Updated ${helperUpdates} helper script(s)`));
+      } else {
+        console.log(chalk.dim("Nothing to update."));
+      }
       console.log();
       return;
     }
@@ -343,7 +349,6 @@ export const refreshCommand = new Command("refresh")
       console.log(chalk.cyan(`  + Added: ${s.label}`));
     }
 
-    const helperUpdates = updateHelpers(ecosystem);
     if (helperUpdates > 0) {
       console.log(chalk.dim(`  → Updated ${helperUpdates} helper script(s)`));
     }

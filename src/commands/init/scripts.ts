@@ -82,6 +82,13 @@ export async function testRunScripts(
       try { fs.chmodSync(path.join(tmpDir, "architecture", "normalize.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod normalize.sh: ${errMsg(err)}`); }
     }
 
+    const lintCompactContent = loadScriptContent(ecosystem, "lib/lint-compact.sh");
+    if (lintCompactContent) {
+      fs.mkdirSync(path.join(tmpDir, "lib"), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, "lib", "lint-compact.sh"), lintCompactContent, "utf-8");
+      try { fs.chmodSync(path.join(tmpDir, "lib", "lint-compact.sh"), 0o755); } catch (err: unknown) { log.debug(`chmod lint-compact.sh: ${errMsg(err)}`); }
+    }
+
     for (const script of selected) {
       const scriptContent = loadScriptContent(ecosystem, script.file);
       if (!scriptContent) {

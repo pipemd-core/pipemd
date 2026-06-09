@@ -325,6 +325,14 @@ function writeLibraryFiles(
     try { fs.chmodSync(corePath, 0o755); } catch (err: unknown) { log.debug(`chmod core ${corePath}: ${errMsg(err)}`); }
   }
 
+  const lintCompactContent = loadScriptContent(ecosystem, "lib/lint-compact.sh");
+  if (lintCompactContent) {
+    mkdirp(libDir);
+    const lintCompactPath = path.join(libDir, "lint-compact.sh");
+    addFile(lintCompactPath, lintCompactContent);
+    try { fs.chmodSync(lintCompactPath, 0o755); } catch (err: unknown) { log.debug(`chmod lint-compact ${lintCompactPath}: ${errMsg(err)}`); }
+  }
+
   const archDir = path.join(SCRIPTS_DIR, "architecture");
   const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
   if (normContent) {
