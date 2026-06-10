@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { reapStaleSessions, DEFAULT_STALE_MS, listSessions as listLocalSessions } from "./crew.js";
 import { writeDashboard, resetDaemonStart } from "./dashboard.js";
 import { ensureCacheDir } from "./cache.js";
@@ -25,7 +26,8 @@ const INJECTION_LOG_MAX_AGE_MS = 3_600_000;
 
 function resolveExternalTools(): void {
   try {
-    const cliDir = path.dirname(require.resolve("@ast-grep/cli/package.json"));
+    const cjsRequire = createRequire(import.meta.url);
+    const cliDir = path.dirname(cjsRequire.resolve("@ast-grep/cli/package.json"));
     for (const bin of ["sg", "ast-grep"]) {
       const binPath = path.join(cliDir, bin);
       if (fs.existsSync(binPath)) {
