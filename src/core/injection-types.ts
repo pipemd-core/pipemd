@@ -21,11 +21,11 @@ export type ContextSource =
   | "syntax-check"
   | "test-failures"
   | "custom"
-  | "context-rules"
   | "handoff"
   | "import-graph"
   | "session-diff"
-  | "exports";
+  | "exports"
+  | "now";
 
 export type InjectionScope = "target-file" | "global";
 
@@ -36,19 +36,13 @@ export interface InjectionRule {
   async?: boolean;
   command?: string;
   label?: string;
-}
-
-export interface ContextFileRule {
-  glob: string;
-  trigger: InjectionTrigger;
-  "max-lines"?: number;
+  "interval-min"?: number;
 }
 
 export interface InjectionConfig {
   delivery: DeliveryMode;
   rules: Partial<Record<InjectionTrigger, InjectionRule[]>>;
   customCommandsAllowed?: boolean;
-  contextFiles?: ContextFileRule[];
 }
 
 export interface InjectionPayload {
@@ -75,11 +69,11 @@ const VALID_SOURCES: ContextSource[] = [
   "syntax-check",
   "test-failures",
   "custom",
-  "context-rules",
   "handoff",
   "import-graph",
   "session-diff",
   "exports",
+  "now",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
 
@@ -105,10 +99,12 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
     ],
     "on-start": [
       { source: "git-delta", scope: "global", "max-lines": 3 },
+      { source: "now", scope: "global", "interval-min": 1 },
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
     "on-idle": [
       { source: "git-staged", scope: "global", "max-lines": 10 },
+      { source: "now", scope: "global", "interval-min": 5 },
       { source: "session-diff", scope: "global", "max-lines": 15 },
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
@@ -173,6 +169,15 @@ function validateRule(raw: unknown, context?: string): InjectionRule | null {
     rule.label = obj.label;
   }
 
+  if (obj["interval-min"] != null) {
+    const im = Number(obj["interval-min"]);
+    if (!Number.isFinite(im) || im < 1) {
+      log.warn(`Injection rule for "${obj.source}": invalid interval-min ${JSON.stringify(obj["interval-min"])} (must be positive number), ignoring`);
+      return null;
+    }
+    rule["interval-min"] = im;
+  }
+
   return rule;
 }
 
@@ -224,23 +229,7 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
 
   const customCommandsAllowed = obj.customCommandsAllowed === true;
 
-  const contextFiles: ContextFileRule[] = [];
-  if (Array.isArray(obj["context-files"])) {
-    for (const entry of obj["context-files"]) {
-      if (typeof entry !== "object" || entry === null) continue;
-      const e = entry as Record<string, unknown>;
-      if (!isString(e.glob) || !isString(e.trigger) || !VALID_TRIGGERS.includes(e.trigger as InjectionTrigger)) continue;
-      const rule: ContextFileRule = { glob: e.glob, trigger: e.trigger as InjectionTrigger };
-      if (e["max-lines"] != null) {
-        const ml = Number(e["max-lines"]);
-        if (Number.isFinite(ml) && ml >= 1) rule["max-lines"] = ml;
-      }
-      contextFiles.push(rule);
-    }
-  }
-
   const result: InjectionConfig = { delivery, rules, customCommandsAllowed: customCommandsAllowed || undefined };
-  if (contextFiles.length > 0) result.contextFiles = contextFiles;
   return result;
 }
 
@@ -290,14 +279,15 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "# triggers: before-read | before-edit | after-edit | on-idle | on-start",
     "# sources:  crew-status | crew-locks | file-errors",
     "#           git-context | git-delta | git-staged | git-diff-stat",
-    "#           edit-diff | syntax-check | test-failures | custom | context-rules",
-    "#           import-graph | handoff | session-diff | exports",
+    "#           edit-diff | syntax-check | test-failures | custom",
+    "#           import-graph | handoff | session-diff | exports | now",
     "# scope:    target-file | global",
+    "# interval-min: (now source only) minutes to round time to, controlling refresh frequency",
     "",
   ].join("\n");
 
   const yamlBody = stringifyYaml(
-    { delivery: config.delivery, rules: config.rules, "context-files": config.contextFiles || [] },
+    { delivery: config.delivery, rules: config.rules },
     { lineWidth: 0, singleQuote: true }
   );
 

@@ -13,11 +13,11 @@ export const BLOCK_SOURCES: readonly string[] = [
   "crew-locks",
   "crew-todos",
   "custom",
-  "context-rules",
   "handoff",
   "import-graph",
   "session-diff",
   "exports",
+  "now",
 ] as const;
 
 const BLOCK_SCOPES: Record<string, BlockScope> = {
@@ -25,8 +25,8 @@ const BLOCK_SCOPES: Record<string, BlockScope> = {
   "git-delta": "shared",
   "git-diff-stat": "shared",
   "git-staged": "shared",
-  "context-rules": "shared",
   "handoff": "shared",
+  "now": "shared",
   "syntax-check": "local",
   "edit-diff": "local",
   "file-errors": "local",

@@ -8,7 +8,8 @@ describe("getBlockScope", () => {
     assert.equal(getBlockScope("git-delta"), "shared");
     assert.equal(getBlockScope("git-diff-stat"), "shared");
     assert.equal(getBlockScope("git-staged"), "shared");
-    assert.equal(getBlockScope("context-rules"), "shared");
+    assert.equal(getBlockScope("handoff"), "shared");
+    assert.equal(getBlockScope("now"), "shared");
   });
 
   it("returns 'local' for local sources", () => {
@@ -35,7 +36,8 @@ describe("isSharedBlock", () => {
   it("returns true for shared sources", () => {
     assert.ok(isSharedBlock("test-failures"));
     assert.ok(isSharedBlock("git-delta"));
-    assert.ok(isSharedBlock("context-rules"));
+    assert.ok(isSharedBlock("handoff"));
+    assert.ok(isSharedBlock("now"));
   });
 
   it("returns false for local sources", () => {

@@ -46,6 +46,7 @@ export function getAllScripts(): ScriptDef[] {
     ...SCRIPT_LIBRARY.go,
     ...SCRIPT_LIBRARY.devops,
     ...SCRIPT_LIBRARY.crew,
+    ...SCRIPT_LIBRARY.context,
   ];
 }
 

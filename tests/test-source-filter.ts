@@ -82,7 +82,7 @@ describe("CrewSession.sources field", () => {
   });
 
   it("round-trips sources through JSON serialization", () => {
-    const sources = ["test-failures", "git-delta", "git-diff-stat", "git-staged", "context-rules"];
+    const sources = ["test-failures", "git-delta", "git-diff-stat", "git-staged", "handoff"];
     const session = makeSession({ id: "cr_src_round", sources });
     writeSessionAtomic(session);
     invalidateSessionListCache();

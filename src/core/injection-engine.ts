@@ -13,7 +13,6 @@ import type {
   InjectionConfig,
   InjectionPayload,
   ContextSource,
-  ContextFileRule,
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession } from "./crew.js";
@@ -35,6 +34,7 @@ export interface ResolverContext {
   targetFile?: string;
   sessionId?: string;
   config: InjectionConfig;
+  intervalMin?: number;
 }
 
 type SourceResolver = (ctx: ResolverContext) => Promise<string>;
@@ -95,7 +95,9 @@ async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
 
   const hasRemote = sessions.some((s) => s._remote);
   const conflicts = findConflicts(sessions);
+  const hasClaims = sessions.some((s) => s.claimedFiles.length > 0);
   if (sessions.length === 1 && !hasRemote && conflicts.length === 0) return "";
+  if (!hasRemote && conflicts.length === 0 && !hasClaims) return "";
 
   const lines: string[] = [];
   for (const s of sessions) {
@@ -377,95 +379,6 @@ async function resolveTestFailures(_ctx: ResolverContext): Promise<string> {
   }
 }
 
-const IGNORED_DIRS = new Set([".git", "node_modules", "dist", "__pycache__", ".next", ".nuxt", "coverage", ".cache"]);
-
-function globToRegex(pattern: string): RegExp {
-  let re = "^";
-  let i = 0;
-  while (i < pattern.length) {
-    const ch = pattern[i];
-    if (ch === "*" && pattern[i + 1] === "*") {
-      if (pattern[i + 2] === "/") {
-        re += "(?:.*/)?";
-        i += 3;
-      } else {
-        re += ".*";
-        i += 2;
-      }
-    } else if (ch === "*") {
-      re += "[^/]*";
-      i++;
-    } else if (ch === "?") {
-      re += "[^/]";
-      i++;
-    } else if (ch === "." || ch === "+" || ch === "^" || ch === "$" || ch === "|" || ch === "\\" || ch === "(" || ch === ")" || ch === "[" || ch === "]" || ch === "{" || ch === "}") {
-      re += "\\" + ch;
-      i++;
-    } else {
-      re += ch;
-      i++;
-    }
-  }
-  re += "$";
-  return new RegExp(re);
-}
-
-function collectFiles(root: string, pattern: string): string[] {
-  const regex = globToRegex(pattern);
-  const results: string[] = [];
-
-  function walk(dir: string) {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch { return; }
-    for (const entry of entries) {
-      if (IGNORED_DIRS.has(entry.name)) continue;
-      const fullPath = path.join(dir, entry.name);
-      const relPath = path.relative(root, fullPath);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-      } else if (entry.isFile() && regex.test(relPath)) {
-        results.push(relPath);
-      }
-    }
-  }
-
-  walk(root);
-  return results.sort();
-}
-
-async function resolveContextRules(ctx: ResolverContext): Promise<string> {
-  const config = ctx.config;
-  if (!config.contextFiles || config.contextFiles.length === 0) return "";
-
-  const matching = config.contextFiles.filter((r: ContextFileRule) => r.trigger === ctx.trigger);
-  if (matching.length === 0) return "";
-
-  const cwd = process.cwd();
-  const parts: string[] = [];
-
-  for (const rule of matching) {
-    const files = collectFiles(cwd, rule.glob);
-    const maxLines = rule["max-lines"] ?? 50;
-    for (const relPath of files) {
-      try {
-        const content = fs.readFileSync(path.join(cwd, relPath), "utf-8");
-        if (!content.trim()) continue;
-        const lines = content.split("\n");
-        const truncated = lines.length <= maxLines
-          ? content
-          : lines.slice(0, maxLines).join("\n") + `\n... (+${lines.length - maxLines} more)`;
-        parts.push(`=== ${relPath} ===\n${truncated}`);
-      } catch (err: unknown) {
-        log.debug(`resolveContextRules: failed to read ${relPath}: ${errMsg(err)}`);
-      }
-    }
-  }
-
-  return parts.length > 0 ? parts.join("\n\n") : "";
-}
-
 async function resolveHandoff(_ctx: ResolverContext): Promise<string> {
   const tasks = getTasksForSession();
   return formatTaskBlock(tasks);
@@ -705,6 +618,28 @@ async function resolveSessionDiff(_ctx: ResolverContext): Promise<string> {
   }
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function formatNow(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const day = DAY_NAMES[date.getDay()];
+  const h = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  const tz = Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
+    .formatToParts(date)
+    .find((p) => p.type === "timeZoneName")?.value ?? "UTC";
+  return `${y}-${mo}-${d} ${day} ${h}:${mi} ${tz}`;
+}
+
+async function resolveNow(ctx: ResolverContext): Promise<string> {
+  const intervalMin = ctx.intervalMin ?? 5;
+  const now = new Date();
+  now.setMinutes(Math.floor(now.getMinutes() / intervalMin) * intervalMin, 0, 0);
+  return formatNow(now);
+}
+
 export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
@@ -718,11 +653,11 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "syntax-check": resolveSyntaxCheck,
   "test-failures": resolveTestFailures,
   custom: resolveCustom,
-  "context-rules": resolveContextRules,
   handoff: resolveHandoff,
   "import-graph": resolveImportGraph,
   "session-diff": resolveSessionDiff,
   "exports": resolveExports,
+  now: resolveNow,
 };
 
 const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
@@ -802,6 +737,7 @@ export async function resolveInjections(
       targetFile,
       sessionId: effectiveSessionId,
       config,
+      intervalMin: rule["interval-min"],
     };
 
     const resolver = RESOLVERS[rule.source];

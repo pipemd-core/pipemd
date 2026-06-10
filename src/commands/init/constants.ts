@@ -72,7 +72,7 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   "cmake-targets": 40, "class-diagram": 40, interfaces: 30, "include-graph": 40,
   "cargo-deps": 40, "cargo-features": 20, "go-packages": 40, "go-interfaces": 30,
   "docker-stats": 30, "k8s-unhealthy": 20, "tf-state": 40, "aws-context": 10,
-  crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15,
+  crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15, now: 1,
 };
 
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
@@ -138,6 +138,9 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
   ],
   crew: [
     { id: "crew", label: "Crew Activity", description: "Parallel agents, claimed files, conflict warnings", command: "bash .pipemd/scripts/crew/crew.sh", category: "project", volatile: 2, file: "crew/crew.sh" },
+  ],
+  context: [
+    { id: "now", label: "Current Time", description: "Date and time (rounded to 5 min)", command: "bash .pipemd/scripts/context/now.sh", category: "project", volatile: 5, file: "context/now.sh" },
   ],
 };
 
