@@ -289,12 +289,23 @@ function writeScripts(
   addFile: (filepath: string, content: string) => void,
 ): void {
   const ecosystemKey = ecosystem;
+  const deadCodeCompanions = ["quality/run-knip.sh", "quality/format-knip.mjs"];
   for (const script of selectedScripts) {
     const scriptContent = loadScriptContent(ecosystemKey, script.file);
     if (scriptContent) {
       const scriptPath = path.join(SCRIPTS_DIR, script.file);
       addFile(scriptPath, scriptContent);
       try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod script ${scriptPath}: ${errMsg(err)}`); }
+    }
+    if (script.id === "dead-code") {
+      for (const companion of deadCodeCompanions) {
+        const companionContent = loadScriptContent(ecosystemKey, companion);
+        if (companionContent) {
+          const companionPath = path.join(SCRIPTS_DIR, companion);
+          addFile(companionPath, companionContent);
+          try { fs.chmodSync(companionPath, 0o755); } catch (err: unknown) { log.debug(`chmod companion ${companionPath}: ${errMsg(err)}`); }
+        }
+      }
     }
   }
 }

@@ -115,6 +115,20 @@ export async function testRunScripts(
       fs.writeFileSync(scriptPath, scriptContent, "utf-8");
       try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod test script ${scriptPath}: ${errMsg(err)}`); }
 
+      if (script.id === "dead-code") {
+        const companions = ["quality/run-knip.sh", "quality/format-knip.mjs"];
+        for (const companion of companions) {
+          const companionContent = loadScriptContent(ecosystem, companion);
+          if (companionContent) {
+            const companionDir = path.join(tmpDir, path.dirname(companion));
+            fs.mkdirSync(companionDir, { recursive: true });
+            const companionPath = path.join(tmpDir, companion);
+            fs.writeFileSync(companionPath, companionContent, "utf-8");
+            try { fs.chmodSync(companionPath, 0o755); } catch (err: unknown) { log.debug(`chmod companion ${companionPath}: ${errMsg(err)}`); }
+          }
+        }
+      }
+
       try {
         const { stdout, stderr } = await execFileAsync("bash", [scriptPath], {
           encoding: "utf-8",

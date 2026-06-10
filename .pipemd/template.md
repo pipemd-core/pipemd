@@ -221,6 +221,14 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ```
 <!-- /pmd -->
 
+### Dead Code
+
+<!-- pmd: dead-code -->
+```
+
+```
+<!-- /pmd -->
+
 ### Crew Activity
 
 <!-- pmd: crew -->
@@ -302,6 +310,12 @@ Every change must be verified. Weak success criteria ("make it work") require co
 <!-- /pmd -->
 
 <!-- pmd: tf-state -->
+```
+
+```
+<!-- /pmd -->
+
+<!-- pmd: now -->
 ```
 
 ```

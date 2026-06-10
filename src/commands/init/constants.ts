@@ -72,7 +72,7 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   "cmake-targets": 40, "class-diagram": 40, interfaces: 30, "include-graph": 40,
   "cargo-deps": 40, "cargo-features": 20, "go-packages": 40, "go-interfaces": 30,
   "docker-stats": 30, "k8s-unhealthy": 20, "tf-state": 40, "aws-context": 10,
-  crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15, now: 1,
+  crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15, now: 1, "dead-code": 30,
 };
 
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
@@ -98,6 +98,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "type-check", label: "Type Errors", description: "Static type errors (tsc, mypy, etc.)", command: "bash .pipemd/scripts/quality/type-check.sh", category: "quality", volatile: 2, file: "quality/type-check.sh" },
     { id: "lint", label: "Lint Errors", description: "Linting errors (ESLint, Ruff, etc.)", command: "bash .pipemd/scripts/quality/lint.sh", category: "quality", volatile: 2, file: "quality/lint.sh" },
     { id: "test-summary", label: "Test Summary", description: "Pass/fail/skip counts (not full output)", command: "bash .pipemd/scripts/quality/test-summary.sh", category: "quality", volatile: 2, file: "quality/test-summary.sh" },
+    { id: "dead-code", label: "Dead Code", description: "Unused exports, files, and dependencies (knip)", command: "bash .pipemd/scripts/quality/dead-code.sh", category: "quality", volatile: 2, file: "quality/dead-code.sh" },
   ],
   db: [
     { id: "prisma", label: "Prisma Models", description: "Model names, field counts, and enums", command: "bash .pipemd/scripts/db/prisma.sh", category: "db", volatile: 1, file: "db/prisma.sh" },

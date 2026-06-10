@@ -31,6 +31,10 @@ commands:
     .pipemd/scripts/quality/test-summary.sh
   express-routes: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/api/express-routes.sh
+  now: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/context/now.sh
+  dead-code: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/quality/dead-code.sh
 injected:
   - file: .pipemd/template.md
     watch: true
@@ -74,9 +78,12 @@ pipes:
     command: express-routes
   - file: hotspots.md
     command: hotspots
+  - file: now.md
+    command: now
 settings:
   debounceMs: 3000
   reServeDelayMs: 1000
   tokenProfile: high
 commandTimeouts:
   test-summary: 60000
+  dead-code: 3000

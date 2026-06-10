@@ -152,6 +152,13 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     recommended.push("test-summary");
   }
 
+  // ── Dead-Code Detection ──
+
+  if (has("package.json") && (has("tsconfig.json") || foundLint)) {
+    signals.push("package.json + tsconfig/lint → dead-code");
+    recommended.push("dead-code");
+  }
+
   // ── Database / ORM Detection ──
 
   if (has("prisma/schema.prisma") || has("src/prisma/schema.prisma")) {

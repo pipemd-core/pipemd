@@ -18,6 +18,7 @@ export const BLOCK_SOURCES: readonly string[] = [
   "session-diff",
   "exports",
   "now",
+  "dead-code",
 ] as const;
 
 const BLOCK_SCOPES: Record<string, BlockScope> = {
@@ -38,6 +39,7 @@ const BLOCK_SCOPES: Record<string, BlockScope> = {
   "import-graph": "local",
   "session-diff": "local",
   "exports": "local",
+  "dead-code": "shared",
 };
 
 export function getBlockScope(source: string): BlockScope {

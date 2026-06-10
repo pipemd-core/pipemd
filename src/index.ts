@@ -15,7 +15,7 @@ import { validateCommand } from "./commands/validate.js";
 import { statuslineCommand } from "./commands/statusline.js";
 import { traceCommand } from "./commands/trace.js";
 import { linkCommand } from "./commands/link.js";
-import { runDaemon } from "./core/daemon.js";
+import { runDaemon, resolveExternalTools } from "./core/daemon.js";
 import { runRelay } from "./core/net/relay.js";
 import { UserError } from "./core/errors.js";
 
@@ -144,6 +144,14 @@ program
   .description("(internal) Run the link relay process")
   .action(() => {
     runRelay();
+  });
+
+program
+  .command("_probe-tools", { hidden: true })
+  .description("(internal) Resolve and print external tool paths")
+  .action(() => {
+    resolveExternalTools();
+    console.log(`PMD_ASTGREP=${process.env.PMD_ASTGREP || "unset"}`);
   });
 
 program.exitOverride((err) => {
