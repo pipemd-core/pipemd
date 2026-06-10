@@ -84,6 +84,8 @@ assert_not_empty "$OUT" "express-routes"
 assert_contains "$OUT" "GET" "express-routes"
 assert_contains "$OUT" "POST" "express-routes"
 assert_contains "$OUT" "/USERS" "express-routes"
+assert_not_contains "$OUT" "USE " "express-routes should not match app.use"
+assert_not_contains "$OUT" "LISTEN" "express-routes should not match app.listen"
 echo ""
 
 # ── NestJS Controllers ──

@@ -23,6 +23,23 @@ import { startLegacyWatcher } from "./legacy-watcher.js";
 
 const INJECTION_LOG_MAX_AGE_MS = 3_600_000;
 
+function resolveExternalTools(): void {
+  try {
+    const cliDir = path.dirname(require.resolve("@ast-grep/cli/package.json"));
+    for (const bin of ["sg", "ast-grep"]) {
+      const binPath = path.join(cliDir, bin);
+      if (fs.existsSync(binPath)) {
+        process.env.PMD_ASTGREP = binPath;
+        log.info(`ast-grep resolved: ${binPath}`);
+        return;
+      }
+    }
+    log.debug("ast-grep platform binary not found — resolver scripts will use regex fallback");
+  } catch {
+    log.debug("@ast-grep/cli not installed — resolver scripts will use regex fallback");
+  }
+}
+
 function cleanInjectionLog(maxAgeMs: number = INJECTION_LOG_MAX_AGE_MS): void {
   if (!fs.existsSync(INJECTION_LOG_DIR)) return;
   const now = Date.now();
@@ -103,6 +120,8 @@ export function runDaemon() {
     throw err
   }
   resetDaemonStart();
+
+  resolveExternalTools();
 
   fs.mkdirSync(LIVE_DIR, { recursive: true });
   ensureCacheDir();
