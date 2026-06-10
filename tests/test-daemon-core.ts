@@ -298,6 +298,18 @@ describe("dedup", () => {
   })
 })
 
+describe("resolveExternalTools", () => {
+  it("sets PMD_ASTGREP to an existing executable when @ast-grep/cli is installed", async () => {
+    const { resolveExternalTools } = await import("../src/core/daemon.js")
+    delete process.env.PMD_ASTGREP
+    resolveExternalTools()
+    const bin = process.env.PMD_ASTGREP
+    assert.ok(bin, "PMD_ASTGREP must be set when @ast-grep/cli is installed")
+    assert.ok(fs.existsSync(bin), `binary must exist: ${bin}`)
+    fs.accessSync(bin, fs.constants.X_OK)
+  })
+})
+
 after(() => {
   process.chdir(origDir)
   try {

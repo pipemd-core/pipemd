@@ -24,7 +24,7 @@ import { startLegacyWatcher } from "./legacy-watcher.js";
 
 const INJECTION_LOG_MAX_AGE_MS = 3_600_000;
 
-function resolveExternalTools(): void {
+export function resolveExternalTools(): void {
   try {
     const cjsRequire = createRequire(import.meta.url);
     const cliDir = path.dirname(cjsRequire.resolve("@ast-grep/cli/package.json"));
