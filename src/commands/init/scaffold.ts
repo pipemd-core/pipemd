@@ -328,6 +328,14 @@ function writeLibraryFiles(
     try { fs.chmodSync(lintCompactPath, 0o755); } catch (err: unknown) { log.debug(`chmod lint-compact ${lintCompactPath}: ${errMsg(err)}`); }
   }
 
+  const resolveSgContent = loadScriptContent(ecosystem, "lib/resolve-sg.sh");
+  if (resolveSgContent) {
+    mkdirp(libDir);
+    const resolveSgPath = path.join(libDir, "resolve-sg.sh");
+    addFile(resolveSgPath, resolveSgContent);
+    try { fs.chmodSync(resolveSgPath, 0o755); } catch (err: unknown) { log.debug(`chmod resolve-sg ${resolveSgPath}: ${errMsg(err)}`); }
+  }
+
   const archDir = path.join(SCRIPTS_DIR, "architecture");
   const normContent = loadScriptContent(ecosystem, "architecture/normalize.sh");
   if (normContent) {

@@ -3,15 +3,7 @@ set -uo pipefail
 # FastAPI route metadata — endpoint signatures
 # Uses ast-grep for structural parsing when available, regex fallback otherwise.
 source "$(dirname "$0")/../lib/limit.sh"
-
-_resolve_sg() {
-  [ -x "${PMD_ASTGREP:-}" ] && echo "$PMD_ASTGREP" && return
-  local bin
-  bin=$(command -v ast-grep 2>/dev/null) && [ -x "$bin" ] && "$bin" --version 2>/dev/null | grep -q 'ast-grep' && echo "$bin" && return
-  bin=$(command -v sg 2>/dev/null) && [ -x "$bin" ] && "$bin" --version 2>/dev/null | grep -q 'ast-grep' && echo "$bin" && return
-}
-
-SG=$(_resolve_sg)
+source "$(dirname "$0")/../lib/resolve-sg.sh" 2>/dev/null || source "$(cd "$(dirname "$0")/../../Shared" 2>/dev/null && pwd)/lib/resolve-sg.sh" 2>/dev/null || true
 
 if [ -x "$SG" ]; then
   out=""
