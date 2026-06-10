@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from "child_process";
 import assert from "assert/strict";
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -41,16 +42,33 @@ function writeCache(content, ageSeconds = 0) {
 const KNIP_FIXTURE = JSON.stringify({
   issues: [
     {
-      file: "src/foo.ts",
-      exports: [{ name: "unusedFn", line: 10 }, { name: "deadHelper", line: 22 }],
-      types: [{ name: "UnusedType", line: 5 }],
-      dependencies: [{ name: "lodash" }],
+      file: "package.json",
+      dependencies: [
+        { name: "@ast-grep/cli", line: 64, col: 6, pos: 2775 },
+        { name: "zod", line: 70, col: 6, pos: 2931 },
+      ],
     },
     {
-      file: "src/bar.ts",
-      files: [{ name: "src/dead.ts" }],
-      devDependencies: [{ name: "moment" }],
-      unlisted: [{ name: "secret-dep" }],
+      file: "src/core/pipe-manager.ts",
+      exports: [
+        { name: "ENXIO_MAX_RETRIES", line: 14, col: 14, pos: 588 },
+        { name: "contextStreamEntries", line: 21, col: 14, pos: 800 },
+      ],
+    },
+    {
+      file: "src/core/crew.ts",
+      types: [
+        { name: "ProcInfo", line: 11, col: 15, pos: 514 },
+        { name: "CrewStatusJson", line: 13, col: 15, pos: 654 },
+      ],
+    },
+    {
+      file: "scripts/Shared/quality/format-knip.mjs",
+      files: [{ name: "scripts/Shared/quality/format-knip.mjs" }],
+    },
+    {
+      file: "src/plugins/opencode-server.js",
+      devDependencies: [{ name: "chalk", line: 5, col: 4, pos: 120 }],
     },
   ],
 });
@@ -134,25 +152,35 @@ test("output frames as candidates, never 'safe to delete'", async () => {
 });
 
 test("run-knip.sh — no knip installed outputs install suggestion", () => {
-  const result = execFileSync("bash", [RUN_KNIP], {
-    encoding: "utf-8",
-    timeout: 3000,
-    cwd: ROOT,
-    env: { ...process.env, PATH: "/usr/bin:/bin" },
-  });
-  assert.ok(result.includes("install knip") || result.includes("No dead-code scanner"), `Expected install suggestion, got: ${result.trim()}`);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "knip-test-"));
+  try {
+    const result = execFileSync("bash", [RUN_KNIP], {
+      encoding: "utf-8",
+      timeout: 3000,
+      cwd: tmpDir,
+      env: { HOME: tmpDir, PATH: "/usr/bin:/bin", PMD_KNIP: "" },
+    });
+    assert.ok(result.includes("install knip") || result.includes("No dead-code scanner"), `Expected install suggestion, got: ${result.trim()}`);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
 });
 
 test("run-knip.sh — exits 0 even when knip is missing", () => {
-  execFileSync("bash", [RUN_KNIP], {
-    encoding: "utf-8",
-    timeout: 3000,
-    cwd: ROOT,
-    env: { ...process.env, PATH: "/usr/bin:/bin" },
-  });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "knip-test-"));
+  try {
+    execFileSync("bash", [RUN_KNIP], {
+      encoding: "utf-8",
+      timeout: 3000,
+      cwd: tmpDir,
+      env: { HOME: tmpDir, PATH: "/usr/bin:/bin", PMD_KNIP: "" },
+    });
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
 });
 
-test("format-knip.mjs — formats knip JSON fixture", () => {
+test("format-knip.mjs — formats real knip JSON fixture", () => {
   const result = execFileSync("node", [FORMAT], {
     encoding: "utf-8",
     input: KNIP_FIXTURE,
@@ -161,15 +189,14 @@ test("format-knip.mjs — formats knip JSON fixture", () => {
   });
   assert.ok(result.includes("Dead-code candidates"), `Expected candidates header, got: ${result.trim()}`);
   assert.ok(result.includes("Unused exports (2)"), `Expected exports count, got: ${result.trim()}`);
-  assert.ok(result.includes("unusedFn"), `Expected export name, got: ${result.trim()}`);
-  assert.ok(result.includes("Unused types (1)"), `Expected types count, got: ${result.trim()}`);
+  assert.ok(result.includes("ENXIO_MAX_RETRIES"), `Expected export name, got: ${result.trim()}`);
+  assert.ok(result.includes("Unused types (2)"), `Expected types count, got: ${result.trim()}`);
+  assert.ok(result.includes("ProcInfo"), `Expected type name, got: ${result.trim()}`);
   assert.ok(result.includes("Unused files (1)"), `Expected files count, got: ${result.trim()}`);
-  assert.ok(result.includes("Unused dependencies (1)"), `Expected deps count, got: ${result.trim()}`);
-  assert.ok(result.includes("lodash"), `Expected dep name, got: ${result.trim()}`);
+  assert.ok(result.includes("Unused dependencies (2)"), `Expected deps count, got: ${result.trim()}`);
+  assert.ok(result.includes("@ast-grep/cli"), `Expected dep name, got: ${result.trim()}`);
   assert.ok(result.includes("Unused devDependencies (1)"), `Expected devDeps count, got: ${result.trim()}`);
-  assert.ok(result.includes("moment"), `Expected devDep name, got: ${result.trim()}`);
-  assert.ok(result.includes("Unlisted deps (1)"), `Expected unlisted count, got: ${result.trim()}`);
-  assert.ok(result.includes("secret-dep"), `Expected unlisted name, got: ${result.trim()}`);
+  assert.ok(result.includes("chalk"), `Expected devDep name, got: ${result.trim()}`);
 });
 
 test("format-knip.mjs — empty issues outputs nothing found", () => {
@@ -190,6 +217,30 @@ test("format-knip.mjs — invalid JSON outputs parse error", () => {
     cwd: ROOT,
   });
   assert.ok(result.includes("JSON parse error"), `Expected JSON parse error, got: ${result.trim()}`);
+});
+
+test("format-knip.mjs — runs against real knip output", () => {
+  const knipBin = path.join(ROOT, "node_modules", ".bin", "knip");
+  if (!fs.existsSync(knipBin)) return;
+  let knipResult = "";
+  try {
+    knipResult = execFileSync(knipBin, ["--reporter", "json"], {
+      encoding: "utf-8",
+      timeout: 30000,
+      cwd: ROOT,
+    });
+  } catch (err) {
+    knipResult = err.stdout || "";
+  }
+  if (!knipResult) return;
+  const realFormatted = execFileSync("node", [FORMAT], {
+    encoding: "utf-8",
+    input: knipResult,
+    timeout: 3000,
+    cwd: ROOT,
+  });
+  assert.ok(realFormatted.includes("Dead-code candidates"), `Expected header, got: ${realFormatted.trim()}`);
+  assert.ok(!realFormatted.includes("failed"), `Formatter should not fail on real knip output: ${realFormatted.trim()}`);
 });
 
 test("format-knip.mjs — unexpected structure outputs structure error", () => {
