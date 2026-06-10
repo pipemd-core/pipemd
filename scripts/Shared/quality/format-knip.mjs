@@ -1,87 +1,105 @@
+// Formats knip --reporter json output into a compact summary.
+// Input: JSON on stdin. Output: plain text summary on stdout.
+// Schema: { issues: [{ file, exports?, types?, dependencies?, files?, ... }] }
+
+const MAX_ITEMS = { exports: 15, types: 10, files: 10, deps: 10 };
+
 const chunks = [];
 process.stdin.on("data", (c) => chunks.push(c));
 process.stdin.on("end", () => {
+  let raw;
   try {
-    const report = JSON.parse(Buffer.concat(chunks).toString());
-    const issues = report.issues || [];
-    const lines = [
-      "Dead-code candidates (verify before deleting — dynamic usage may be missed)",
-    ];
+    raw = Buffer.concat(chunks).toString();
+  } catch (err) {
+    console.log(`knip analysis failed — read error: ${err.message}`);
+    process.exit(0);
+  }
 
-    const allExports = [];
-    const allTypes = [];
-    const allDeps = [];
-    const allDevDeps = [];
-    const allFiles = [];
-
-    for (const entry of issues) {
-      if (entry.exports?.length) {
-        for (const e of entry.exports) {
-          allExports.push(`${entry.file}:${e.name}`);
-        }
-      }
-      if (entry.nsExports?.length) {
-        for (const e of entry.nsExports) {
-          allExports.push(`${entry.file}:${e.name}`);
-        }
-      }
-      if (entry.types?.length) {
-        for (const t of entry.types) {
-          allTypes.push(`${entry.file}:${t.name}`);
-        }
-      }
-      if (entry.nsTypes?.length) {
-        for (const t of entry.nsTypes) {
-          allTypes.push(`${entry.file}:${t.name}`);
-        }
-      }
-      if (entry.enumMembers?.length) {
-        for (const t of entry.enumMembers) {
-          allTypes.push(`${entry.file}:${t.name}`);
-        }
-      }
-      if (entry.dependencies?.length) {
-        allDeps.push(...entry.dependencies.map((d) => d.name));
-      }
-      if (entry.devDependencies?.length) {
-        allDevDeps.push(...entry.devDependencies.map((d) => d.name));
-      }
-      if (entry.files?.length) {
-        allFiles.push(...entry.files.map((f) => f.name || entry.file));
-      }
-    }
-
-    if (allExports.length > 0) {
-      const items = allExports.slice(0, 15).join(", ");
-      lines.push(`Unused exports (${allExports.length}): ${items}`);
-    }
-    if (allTypes.length > 0) {
-      const items = allTypes.slice(0, 10).join(", ");
-      lines.push(`Unused types (${allTypes.length}): ${items}`);
-    }
-    if (allFiles.length > 0) {
-      const items = allFiles.slice(0, 10).join(", ");
-      lines.push(`Unused files (${allFiles.length}): ${items}`);
-    }
-    if (allDeps.length > 0) {
-      const items = allDeps.slice(0, 10).join(", ");
-      lines.push(`Unused dependencies (${allDeps.length}): ${items}`);
-    }
-    if (allDevDeps.length > 0) {
-      const items = allDevDeps.slice(0, 10).join(", ");
-      lines.push(`Unused devDependencies (${allDevDeps.length}): ${items}`);
-    }
-
-    if (lines.length === 1) {
-      lines.push("No unused exports, files, or dependencies found");
-    }
-
-    console.log(lines.join("\n"));
+  let report;
+  try {
+    report = JSON.parse(raw);
   } catch (err) {
     if (err instanceof SyntaxError) {
       console.log("knip analysis failed — JSON parse error");
     } else {
       console.log(`knip analysis failed — ${err.message}`);
     }
+    process.exit(0);
   }
+
+  if (!report || !Array.isArray(report.issues)) {
+    console.log("knip analysis failed — unexpected JSON structure");
+    process.exit(0);
+  }
+
+  const lines = [
+    "Dead-code candidates (verify before deleting — dynamic usage may be missed)",
+  ];
+
+  const allExports = [];
+  const allTypes = [];
+  const allDeps = [];
+  const allDevDeps = [];
+  const allFiles = [];
+  const allUnlisted = [];
+  const allUnresolved = [];
+
+  for (const entry of report.issues) {
+    const file = entry.file || "?";
+    const collect = (arr, items) => {
+      if (!items?.length) return;
+      for (const item of items) {
+        arr.push(item.name ? `${file}:${item.name}` : file);
+      }
+    };
+    collect(allExports, entry.exports);
+    collect(allExports, entry.nsExports);
+    collect(allTypes, entry.types);
+    collect(allTypes, entry.nsTypes);
+    collect(allTypes, entry.enumMembers);
+    if (entry.dependencies?.length) {
+      allDeps.push(...entry.dependencies.map((d) => d.name));
+    }
+    if (entry.devDependencies?.length) {
+      allDevDeps.push(...entry.devDependencies.map((d) => d.name));
+    }
+    if (entry.files?.length) {
+      allFiles.push(...entry.files.map((f) => f.name || file));
+    }
+    if (entry.unlisted?.length) {
+      allUnlisted.push(...entry.unlisted.map((d) => d.name));
+    }
+    if (entry.unresolved?.length) {
+      allUnresolved.push(...entry.unresolved.map((d) => `${file}:${d.name}`));
+    }
+  }
+
+  if (allExports.length > 0) {
+    lines.push(`Unused exports (${allExports.length}): ${allExports.slice(0, MAX_ITEMS.exports).join(", ")}`);
+  }
+  if (allTypes.length > 0) {
+    lines.push(`Unused types (${allTypes.length}): ${allTypes.slice(0, MAX_ITEMS.types).join(", ")}`);
+  }
+  if (allFiles.length > 0) {
+    lines.push(`Unused files (${allFiles.length}): ${allFiles.slice(0, MAX_ITEMS.files).join(", ")}`);
+  }
+  if (allDeps.length > 0) {
+    lines.push(`Unused dependencies (${allDeps.length}): ${allDeps.slice(0, MAX_ITEMS.deps).join(", ")}`);
+  }
+  if (allDevDeps.length > 0) {
+    lines.push(`Unused devDependencies (${allDevDeps.length}): ${allDevDeps.slice(0, MAX_ITEMS.deps).join(", ")}`);
+  }
+  if (allUnlisted.length > 0) {
+    lines.push(`Unlisted deps (${allUnlisted.length}): ${allUnlisted.slice(0, MAX_ITEMS.deps).join(", ")}`);
+  }
+  if (allUnresolved.length > 0) {
+    lines.push(`Unresolved imports (${allUnresolved.length}): ${allUnresolved.slice(0, MAX_ITEMS.exports).join(", ")}`);
+  }
+
+  if (lines.length === 1) {
+    lines.push("No unused exports, files, or dependencies found");
+  }
+
+  console.log(lines.join("\n"));
+  process.exit(0);
 });

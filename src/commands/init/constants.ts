@@ -75,6 +75,10 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15, now: 1, "dead-code": 30,
 };
 
+export const SCRIPT_COMPANIONS: Record<string, string[]> = {
+  "dead-code": ["quality/run-knip.sh", "quality/format-knip.mjs"],
+};
+
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
   architecture: [
     { id: "arch", label: "Architecture Map", description: "Module dependency graph (Mermaid)", command: "bash .pipemd/scripts/architecture/arch.sh", category: "architecture", volatile: 1, file: "architecture/arch.sh" },

@@ -2,7 +2,6 @@ import { execFile, execFileSync } from "child_process";
 import assert from "assert/strict";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const SCRIPT = path.join(ROOT, "scripts", "Shared", "quality", "dead-code.sh");
@@ -14,18 +13,6 @@ const PID_FILE = path.join(CACHE_DIR, "dead-code.pid");
 
 let passed = 0;
 let failed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } catch (err) {
-    console.error(`  ✗ ${name}`);
-    console.error(`    ${err.message}`);
-    failed++;
-  }
-}
 
 function execFileAsync(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -63,11 +50,36 @@ const KNIP_FIXTURE = JSON.stringify({
       file: "src/bar.ts",
       files: [{ name: "src/dead.ts" }],
       devDependencies: [{ name: "moment" }],
+      unlisted: [{ name: "secret-dep" }],
     },
   ],
 });
 
-console.log("Dead-code block contract tests (plain node, execFile codepath)\n");
+const tests = [];
+
+function test(name, fn) {
+  tests.push({ name, fn });
+}
+
+async function run() {
+  console.log("Dead-code block contract tests (plain node, execFile codepath)\n");
+
+  for (const { name, fn } of tests) {
+    try {
+      await fn();
+      console.log(`  ✓ ${name}`);
+      passed++;
+    } catch (err) {
+      console.error(`  ✗ ${name}`);
+      console.error(`    ${err.message}`);
+      failed++;
+    }
+  }
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  cleanup();
+  process.exit(failed > 0 ? 1 : 0);
+}
 
 test("no cache — returns fast with pending message", async () => {
   cleanup();
@@ -132,19 +144,15 @@ test("run-knip.sh — no knip installed outputs install suggestion", () => {
 });
 
 test("run-knip.sh — exits 0 even when knip is missing", () => {
-  try {
-    execFileSync("bash", [RUN_KNIP], {
-      encoding: "utf-8",
-      timeout: 3000,
-      cwd: ROOT,
-      env: { ...process.env, PATH: "/usr/bin:/bin" },
-    });
-  } catch (err) {
-    assert.fail(`run-knip.sh should exit 0 when knip missing, but threw: ${err.message}`);
-  }
+  execFileSync("bash", [RUN_KNIP], {
+    encoding: "utf-8",
+    timeout: 3000,
+    cwd: ROOT,
+    env: { ...process.env, PATH: "/usr/bin:/bin" },
+  });
 });
 
-test("format-knip.mjs — formats real knip JSON fixture", () => {
+test("format-knip.mjs — formats knip JSON fixture", () => {
   const result = execFileSync("node", [FORMAT], {
     encoding: "utf-8",
     input: KNIP_FIXTURE,
@@ -160,6 +168,8 @@ test("format-knip.mjs — formats real knip JSON fixture", () => {
   assert.ok(result.includes("lodash"), `Expected dep name, got: ${result.trim()}`);
   assert.ok(result.includes("Unused devDependencies (1)"), `Expected devDeps count, got: ${result.trim()}`);
   assert.ok(result.includes("moment"), `Expected devDep name, got: ${result.trim()}`);
+  assert.ok(result.includes("Unlisted deps (1)"), `Expected unlisted count, got: ${result.trim()}`);
+  assert.ok(result.includes("secret-dep"), `Expected unlisted name, got: ${result.trim()}`);
 });
 
 test("format-knip.mjs — empty issues outputs nothing found", () => {
@@ -172,14 +182,24 @@ test("format-knip.mjs — empty issues outputs nothing found", () => {
   assert.ok(result.includes("No unused"), `Expected nothing-found message, got: ${result.trim()}`);
 });
 
-test("format-knip.mjs — invalid JSON outputs error", () => {
+test("format-knip.mjs — invalid JSON outputs parse error", () => {
   const result = execFileSync("node", [FORMAT], {
     encoding: "utf-8",
     input: "not json",
     timeout: 3000,
     cwd: ROOT,
   });
-  assert.ok(result.includes("failed"), `Expected error message, got: ${result.trim()}`);
+  assert.ok(result.includes("JSON parse error"), `Expected JSON parse error, got: ${result.trim()}`);
+});
+
+test("format-knip.mjs — unexpected structure outputs structure error", () => {
+  const result = execFileSync("node", [FORMAT], {
+    encoding: "utf-8",
+    input: JSON.stringify({ not_issues: [] }),
+    timeout: 3000,
+    cwd: ROOT,
+  });
+  assert.ok(result.includes("unexpected JSON structure"), `Expected structure error, got: ${result.trim()}`);
 });
 
 test("PID-liveness — stale PID file doesn't block new background job", async () => {
@@ -194,7 +214,4 @@ test("PID-liveness — stale PID file doesn't block new background job", async (
   cleanup();
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-
-cleanup();
-process.exit(failed > 0 ? 1 : 0);
+run();

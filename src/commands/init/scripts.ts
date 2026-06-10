@@ -13,6 +13,7 @@ import {
   TEST_RUN_TIMEOUT_MS,
 } from "./constants.js";
 import type { ScriptDef, RunResult, AiAgent } from "./constants.js";
+import { SCRIPT_COMPANIONS } from "./constants.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -116,15 +117,17 @@ export async function testRunScripts(
       try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod test script ${scriptPath}: ${errMsg(err)}`); }
 
       if (script.id === "dead-code") {
-        const companions = ["quality/run-knip.sh", "quality/format-knip.mjs"];
-        for (const companion of companions) {
-          const companionContent = loadScriptContent(ecosystem, companion);
-          if (companionContent) {
-            const companionDir = path.join(tmpDir, path.dirname(companion));
-            fs.mkdirSync(companionDir, { recursive: true });
-            const companionPath = path.join(tmpDir, companion);
-            fs.writeFileSync(companionPath, companionContent, "utf-8");
-            try { fs.chmodSync(companionPath, 0o755); } catch (err: unknown) { log.debug(`chmod companion ${companionPath}: ${errMsg(err)}`); }
+        const companions = SCRIPT_COMPANIONS[script.id];
+        if (companions) {
+          for (const companion of companions) {
+            const companionContent = loadScriptContent(ecosystem, companion);
+            if (companionContent) {
+              const companionDir = path.join(tmpDir, path.dirname(companion));
+              fs.mkdirSync(companionDir, { recursive: true });
+              const companionPath = path.join(tmpDir, companion);
+              fs.writeFileSync(companionPath, companionContent, "utf-8");
+              try { fs.chmodSync(companionPath, 0o755); } catch (err: unknown) { log.debug(`chmod companion ${companionPath}: ${errMsg(err)}`); }
+            }
           }
         }
       }

@@ -22,6 +22,7 @@ import {
   HARNESS_USAGE_TIPS,
 } from "./constants.js";
 import type { ScriptDef, AiAgent } from "./constants.js";
+import { SCRIPT_COMPANIONS } from "./constants.js";
 import { loadScriptContent, getAllScripts } from "./scripts.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -289,7 +290,6 @@ function writeScripts(
   addFile: (filepath: string, content: string) => void,
 ): void {
   const ecosystemKey = ecosystem;
-  const deadCodeCompanions = ["quality/run-knip.sh", "quality/format-knip.mjs"];
   for (const script of selectedScripts) {
     const scriptContent = loadScriptContent(ecosystemKey, script.file);
     if (scriptContent) {
@@ -297,8 +297,9 @@ function writeScripts(
       addFile(scriptPath, scriptContent);
       try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod script ${scriptPath}: ${errMsg(err)}`); }
     }
-    if (script.id === "dead-code") {
-      for (const companion of deadCodeCompanions) {
+    const companions = SCRIPT_COMPANIONS[script.id];
+    if (companions) {
+      for (const companion of companions) {
         const companionContent = loadScriptContent(ecosystemKey, companion);
         if (companionContent) {
           const companionPath = path.join(SCRIPTS_DIR, companion);
