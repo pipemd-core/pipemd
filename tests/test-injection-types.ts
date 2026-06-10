@@ -1,12 +1,20 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
+import { parse as parseYaml } from "yaml"
 import {
   parseInjectionConfig,
   computePayloadHash,
   getRulesForTrigger,
+  findInjectionConfigIssues,
+  generateInjectionYml,
   DEFAULT_ACTIVE_RULES,
 } from "../src/core/injection-types.js"
 import type { InjectionConfig } from "../src/core/injection-types.js"
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 describe("parseInjectionConfig", () => {
   it("null input returns default active rules", () => {
@@ -249,5 +257,39 @@ describe("getRulesForTrigger", () => {
     const config: InjectionConfig = { delivery: "passive", rules: {} }
     const rules = getRulesForTrigger(config, "before-read")
     assert.deepStrictEqual(rules, [])
+  })
+})
+
+describe("findInjectionConfigIssues", () => {
+  it("clean config has no issues", () => {
+    const clean = { delivery: "active", rules: { "before-read": [{ source: "crew-status", scope: "global" }] } }
+    assert.deepStrictEqual(findInjectionConfigIssues(clean), [])
+  })
+
+  it("flags an unknown source", () => {
+    const bad = { rules: { "before-read": [{ source: "context-rules", scope: "global" }] } }
+    const issues = findInjectionConfigIssues(bad)
+    assert.strictEqual(issues.length, 1)
+    assert.match(issues[0], /unknown source "context-rules" in trigger "before-read"/)
+  })
+
+  it("flags an unknown trigger", () => {
+    const bad = { rules: { "after-read": [{ source: "crew-status", scope: "global" }] } }
+    assert.deepStrictEqual(findInjectionConfigIssues(bad), ['unknown trigger "after-read"'])
+  })
+
+  it("flags a removed top-level key", () => {
+    const bad = { rules: {}, "context-files": [{ glob: "AGENTS.md" }] }
+    assert.deepStrictEqual(findInjectionConfigIssues(bad), ['removed config key "context-files" is still present'])
+  })
+
+  it("the generated default config is clean", () => {
+    const generated = parseYaml(generateInjectionYml(DEFAULT_ACTIVE_RULES))
+    assert.deepStrictEqual(findInjectionConfigIssues(generated), [])
+  })
+
+  it("the repo's own .pipemd/injection.yml is clean", () => {
+    const raw = parseYaml(readFileSync(path.join(repoRoot, ".pipemd", "injection.yml"), "utf-8"))
+    assert.deepStrictEqual(findInjectionConfigIssues(raw), [])
   })
 })

@@ -56,7 +56,7 @@ export interface InjectionPayload {
 
 const VALID_DELIVERY_MODES: DeliveryMode[] = ["passive", "active", "expert"];
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
-const VALID_SOURCES: ContextSource[] = [
+export const VALID_SOURCES: ContextSource[] = [
   "crew-status",
   "crew-locks",
   "crew-todos",
@@ -231,6 +231,48 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
 
   const result: InjectionConfig = { delivery, rules, customCommandsAllowed: customCommandsAllowed || undefined };
   return result;
+}
+
+/** Top-level config keys that were removed from the schema; their presence means a stale config. */
+const REMOVED_CONFIG_KEYS = ["context-files"];
+
+/**
+ * Strict validation for committed/scaffolded injection configs. Unlike parseInjectionConfig
+ * (which warns and silently drops bad rules), this collects every problem so callers — tests
+ * and `pmd validate` — can fail hard on drift between the YAML and the engine's schema.
+ * Returns a list of human-readable issues; empty means the config is clean.
+ */
+export function findInjectionConfigIssues(raw: unknown): string[] {
+  const issues: string[] = [];
+  if (typeof raw !== "object" || raw === null) {
+    return ["config is not an object"];
+  }
+  const obj = raw as Record<string, unknown>;
+
+  for (const key of REMOVED_CONFIG_KEYS) {
+    if (key in obj) issues.push(`removed config key "${key}" is still present`);
+  }
+
+  if (typeof obj.rules === "object" && obj.rules !== null) {
+    const rawRules = obj.rules as Record<string, unknown>;
+    for (const trigger of Object.keys(rawRules)) {
+      if (!VALID_TRIGGERS.includes(trigger as InjectionTrigger)) {
+        issues.push(`unknown trigger "${trigger}"`);
+        continue;
+      }
+      const arr = rawRules[trigger];
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        if (typeof item !== "object" || item === null) continue;
+        const src = (item as Record<string, unknown>).source;
+        if (!isString(src) || !VALID_SOURCES.includes(src as ContextSource)) {
+          issues.push(`unknown source "${String(src)}" in trigger "${trigger}"`);
+        }
+      }
+    }
+  }
+
+  return issues;
 }
 
 export function loadInjectionConfig(configDir?: string): InjectionConfig {
