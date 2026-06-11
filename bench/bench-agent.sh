@@ -19,7 +19,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Defaults
 RUNS=5
-MODEL="openrouter/z-ai/glm-5.1"
+MODEL="zai-coding-plan/glm-5.1"
 SCENARIOS="1,2,3"
 DRY_RUN=false
 
@@ -83,28 +83,21 @@ parse_run_metrics() {
         ;;
       tool_use)
         tool_calls=$((tool_calls + 1))
-        local tool_name=$(echo "$line" | jq -r '.part.name // .part.tool // empty' 2>/dev/null || echo "")
+        local tool_name=$(echo "$line" | jq -r '.part.tool // empty' 2>/dev/null || echo "")
         case "$tool_name" in
-          read|file_read|Read) reads=$((reads + 1)) ;;
-          edit|file_edit|Edit) edits=$((edits + 1)) ;;
-          write|file_write|Write) writes=$((writes + 1)) ;;
-          grep|search|Grep|Search) greps=$((greps + 1)) ;;
-          glob|list|Glob|List) globs=$((globs + 1)) ;;
+          read|file_read) reads=$((reads + 1)) ;;
+          edit|file_edit) edits=$((edits + 1)) ;;
+          write|file_write) writes=$((writes + 1)) ;;
+          grep|search) greps=$((greps + 1)) ;;
+          glob|list) globs=$((globs + 1)) ;;
         esac
         ;;
       step_finish)
         wall_end=$(echo "$line" | jq -r '.timestamp // empty' 2>/dev/null || echo "")
-        # Extract token data if present
         local part_tokens=$(echo "$line" | jq -c '
-          if .part then
-            {
-              input: (.part.usage?.input // .part.inputTokens // 0),
-              output: (.part.usage?.output // .part.outputTokens // 0),
-              cache_read: (.part.usage?.cache?.read // .part.cacheReadTokens // 0),
-              cache_write: (.part.usage?.cache?.write // .part.cacheWriteTokens // 0)
-            }
-          else null end
-        ' 2>/dev/null || echo "null")
+          .part.tokens // {} |
+          {input: (.input // 0), output: (.output // 0)}
+        ' 2>/dev/null || echo '{"input":0,"output":0}')
         if [ "$part_tokens" != "null" ] && [ "$part_tokens" != "" ]; then
           local inp=$(echo "$part_tokens" | jq -r '.input // 0')
           local out=$(echo "$part_tokens" | jq -r '.output // 0')
@@ -163,12 +156,12 @@ run_cell() {
   # Determine work dir
   local work_dir="$worktree"
 
-  # For "with" condition: ensure PipeMD context is present
+  # For "with" condition: start PipeMD daemon inside the worktree
   if [ "$condition" = "with" ]; then
-    # Start daemon in the worktree if pipemd is configured
     if [ -f "$work_dir/.pipemd/config.yml" ]; then
-      pmd start --dir "$work_dir" 2>/dev/null || true
-      sleep 3  # Let context render
+      log "    Starting daemon in $work_dir"
+      (cd "$work_dir" && pmd start) 2>/dev/null || true
+      sleep 3
     fi
   fi
 
@@ -185,7 +178,7 @@ run_cell() {
 
   # Stop daemon if we started it
   if [ "$condition" = "with" ]; then
-    pmd stop 2>/dev/null || true
+    (cd "$work_dir" && pmd stop) 2>/dev/null || true
   fi
 
   # Parse metrics
@@ -198,11 +191,11 @@ run_cell() {
     echo "$tmp_metrics" > "$metrics_file"
   fi
 
-  # Quality check
+  # Quality check — run INSIDE the worktree so relative paths resolve correctly
   local quality=0
   local check_script="${SCENARIO_CHECK[$scenario]}"
   if [ -f "$check_script" ]; then
-    quality=$(bash "$check_script" 2>/dev/null || echo "0")
+    quality=$(cd "$work_dir" && bash "$check_script" 2>/dev/null || echo "0")
   fi
 
   # Record result
@@ -293,10 +286,10 @@ for s in "${SCEN[@]}"; do
         fi
       else
         setup_worktree "$base" "$worktree_base" "$condition"
-        # For "with" on hono: run pmd init
+        # For "with" on hono: run pmd init inside the worktree
         if [ "$condition" = "with" ]; then
           log "  Running pmd init on hono ($condition)..."
-          pmd init --headless --dir "$worktree_base" 2>/dev/null || true
+          (cd "$worktree_base" && pmd init --headless) 2>/dev/null || true
         fi
       fi
     fi

@@ -1,7 +1,7 @@
 {
   "meta": {
     "description": "PipeMD Agent A/B Benchmark baselines. Populated after first run.",
-    "model": "openrouter/z-ai/glm-5.1",
+    "model": "zai-coding-plan/glm-5.1",
     "runs_per_cell": 5,
     "hono_version": "v4.9.12",
     "date": null
