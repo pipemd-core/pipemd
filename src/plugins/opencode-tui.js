@@ -23,6 +23,7 @@ const ERROR_LOG_PATH = join(PROJECT_ROOT, ".pipemd", ".plugin-errors.log");
 const CONTEXT_FILES = ["AGENTS.md", "AI_CONTEXT.md"];
 const POLL_MS = 2000;
 const MAX_SESSIONS = 20;
+const SIDEBAR_EVENT_CAP = 10;
 
 function estimateTokens(bytes) {
   return Math.round(bytes / 4);
@@ -111,6 +112,12 @@ function formatTimeAgo(iso) {
   return Math.floor(m / 60) + "h";
 }
 
+function formatGap(seconds) {
+  if (seconds < 60) return seconds + "s";
+  if (seconds < 3600) return Math.floor(seconds / 60) + "m" + (seconds % 60 ? " " + (seconds % 60) + "s" : "");
+  return Math.floor(seconds / 3600) + "h" + (Math.floor((seconds % 3600) / 60) ? " " + Math.floor((seconds % 3600) / 60) + "m" : "");
+}
+
 function truncStr(s, max) {
   if (!s) return "";
   return s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
@@ -120,6 +127,10 @@ function basename(p) {
   if (!p) return "";
   const parts = p.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || p;
+}
+
+function eventKey(e) {
+  return (e.ts || "") + ":" + (e.trigger || "") + ":" + (e.result || "");
 }
 
 function vbox(children, props) {
@@ -162,17 +173,17 @@ function dot(color) {
 function renderTraceRoute(api) {
   const theme = () => api.theme.current;
   const [tick, setTick] = createSignal(Date.now());
-  const [view, setView] = createSignal("tree");
+  const [view, setView] = createSignal("timeline");
   const [cursor, setCursor] = createSignal(0);
   const [scrollOffset, setScrollOffset] = createSignal(0);
-  const [expandedHook, setExpandedHook] = createSignal(-1);
+  const [expandedKey, setExpandedKey] = createSignal(null);
   const timer = setInterval(() => setTick(Date.now()), POLL_MS);
   onCleanup(() => clearInterval(timer));
 
   const stats = createMemo(() => { tick(); return tryReadJson(STATS_PATH); });
   const sessions = createMemo(() => { tick(); return readSessions(); });
   const daemonPid = createMemo(() => { tick(); return tryReadPid(); });
-  const allEvents = createMemo(() => (stats()?.events || []).slice().reverse().slice(0, 50));
+  const allEvents = createMemo(() => (stats()?.events || []).slice().reverse());
   const conflictList = createMemo(() => findConflicts(sessions()));
   const dashboard = createMemo(() => { tick(); return tryReadJson(DASHBOARD_PATH); });
   const passiveAgents = createMemo(() => {
@@ -204,9 +215,12 @@ function renderTraceRoute(api) {
     if (evt.name === "escape" || (evt.alt && evt.name === "p")) {
       evt.preventDefault();
       evt.stopPropagation();
+      if (expandedKey()) { setExpandedKey(null); return; }
       dismissTrace();
       return;
     }
+    const evts = allEvents();
+    const total = view() === "tree" ? sessions().length : evts.length;
     if (evt.name === "up" || evt.name === "k") {
       evt.preventDefault();
       evt.stopPropagation();
@@ -214,21 +228,26 @@ function renderTraceRoute(api) {
     } else if (evt.name === "down" || evt.name === "j") {
       evt.preventDefault();
       evt.stopPropagation();
-      setCursor(cursor() + 1);
+      setCursor(Math.min(total - 1, cursor() + 1));
     } else if (evt.name === "enter") {
-      evt.preventDefault(); evt.stopPropagation();
-      if (view() === "hooks") {
-        setExpandedHook((prev) => prev === cursor() ? -1 : cursor());
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (view() === "timeline") {
+        const idx = cursor();
+        if (idx >= 0 && idx < evts.length && evts[idx].result === "injected") {
+          const key = eventKey(evts[idx]);
+          setExpandedKey((prev) => prev === key ? null : key);
+        }
       }
     } else if (evt.name === "right" || evt.name === "l") {
-      const views = ["tree", "timeline", "locks", "hooks"];
+      const views = ["tree", "timeline", "locks"];
       const next = (views.indexOf(view()) + 1) % views.length;
-      setView(views[next]); setCursor(0); setScrollOffset(0);
+      setView(views[next]); setCursor(0); setScrollOffset(0); setExpandedKey(null);
     } else if (evt.name === "left" || evt.name === "h") {
       evt.preventDefault(); evt.stopPropagation();
-      const views = ["tree", "timeline", "locks", "hooks"];
+      const views = ["tree", "timeline", "locks"];
       const prev = (views.indexOf(view()) - 1 + views.length) % views.length;
-      setView(views[prev]); setCursor(0); setScrollOffset(0);
+      setView(views[prev]); setCursor(0); setScrollOffset(0); setExpandedKey(null);
     }
   });
 
@@ -260,32 +279,16 @@ function renderTraceRoute(api) {
     view();
     cursor();
     scrollOffset();
+    expandedKey();
     const sess = sessions();
     const evts = allEvents();
     const dPid = daemonPid();
     const conflicts = conflictList();
-    const pw = Math.min((process.stdout.columns || 80) - 8, 114);
-
-    const header = [];
-    header.push(hbox([
-      boldNode("PipeMD Resolution Trace", theme().primary),
-      textNode("\u00B7", theme().textMuted),
-      textNode(sess.length + " session" + (sess.length !== 1 ? "s" : ""), theme().text),
-      textNode("\u00B7", theme().textMuted),
-      textNode(dPid ? "live" : "offline", dPid ? theme().success : theme().error),
-    ], { gap: 1 }));
-
-    header.push(hbox([
-      textNode(view() === "tree" ? "\u25B6 tree" : "  tree", view() === "tree" ? theme().primary : theme().textMuted),
-      textNode(view() === "timeline" ? "\u25B6 timeline" : "  timeline", view() === "timeline" ? theme().primary : theme().textMuted),
-      textNode(view() === "locks" ? "\u25B6 locks" : "  locks", view() === "locks" ? theme().primary : theme().textMuted),
-      textNode(view() === "hooks" ? "\u25B6 hooks" : "  hooks", view() === "hooks" ? theme().primary : theme().textMuted),
-    ], { gap: 2 }));
-
-    header.push(textNode("\u2500".repeat(pw), RGBA.fromInts(60, 60, 60, 255)));
-
-    // ── Agent status (active coordinators + workers + passive) ──
     const pAgents = passiveAgents();
+    const pw = Math.min((process.stdout.columns || 80) - 8, 114);
+    const th = theme();
+    const ek = expandedKey();
+
     const coordSessions = sess.filter((s) => s.role !== "worker");
     const workerByCoord = new Map();
     for (const s of sess) {
@@ -295,68 +298,98 @@ function renderTraceRoute(api) {
         workerByCoord.set(s.coordinatorId, list);
       }
     }
+
+    // ══ HEADER ══
+    const header = [];
+
+    const injectedCount = evts.filter((e) => e.result === "injected").length;
+    const totalInjected = evts.reduce((s, e) => s + (e.tokens || 0), 0);
+
+    header.push(hbox([
+      boldNode("PipeMD Trace", th.primary),
+      textNode("\u00B7", th.textMuted),
+      textNode(sess.length + " sess", th.text),
+      textNode("\u00B7", th.textMuted),
+      textNode(dPid ? "live" : "offline", dPid ? th.success : th.error),
+      textNode("\u00B7", th.textMuted),
+      textNode(evts.length + " events", th.textMuted),
+    ], { gap: 1 }));
+
+    if (totalInjected > 0) {
+      header.push(hbox([
+        boldNode(formatTokenCount(estimateTokens(totalInjected)) + " tok", th.primary),
+        textNode("injected \u00B7 " + injectedCount + " events", th.textMuted),
+      ], { gap: 1, paddingLeft: 1 }));
+    }
+
+    header.push(hbox([
+      textNode(view() === "tree" ? "\u25B6 tree" : "  tree", view() === "tree" ? th.primary : th.textMuted),
+      textNode(view() === "timeline" ? "\u25B6 timeline" : "  timeline", view() === "timeline" ? th.primary : th.textMuted),
+      textNode(view() === "locks" ? "\u25B6 locks" : "  locks", view() === "locks" ? th.primary : th.textMuted),
+    ], { gap: 2 }));
+
+    header.push(textNode("\u2500".repeat(pw), RGBA.fromInts(60, 60, 60, 255)));
+
+    // Agent status
     const activeCount = sess.length;
     const passiveCount = pAgents.length;
     const totalAgents = activeCount + passiveCount;
 
     if (totalAgents > 0) {
       header.push(hbox([
-        boldNode("Agents", theme().text),
-        dot(theme().success),
-        textNode(activeCount + " active", theme().success),
-        passiveCount > 0 ? dot(theme().warning) : textNode("", theme().textMuted),
-        passiveCount > 0 ? textNode(passiveCount + " passive", theme().warning) : textNode("", theme().textMuted),
+        boldNode("Agents", th.text),
+        dot(th.success),
+        textNode(activeCount + " active", th.success),
+        passiveCount > 0 ? dot(th.warning) : textNode("", th.textMuted),
+        passiveCount > 0 ? textNode(passiveCount + " passive", th.warning) : textNode("", th.textMuted),
       ], { gap: 1 }));
 
       for (const c of coordSessions) {
         const claimed = (c.claimedFiles || []).map((cl) => cl.path).join(", ");
         header.push(hbox([
-          dot(theme().success),
-          textNode(truncStr(c.harness, 14), theme().text),
-          textNode("coord", theme().textMuted),
+          dot(th.success),
+          textNode(truncStr(c.harness, 14), th.text),
+          textNode("coord", th.textMuted),
         ], { gap: 1, paddingLeft: 1 }));
         if (claimed) {
-          header.push(textNode("  claimed: " + truncStr(claimed, pw - 16), theme().textMuted));
+          header.push(textNode("  claimed: " + truncStr(claimed, pw - 16), th.textMuted));
         }
         const workers = workerByCoord.get(c.id) || [];
         for (let wi = 0; wi < workers.length; wi++) {
           const w = workers[wi];
           const prefix = wi === workers.length - 1 ? "\u2514\u2500" : "\u251C\u2500";
-          const wClaimed = (w.claimedFiles || []).map((cl) => cl.path).join(", ");
           const wLabel = w.label ? truncStr(w.label, 16) : truncStr(w.id, 10);
           header.push(hbox([
-            textNode(prefix, theme().textMuted),
-            dot(theme().primary),
-            textNode(truncStr(w.harness || "worker", 12), theme().text),
-            textNode(wLabel, theme().textMuted),
+            textNode(prefix, th.textMuted),
+            dot(th.primary),
+            textNode(truncStr(w.harness || "worker", 12), th.text),
+            textNode(wLabel, th.textMuted),
           ], { gap: 1, paddingLeft: 2 }));
-          if (wClaimed) {
-            header.push(textNode("    claimed: " + truncStr(wClaimed, pw - 18), theme().textMuted));
-          }
         }
       }
       const unattached = sess.filter((s) => s.role === "worker" && !s.coordinatorId);
       for (const w of unattached) {
         header.push(hbox([
-          dot(theme().warning),
-          textNode(truncStr(w.harness || "worker", 12), theme().text),
-          textNode("worker", theme().textMuted),
+          dot(th.warning),
+          textNode(truncStr(w.harness || "worker", 12), th.text),
+          textNode("worker", th.textMuted),
         ], { gap: 1, paddingLeft: 1 }));
       }
       for (const pa of pAgents) {
         header.push(hbox([
-          dot(theme().warning),
-          textNode(truncStr(pa, pw - 6), theme().textMuted),
+          dot(th.warning),
+          textNode(truncStr(pa, pw - 6), th.textMuted),
         ], { gap: 1, paddingLeft: 1 }));
       }
     } else {
-      header.push(textNode("No active agents", theme().textMuted));
+      header.push(textNode("No active agents", th.textMuted));
     }
 
     header.push(textNode("\u2500".repeat(pw), RGBA.fromInts(60, 60, 60, 255)));
 
     const headerLineCount = header.length;
 
+    // ══ BODY ROWS ══
     const rows = [];
 
     if (view() === "tree") {
@@ -364,56 +397,109 @@ function renderTraceRoute(api) {
         const hb = c.lastHeartbeat ? formatTimeAgo(c.lastHeartbeat) : "?";
         const claimed = (c.claimedFiles || []).map((cl) => cl.path).join(", ");
         rows.push(hbox([
-          textNode("\u25CF", theme().success),
-          textNode(truncStr(c.harness, 14), theme().text),
-          textNode(truncStr(c.id, 8), theme().textMuted),
-          textNode("pid:" + (c.pid || "?"), theme().textMuted),
-          textNode(hb, theme().textMuted),
+          textNode("\u25CF", th.success),
+          textNode(truncStr(c.harness, 14), th.text),
+          textNode(truncStr(c.id, 8), th.textMuted),
+          textNode("pid:" + (c.pid || "?"), th.textMuted),
+          textNode(hb, th.textMuted),
         ], { gap: 1, paddingLeft: 1 }));
-        if (claimed) rows.push(textNode("  claimed: " + truncStr(claimed, pw - 16), theme().textMuted));
+        if (claimed) rows.push(textNode("  claimed: " + truncStr(claimed, pw - 16), th.textMuted));
         const workers = workerByCoord.get(c.id) || [];
         for (let wi = 0; wi < workers.length; wi++) {
           const wk = workers[wi];
           const prefix = wi === workers.length - 1 ? "\u2514\u2500" : "\u251C\u2500";
-          const wClaimed = (wk.claimedFiles || []).map((cl) => cl.path).join(", ");
           rows.push(hbox([
-            textNode(prefix, theme().textMuted),
-            textNode("\u25CB", theme().primary),
-            textNode(truncStr(wk.harness || "worker", 12), theme().text),
-            textNode(truncStr(wk.id, 8), theme().textMuted),
-            textNode("pid:" + (wk.pid || "?"), theme().textMuted),
+            textNode(prefix, th.textMuted),
+            textNode("\u25CB", th.primary),
+            textNode(truncStr(wk.harness || "worker", 12), th.text),
+            textNode(truncStr(wk.id, 8), th.textMuted),
+            textNode("pid:" + (wk.pid || "?"), th.textMuted),
           ], { gap: 1, paddingLeft: 2 }));
-          if (wClaimed) rows.push(textNode("    claimed: " + truncStr(wClaimed, pw - 18), theme().textMuted));
         }
       }
       const unattached = sess.filter((s) => s.role === "worker" && !s.coordinatorId);
       for (const wk of unattached) {
         rows.push(hbox([
-          textNode("\u25CB", theme().warning),
-          textNode(truncStr(wk.harness || "worker", 12), theme().text),
-          textNode(truncStr(wk.id, 8), theme().textMuted),
-          textNode("unattached", theme().warning),
+          textNode("\u25CB", th.warning),
+          textNode(truncStr(wk.harness || "worker", 12), th.text),
+          textNode(truncStr(wk.id, 8), th.textMuted),
+          textNode("unattached", th.warning),
         ], { gap: 1, paddingLeft: 1 }));
       }
     } else if (view() === "timeline") {
-      if (evts.length === 0) rows.push(textNode("No events recorded", theme().textMuted));
-      for (const e of evts) {
+      if (evts.length === 0) rows.push(textNode("No events recorded", th.textMuted));
+
+      let lastTs = null;
+      for (let i = 0; i < evts.length; i++) {
+        const e = evts[i];
         const ts = e.ts ? new Date(e.ts) : null;
+
+        if (lastTs && ts && (lastTs.getTime() - ts.getTime()) > 30000) {
+          const gapS = Math.round((lastTs.getTime() - ts.getTime()) / 1000);
+          rows.push(textNode("  \u2500 " + formatGap(gapS) + " gap \u2500", RGBA.fromInts(50, 50, 50, 255)));
+        }
+        lastTs = ts;
+
         const timeStr = ts ? ts.toTimeString().slice(0, 8) : "?";
         const isInjected = e.result === "injected";
         const isDedup = e.result === "dedup";
+        const isClaimed = e.result === "claimed";
         const isHb = e.result === "heartbeat";
-        const resultFg = isInjected ? theme().success : isDedup ? theme().warning : isHb ? theme().textMuted : theme().text;
-        const resultLabel = isInjected ? "injected" : isDedup ? "dedup" : isHb ? "hb" : "ok";
+        const resultFg = isInjected ? th.success : isDedup ? th.warning : isHb ? th.textMuted : th.text;
+        const resultLabel = isInjected ? "injected" : isDedup ? "dedup" : isClaimed ? "claimed" : isHb ? "hb" : "ok";
         const tok = e.tokens || 0;
+        const tokEst = estimateTokens(tok);
+        const tokFg = tokEst > 20000 ? th.error : tokEst > 5000 ? th.warning : th.primary;
+        const isExpanded = isInjected && ek && eventKey(e) === ek;
+
         const lineChildren = [
-          textNode(timeStr, theme().textMuted),
-          textNode(truncStr(e.trigger || "?", 10), theme().text),
-          textNode(resultLabel, resultFg),
+          textNode(timeStr, th.textMuted),
+          dot(resultFg),
+          textNode(truncStr(e.trigger || "?", 10), th.text),
         ];
-        if (e.file) lineChildren.push(textNode(truncStr(basename(e.file), 16), theme().text));
-        if (tok > 0) lineChildren.push(boldNode("+" + formatTokenCount(estimateTokens(tok)) + " tok", theme().primary));
+        if (e.tool) lineChildren.push(textNode(truncStr(e.tool, 8), th.text));
+        if (e.file) lineChildren.push(textNode(truncStr(basename(e.file), 20), th.text));
+        if (tok > 0) lineChildren.push(boldNode("+" + formatTokenCount(tokEst) + " tok", tokFg));
+        else lineChildren.push(textNode(resultLabel, resultFg));
+        if (isInjected) lineChildren.push(textNode(isExpanded ? "\u25BC" : "\u25B6", th.textMuted));
+        if (e.session) lineChildren.push(textNode(truncStr(e.session, 8), RGBA.fromInts(80, 80, 120, 255)));
+
         rows.push(hbox(lineChildren, { gap: 1, paddingLeft: 1 }));
+
+        if (isExpanded) {
+          const payloadFile = e.payload;
+          if (payloadFile) {
+            try {
+              const content = readFileSync(join(INJECT_LOG_DIR, payloadFile), "utf-8");
+              const maxLines = Math.max(10, Math.min(30, Math.floor(h() * 0.4)));
+              const lines = content.split("\n");
+              const showLines = lines.slice(0, maxLines);
+              rows.push(hbox([
+                textNode("\u250C\u2500 ", th.primary),
+                boldNode(truncStr(e.trigger || "", 12) + " \u00B7 " + formatTokenCount(tokEst) + " tok \u00B7 " + lines.length + " lines", th.primary),
+                textNode(" \u2500" + "\u2500".repeat(Math.max(1, pw - 40)), th.primary),
+              ], { paddingLeft: 2 }));
+              for (const line of showLines) {
+                rows.push(hbox([
+                  textNode("\u2502 ", th.textMuted),
+                  textNode(line.length > pw - 6 ? line.slice(0, pw - 9) + "\u2026" : line, th.text),
+                ], { paddingLeft: 2 }));
+              }
+              if (lines.length > maxLines) {
+                rows.push(hbox([
+                  textNode("\u2514\u2500 ", th.textMuted),
+                  textNode("..." + (lines.length - maxLines) + " more lines (" + content.length + " bytes)", th.textMuted),
+                ], { paddingLeft: 2 }));
+              } else {
+                rows.push(hbox([textNode("\u2514" + "\u2500".repeat(pw - 6), th.textMuted)], { paddingLeft: 2 }));
+              }
+            } catch {
+              rows.push(hbox([textNode("\u2502 (payload file not found)", th.textMuted)], { paddingLeft: 3 }));
+            }
+          } else {
+            rows.push(hbox([textNode("\u2502 (no payload captured)", th.textMuted)], { paddingLeft: 3 }));
+          }
+        }
       }
     } else if (view() === "locks") {
       const byFile = new Map();
@@ -424,91 +510,26 @@ function renderTraceRoute(api) {
           byFile.set(cl.path, owners);
         }
       }
-      if (byFile.size === 0) rows.push(textNode("No files claimed", theme().textMuted));
+      if (byFile.size === 0) rows.push(textNode("No files claimed", th.textMuted));
       for (const [path, owners] of byFile) {
         const hasConflict = owners.length > 1;
-        const fg = hasConflict ? theme().error : theme().text;
+        const fg = hasConflict ? th.error : th.text;
         rows.push(hbox([
           textNode(hasConflict ? "\u26A0" : "\u25CF", fg),
           textNode(truncStr(path, pw - 8), fg),
         ], { gap: 1, paddingLeft: 1 }));
         for (const o of owners) {
           rows.push(hbox([
-            textNode("\u2514\u2500", theme().textMuted),
-            textNode(truncStr(o.harness || "?", 10), theme().text),
-            textNode(truncStr(o.id, 8), theme().textMuted),
-            textNode(o.role || "agent", theme().textMuted),
+            textNode("\u2514\u2500", th.textMuted),
+            textNode(truncStr(o.harness || "?", 10), th.text),
+            textNode(truncStr(o.id, 8), th.textMuted),
+            textNode(o.role || "agent", th.textMuted),
           ], { gap: 1, paddingLeft: 3 }));
-        }
-      }
-    } else if (view() === "hooks") {
-      const evts = allEvents();
-      const totalInjected = evts.reduce((s, e) => s + (e.tokens || 0), 0);
-      if (totalInjected > 0) {
-        rows.push(hbox([
-          boldNode(formatTokenCount(estimateTokens(totalInjected)) + " tok", theme().primary),
-          textNode("injected", theme().textMuted),
-          textNode("\u2139 enter to expand", theme().textMuted),
-        ], { gap: 1, paddingLeft: 1 }));
-      }
-      if (evts.length === 0) {
-        rows.push(textNode("No hook events recorded", theme().textMuted));
-      }
-      const expIdx = expandedHook();
-      for (let i = 0; i < evts.length; i++) {
-        const e = evts[i];
-        const ago = formatTimeAgo(e.ts);
-        const isInjected = e.result === "injected";
-        const isDedup = e.result === "dedup";
-        const isClaimed = e.result === "claimed";
-        const isHb = e.result === "heartbeat";
-        const resultDotFg = isInjected ? theme().primary : isDedup ? theme().textMuted : isClaimed ? theme().warning : isHb ? theme().textMuted : theme().success;
-        const triggerStr = truncStr(e.trigger, 10);
-        const toolStr = e.tool ? truncStr(e.tool, 8) : "";
-        const fileStr = e.file ? truncStr(basename(e.file), 20) : "";
-        const tok = e.tokens || 0;
-        const tokStr = tok > 0 ? "+" + formatTokenCount(estimateTokens(tok)) + " tok" : "";
-        const resultLabel = isInjected ? "injected" : isDedup ? "dedup" : isClaimed ? "claimed" : isHb ? "hb" : "ok";
-
-        const lineChildren = [
-          dot(resultDotFg),
-          textNode(ago, theme().textMuted),
-          textNode(triggerStr, theme().text),
-        ];
-        if (toolStr) lineChildren.push(textNode(toolStr, theme().text));
-        if (fileStr) lineChildren.push(textNode(fileStr, theme().text));
-        if (tokStr) lineChildren.push(boldNode(tokStr, theme().primary));
-        else lineChildren.push(textNode(resultLabel, resultDotFg));
-        if (isInjected) {
-          lineChildren.push(textNode(expIdx === i ? "\u25BC" : "\u25B6", theme().textMuted));
-        }
-        rows.push(hbox(lineChildren, { gap: 1, paddingLeft: 1 }));
-
-        if (isInjected && expIdx === i) {
-          const payloadFile = e.payload;
-          if (payloadFile) {
-            try {
-              const content = readFileSync(join(INJECT_LOG_DIR, payloadFile), "utf-8");
-              const plines = content.split("\n").slice(0, 8);
-              for (const line of plines) {
-                rows.push(hbox([
-                  textNode("\u2502 ", theme().textMuted),
-                  textNode(line.length > pw - 8 ? line.slice(0, pw - 11) + "..." : line, theme().textMuted),
-                ], { paddingLeft: 3 }));
-              }
-              if (content.split("\n").length > 8) {
-                rows.push(hbox([textNode("\u2502 ... (" + content.length + " bytes)", theme().textMuted)], { paddingLeft: 3 }));
-              }
-            } catch {
-              rows.push(hbox([textNode("\u2502 (payload file not found)", theme().textMuted)], { paddingLeft: 3 }));
-            }
-          } else {
-            rows.push(hbox([textNode("\u2502 (no payload captured)", theme().textMuted)], { paddingLeft: 3 }));
-          }
         }
       }
     }
 
+    // ══ WINDOWED DISPLAY ══
     const totalRows = rows.length;
     const cur = Math.min(cursor(), Math.max(0, totalRows - 1));
     if (cur !== cursor()) setCursor(cur);
@@ -525,14 +546,10 @@ function renderTraceRoute(api) {
     for (let i = 0; i < vr; i++) {
       const rowIdx = so + i;
       const isCursorRow = rowIdx === cur && rowIdx < totalRows;
-      const rowEl = sliced[i] || textNode("", theme().textMuted);
+      const rowEl = sliced[i] || textNode("", th.textMuted);
       if (isCursorRow) {
         const highlight = el("box");
-        spread(highlight, {
-          backgroundColor: cursorBarBg,
-          paddingLeft: 1,
-          width: pw,
-        });
+        spread(highlight, { backgroundColor: cursorBarBg, paddingLeft: 1, width: pw });
         insert(highlight, rowEl);
         body.push(highlight);
       } else {
@@ -540,18 +557,19 @@ function renderTraceRoute(api) {
       }
     }
 
+    // ══ FOOTER ══
     const footer = [];
     if (conflicts.length > 0) {
       footer.push(hbox([
-        textNode("\u26A0 " + conflicts.length + " conflict" + (conflicts.length > 1 ? "s" : ""), theme().error),
+        textNode("\u26A0 " + conflicts.length + " conflict" + (conflicts.length > 1 ? "s" : ""), th.error),
       ], { paddingTop: 1 }));
     }
     footer.push(textNode("\u2500".repeat(pw), RGBA.fromInts(60, 60, 60, 255)));
     footer.push(hbox([
-      textNode("[esc] close", theme().textMuted),
-      textNode("[\u2191\u2193] navigate", theme().textMuted),
-      textNode("[\u2190\u2192] views", theme().textMuted),
-      view() === "hooks" ? textNode("[enter] expand", theme().textMuted) : textNode("", theme().textMuted),
+      textNode("[esc] close", th.textMuted),
+      textNode("[\u2191\u2193] navigate", th.textMuted),
+      textNode("[\u2190\u2192] views", th.textMuted),
+      view() === "timeline" ? textNode("[enter] expand", th.textMuted) : textNode("", th.textMuted),
     ], { gap: 2 }));
 
     return vbox([...header, ...body, ...footer], {});
@@ -577,8 +595,9 @@ function renderPmdPanel(api, sessionId) {
   const deliveryMode = createMemo(() => stats()?.deliveryMode || "passive");
   const allEvents = createMemo(() => {
     const raw = stats()?.events || [];
-    return raw.slice().reverse();
+    return raw.slice().reverse().slice(0, SIDEBAR_EVENT_CAP);
   });
+  const totalEventCount = createMemo(() => (stats()?.events || []).length);
 
   const dashboard = createMemo(() => { tick(); return tryReadJson(DASHBOARD_PATH); });
   const passiveAgents = createMemo(() => {
@@ -604,6 +623,7 @@ function renderPmdPanel(api, sessionId) {
     const sess = sessions();
     const conflictList = findConflicts(sess);
     const evts = allEvents();
+    const totalEvts = totalEventCount();
     const dMode = deliveryMode();
     const pAgents = passiveAgents();
     const st = stats();
@@ -622,7 +642,6 @@ function renderPmdPanel(api, sessionId) {
 
     const children = [];
 
-    // ── Header: PipeMD  ● running  active ──
     const headerChildren = [];
     headerChildren.push(boldNode("PipeMD", theme().primary));
     headerChildren.push(dot(daemonOk ? theme().success : theme().error));
@@ -632,12 +651,10 @@ function renderPmdPanel(api, sessionId) {
     }
     children.push(hbox(headerChildren, { gap: 1 }));
 
-    // ── Daemon PID ──
     if (daemonOk) {
       children.push(textNode("pid " + daemonPid(), theme().textMuted));
     }
 
-    // ── Context tokens ──
     if (ci) {
       const tokenFg = contextTokens > 50000 ? theme().error : contextTokens > 20000 ? theme().warning : theme().success;
       children.push(hbox([
@@ -647,7 +664,6 @@ function renderPmdPanel(api, sessionId) {
       ], { gap: 1 }));
     }
 
-    // ── Plugin error ──
     if (err) {
       const errLines = (err.error || "").split("\n").slice(0, 2);
       children.push(hbox([
@@ -660,14 +676,12 @@ function renderPmdPanel(api, sessionId) {
       }
     }
 
-    // ── Conflicts ──
     if (conflictCount > 0) {
       children.push(hbox([
         textNode("\u26A0 " + conflictCount + " conflict" + (conflictCount > 1 ? "s" : ""), theme().error),
       ]));
     }
 
-    // ── Agents (active crew + passive) ──
     const totalAgents = sessionCount + passiveCount;
     if (totalAgents > 0) {
       const agentsHeaderChildren = [];
@@ -764,21 +778,21 @@ function renderPmdPanel(api, sessionId) {
       }
     }
 
-    // ── Hook log (retractable) ──
-    if (evts.length > 0) {
+    // ── Hook log (retractable, capped) ──
+    if (evts.length > 0 || totalEvts > 0) {
       const logHeaderChildren = [];
       const arrow = el("text");
       spread(arrow, { fg: theme().text });
       insert(arrow, txt(isOpen ? "\u25BC" : "\u25B6"));
       logHeaderChildren.push(arrow);
       logHeaderChildren.push(boldNode("Hook Log", theme().text));
-      logHeaderChildren.push(textNode(evts.length + " events", theme().textMuted));
-      if (!isOpen && hooksFired > evts.length) {
+      logHeaderChildren.push(textNode(eventCount + "/" + totalEvts, theme().textMuted));
+      if (!isOpen && hooksFired > totalEvts) {
         logHeaderChildren.push(textNode("(" + hooksFired + " total)", theme().textMuted));
       }
       children.push(hbox(logHeaderChildren, { gap: 1, paddingTop: 1, onMouseDown: () => setLogOpen((x) => !x) }));
 
-      if (isOpen) {
+      if (isOpen && evts.length > 0) {
         const totalInjected = evts.reduce((s, e) => s + (e.tokens || 0), 0);
         if (totalInjected > 0) {
           children.push(hbox([
@@ -789,6 +803,7 @@ function renderPmdPanel(api, sessionId) {
         }
 
         const expIdx = expandedIdx();
+        const sidebarWidth = 44;
 
         for (let i = 0; i < evts.length; i++) {
           const e = evts[i];
@@ -828,16 +843,17 @@ function renderPmdPanel(api, sessionId) {
             if (payloadFile) {
               try {
                 const content = readFileSync(join(INJECT_LOG_DIR, payloadFile), "utf-8");
-                const lines = content.split("\n").slice(0, 6);
+                const lines = content.split("\n").slice(0, 12);
                 for (const line of lines) {
                   children.push(hbox([
                     textNode("\u2502 ", theme().textMuted),
-                    textNode(line.length > 34 ? line.slice(0, 31) + "..." : line, theme().textMuted),
+                    textNode(line.length > sidebarWidth ? line.slice(0, sidebarWidth - 3) + "\u2026" : line, theme().textMuted),
                   ], { paddingLeft: 3 }));
                 }
-                if (content.split("\n").length > 6) {
+                if (content.split("\n").length > 12) {
                   children.push(hbox([textNode("\u2502 ... (" + content.length + " bytes)", theme().textMuted)], { paddingLeft: 3 }));
                 }
+                children.push(hbox([textNode("\u2502 [Alt+P] full view", theme().textMuted)], { paddingLeft: 3 }));
               } catch {
                 children.push(hbox([textNode("\u2502 (payload file not found)", theme().textMuted)], { paddingLeft: 3 }));
               }
@@ -845,6 +861,12 @@ function renderPmdPanel(api, sessionId) {
               children.push(hbox([textNode("\u2502 (no payload captured)", theme().textMuted)], { paddingLeft: 3 }));
             }
           }
+        }
+
+        if (totalEvts > SIDEBAR_EVENT_CAP) {
+          children.push(hbox([
+            textNode("[Alt+P] view all " + totalEvts + " events", theme().textMuted),
+          ], { paddingTop: 1 }));
         }
       }
     }
@@ -855,7 +877,7 @@ function renderPmdPanel(api, sessionId) {
       dot(theme().textMuted),
       textNode(claimsMade + " claims", theme().textMuted),
       dot(theme().textMuted),
-      textNode(eventCount + " events", theme().textMuted),
+      textNode(totalEvts + " events", theme().textMuted),
     ];
     children.push(hbox(footerLine1, { gap: 1, paddingTop: 1 }));
     if (dMode !== "passive") {

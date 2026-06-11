@@ -178,7 +178,7 @@ function pushEvent(trigger, tool, file, result, tokens) {
     stats.lastPayloadFile = "";
   }
   stats.events.push(entry);
-  if (stats.events.length > 10) stats.events = stats.events.slice(-10);
+  if (stats.events.length > 100) stats.events = stats.events.slice(-100);
   writeStats();
 }
 
