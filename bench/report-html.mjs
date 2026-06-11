@@ -1,11 +1,32 @@
 /* global process, console */
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { join, isAbsolute } from "node:path";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { join, isAbsolute, dirname } from "node:path";
 
 const [input, output, repoRoot, scenarioNamesRaw, scenarioTargetsRaw, promptsDir] = process.argv.slice(2);
 
-const scenarioNames = JSON.parse(scenarioNamesRaw);
-const scenarioTargets = JSON.parse(scenarioTargetsRaw);
+const scenarioNamesFallback = JSON.parse(scenarioNamesRaw);
+const scenarioTargetsFallback = JSON.parse(scenarioTargetsRaw);
+const resultsDir = dirname(input);
+const benchDir = dirname(promptsDir);
+
+let scenarioNames = scenarioNamesFallback;
+let scenarioTargets = scenarioTargetsFallback;
+try {
+  const baselines = JSON.parse(readFileSync(join(benchDir, "baselines.json"), "utf8"));
+  const entries = Object.entries(baselines.scenarios || {});
+  if (entries.length) {
+    const names = {};
+    const targets = {};
+    entries.forEach(([key, val], i) => {
+      const num = String(i + 1);
+      const label = key.replace(/^\d+-/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      names[num] = label + " (" + (val.target || "?") + ")";
+      targets[num] = val.target || "?";
+    });
+    scenarioNames = names;
+    scenarioTargets = targets;
+  }
+} catch { /* fallback to hardcoded */ }
 
 const lines = readFileSync(input, "utf8").split("\n").filter(l => l.trim());
 if (lines.length < 2) {
@@ -14,7 +35,9 @@ if (lines.length < 2) {
 }
 
 const meta = JSON.parse(lines[0]);
-const runs = lines.slice(1).map(l => JSON.parse(l));
+const allRuns = lines.slice(1).map(l => JSON.parse(l));
+const runs = allRuns.filter(r => r.quality !== -1);
+const voidRuns = allRuns.filter(r => r.quality === -1);
 
 const groups = {};
 for (const r of runs) {
@@ -23,6 +46,21 @@ for (const r of runs) {
   groups[key].push(r);
 }
 const scenarios = [...new Set(runs.map(r => r.scenario))].sort();
+
+function extractFirstTurnTokens(label) {
+  const ndjsonPath = join(resultsDir, `${label}.ndjson`);
+  if (!existsSync(ndjsonPath)) return null;
+  try {
+    const ndjsonLines = readFileSync(ndjsonPath, "utf8").split("\n").filter(l => l.trim());
+    for (const line of ndjsonLines) {
+      const obj = JSON.parse(line);
+      if (obj.type === "step_finish" && obj.part?.tokens?.input) {
+        return obj.part.tokens.input;
+      }
+    }
+  } catch { return null; }
+  return null;
+}
 
 const median = (arr) => {
   if (!arr.length) return null;
@@ -103,19 +141,35 @@ function computeVerdict(sw, swo, withData) {
   const readsWo = swo?.r?.med || 0;
   const qW = sw?.q, qWo = swo?.q;
 
+  // Try first-turn token comparison for unambiguous consumption check
+  const ftWith = withData.map(d => {
+    const label = `s${d.scenario}-${d.condition}-r${d.run}`;
+    return extractFirstTurnTokens(label);
+  }).filter(v => v != null);
+  const ftWithout = (groups[withData[0]?.scenario + "-without"] || []).map(d => {
+    const label = `s${d.scenario}-${d.condition}-r${d.run}`;
+    return extractFirstTurnTokens(label);
+  }).filter(v => v != null);
+  const ftW = ftWith.length ? median(ftWith) : null;
+  const ftWo = ftWithout.length ? median(ftWithout) : null;
+  const ftDelta = ftW != null && ftWo != null && ftWo > 0 ? ((ftW - ftWo) / ftWo) * 100 : null;
+
+  const useFirstTurn = ftDelta != null;
+  const signal = useFirstTurn ? `First-turn: WITH=${fmt(ftW)} vs WITHOUT=${fmt(ftWo)} (${ftDelta > 0 ? "+" : ""}${ftDelta.toFixed(0)}%)` : `Summed: WITH=${fmt(itW)} vs WITHOUT=${fmt(itWo)} (${itDelta > 0 ? "+" : ""}${itDelta.toFixed(0)}%)`;
+
   let verdict, detail;
   if (!consumed && withData.length > 0) {
-    verdict = "VOID"; detail = `Context not consumed (input_tokens WITH=${fmt(itW)} vs WITHOUT=${fmt(itWo)}, delta=${itDelta.toFixed(0)}%)`;
+    verdict = "VOID"; detail = `Context not consumed (${signal})`;
   } else if (consumed && qW === qWo && readsW < readsWo) {
-    verdict = "PASS"; detail = `Context consumed (+${itDelta.toFixed(0)}% input tokens), equal quality, fewer exploration reads`;
+    verdict = "PASS"; detail = `Context consumed, equal quality, fewer exploration reads (${signal})`;
   } else if (consumed && qW === qWo && readsW >= readsWo) {
-    verdict = "WEAK"; detail = `Context consumed (+${itDelta.toFixed(0)}% input tokens), equal quality, but no reduction in reads`;
+    verdict = "WEAK"; detail = `Context consumed, equal quality, but no reduction in reads (${signal})`;
   } else if (consumed && qW !== qWo) {
     verdict = "INCONCLUSIVE"; detail = `Quality grades differ (${qW} vs ${qWo}), cannot compare efficiency`;
   } else {
     verdict = "INCONCLUSIVE"; detail = "Insufficient data";
   }
-  return { verdict, detail, consumed, itDelta, itW, itWo };
+  return { verdict, detail, consumed, itDelta, itW, itWo, ftDelta, ftW, ftWo, useFirstTurn };
 }
 
 const metricsDef = [
@@ -245,10 +299,15 @@ ${compRows}
       VERDICT: ${v.verdict}
     </div>
     <div class="verdict-detail">${v.detail}</div>
-    <div class="consumption-note">
-      Consumption: input_tokens delta = ${(v.itDelta || 0).toFixed(0)}%
-      (WITH=${fmt(v.itW)}, WITHOUT=${fmt(v.itWo)})
-    </div>
+    ${v.ftDelta != null
+      ? `<div class="consumption-note">
+        First-turn input_tokens: WITH=${fmt(v.ftW)} WITHOUT=${fmt(v.ftWo)} (${v.ftDelta > 0 ? "+" : ""}${v.ftDelta.toFixed(0)}%)
+        — unambiguous consumption signal.
+      </div>`
+      : `<div class="consumption-note">
+        Summed input_tokens delta = ${(v.itDelta || 0).toFixed(0)}% (WITH=${fmt(v.itW)}, WITHOUT=${fmt(v.itWo)}).
+        First-turn data unavailable (NDJSON files not found next to JSONL).
+      </div>`}
 
     <details class="run-details">
       <summary>Per-Run Detail (${maxRuns} runs)</summary>
@@ -497,7 +556,7 @@ const html = `<!DOCTYPE html>
       <span>Runs/cell: ${meta.runs_per_cell}</span>
       <span>Timestamp: ${meta.timestamp}</span>
       <span>Scenarios: ${scenarios.length}</span>
-      <span>Total runs: ${runs.length}</span>
+      <span>Total runs: ${runs.length}${voidRuns.length ? ` (${voidRuns.length} void — excluded)` : ""}</span>
     </div>
   </header>
 
