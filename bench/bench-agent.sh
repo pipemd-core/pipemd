@@ -23,6 +23,16 @@ MODEL="zai-coding-plan/glm-5.1"
 SCENARIOS="1,2,3"
 DRY_RUN=false
 
+RETROSPECTIVE_PROMPT="You just completed a task using PipeMD context (the AGENTS.md file with <!-- pmd: --> blocks). Give honest, concise feedback in a numbered list.
+
+1. Which pmd: blocks were actually useful? Which did you ignore?
+2. Did any block return stale, empty, or misleading data?
+3. What did you need that no block provided?
+4. Were there moments you explored the codebase manually for something that should have been in context?
+5. Any block that felt like wasted tokens?
+
+Be brutally honest — flattery is useless. One sentence per point max."
+
 # Parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -207,6 +217,29 @@ run_cell() {
   end_ms=$(date +%s%3N)
   local elapsed_ms=$(( end_ms - start_ms ))
 
+  # Retrospective: ask the agent which blocks helped (WITH only, daemon still running)
+  local retro_path=""
+  if [ "$condition" = "with" ]; then
+    local retro_ndjson="$RESULTS_DIR/${label}.retro.ndjson"
+    log "    Running retrospective follow-up..."
+    opencode run --continue --format json --model "$MODEL" --dir "$work_dir" \
+      "$RETROSPECTIVE_PROMPT" > "$retro_ndjson" 2>/dev/null || true
+
+    local retro_dir="$RESULTS_DIR/retrospectives"
+    mkdir -p "$retro_dir"
+    retro_path="${retro_dir}/s${scenario}-${condition}-r${run_idx}.md"
+    # Extract text events from retro NDJSON
+    jq -r 'select(.type == "text") | .part.text // empty' "$retro_ndjson" 2>/dev/null \
+      | sed '/^$/d' > "$retro_path"
+    if [ ! -s "$retro_path" ]; then
+      rm -f "$retro_path"
+      retro_path=""
+      log "    Retrospective: (empty response)"
+    else
+      log "    Retrospective: $(wc -l < "$retro_path") lines captured"
+    fi
+  fi
+
   # Stop daemon if we started it
   if [ "$condition" = "with" ]; then
     (cd "$work_dir" && pmd stop) 2>/dev/null || true
@@ -239,7 +272,8 @@ run_cell() {
     --argjson run "$run_idx" \
     --argjson quality "$quality" \
     --argjson metrics "$metrics_json" \
-    '{scenario: $scenario, condition: $condition, run: $run, quality: $quality, metrics: $metrics}' \
+    --arg retro "${retro_path:-}" \
+    '{scenario: $scenario, condition: $condition, run: $run, quality: $quality, metrics: $metrics, retrospective: (if $retro == "" then null else $retro end)}' \
     >> "$RESULTS_FILE"
 
   log "    Quality: $quality, Tool calls: $(jq -r '.tool_calls // "?"' "$metrics_file" 2>/dev/null)"
@@ -454,6 +488,13 @@ console.log('');
 console.log('Note: input_tokens will likely be HIGHER with PipeMD (context tax).');
 console.log('      output_tokens / tool_calls should be LOWER if PipeMD helps.');
 console.log('      Delta is relative to WITHOUT (negative = WITH is smaller).');
+// List retrospectives
+const retros = allData.filter(d => d.retrospective).map(d => d.retrospective);
+if (retros.length > 0) {
+  console.log('');
+  console.log('=== Retrospectives ===');
+  retros.forEach(r => console.log('  ' + r));
+}
 " 2>/dev/null
 
 log "Done."
