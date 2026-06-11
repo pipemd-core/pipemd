@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "description": "PipeMD Agent A/B Benchmark baselines. Populated after first run.",
+    "model": "openrouter/z-ai/glm-5.1",
+    "runs_per_cell": 5,
+    "hono_version": "v4.9.12",
+    "date": null
+  },
+  "scenarios": {
+    "01-crew-export": {
+      "target": "pipemd",
+      "with_pmd": null,
+      "without_pmd": null
+    },
+    "02-middleware-timing": {
+      "target": "hono",
+      "with_pmd": null,
+      "without_pmd": null
+    },
+    "03-error-handler": {
+      "target": "hono",
+      "with_pmd": null,
+      "without_pmd": null
+    }
+  },
+  "methodology": {
+    "quality_levels": "0=broken, 1=partial, 2=complete (see rubric.md)",
+    "metrics": "input_tokens, output_tokens, tool_calls, reads, edits, writes, greps, globs, wall_ms, quality",
+    "comparison_rule": "Only compare efficiency metrics at equal quality levels",
+    "with_pmd": "Full active mode: daemon running, context file rendered, hooks injecting",
+    "without_pmd": "Pristine git clone, never touched by PipeMD, no .pipemd/ directory"
+  }
+}
