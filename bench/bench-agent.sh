@@ -163,30 +163,37 @@ run_cell() {
   # Determine work dir
   local work_dir="$worktree"
 
-  # For "with" condition: start PipeMD daemon inside the worktree
+  local render_failed=false
+
   if [ "$condition" = "with" ]; then
     if [ -f "$work_dir/.pipemd/config.yml" ]; then
       log "    Starting daemon in $work_dir"
       (cd "$work_dir" && pmd start) 2>/dev/null || true
-      # Wait for initial render (commands run synchronously, ~5-8s)
       local waited=0
-      while [ $waited -lt 30 ]; do
+      while [ $waited -lt 60 ]; do
         sleep 1
         waited=$((waited + 1))
         if [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null; then
           break
         fi
       done
-      # Verify context was rendered as a regular file with pmd: blocks
       local ctx_file="$work_dir/AGENTS.md"
-      if [ -f "$ctx_file" ]; then
+      if [ -f "$ctx_file" ] && grep -q 'pmd:' "$ctx_file" 2>/dev/null; then
         local block_count
         block_count=$(grep -c 'pmd:' "$ctx_file" 2>/dev/null || echo "0")
-        log "    Context OK: $block_count pmd: blocks in $(basename "$ctx_file")"
+        log "    Context OK: $block_count pmd: blocks in $(basename "$ctx_file") (${waited}s)"
       else
-        log "    WARNING: AGENTS.md not found or is not a regular file — context may be missing"
+        log "    VOID: AGENTS.md render failed after ${waited}s — excluding cell"
+        render_failed=true
       fi
     fi
+  fi
+
+  if [ "$render_failed" = true ]; then
+    echo "{\"scenario\":\"$scenario\",\"condition\":\"with\",\"run\":$run,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
+      >> "$RESULTS_FILE"
+    (cd "$work_dir" && pmd stop) 2>/dev/null || true
+    return 1
   fi
 
   # Run opencode
@@ -400,6 +407,7 @@ for (const s of scenarios) {
       tc: metric(m => m.tool_calls), r: metric(m => m.reads), e: metric(m => m.edits),
       it: metric(m => m.input_tokens), ot: metric(m => m.output_tokens),
       w: metric(m => m.wall_ms), q: qMed(),
+      cr: metric(m => m.context_reads || 0),
     };
   };
   const sw = stats(withData), swo = stats(withoutData);
@@ -418,6 +426,24 @@ for (const s of scenarios) {
   console.log(row('input_tokens', sw.it, swo.it));
   console.log(row('output_tokens', sw.ot, swo.ot));
   console.log(row('wall_ms', sw.w, swo.w));
+  console.log(row('context_reads', sw.cr, swo.cr));
+  // Smoke-test verdict
+  const crWith = sw.cr && sw.cr.med || 0;
+  const crWithout = swo.cr && swo.cr.med || 0;
+  const readsW = sw.r && sw.r.med || 0;
+  const readsWo = swo.r && swo.r.med || 0;
+  const qW = sw.q, qWo = swo.q;
+  if (crWith === 0 && withData.length > 0) {
+    console.log('  VERDICT: VOID — opencode did not read AGENTS.md (context_reads=0)');
+  } else if (crWith > 0 && qW === qWo && readsW < readsWo) {
+    console.log('  VERDICT: PASS — context consumed, equal quality, fewer exploration reads');
+  } else if (crWith > 0 && qW === qWo && readsW >= readsWo) {
+    console.log('  VERDICT: WEAK — context consumed, equal quality, but no reduction in reads');
+  } else if (crWith > 0 && qW !== qWo) {
+    console.log('  VERDICT: INCONCLUSIVE — quality grades differ, cannot compare efficiency');
+  } else {
+    console.log('  VERDICT: (insufficient data)');
+  }
 }
 console.log('');
 console.log('Note: input_tokens will likely be HIGHER with PipeMD (context tax).');
