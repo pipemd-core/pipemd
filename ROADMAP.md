@@ -1,6 +1,6 @@
 # PipeMD Roadmap
 
-*Last updated: 2026-06-09*
+*Last updated: 2026-06-11*
 
 > **PipeMD is a context provider. Its job: resolve fresh, relevant context and push it to AI agents faster than anything else.**
 
@@ -16,8 +16,8 @@ The moat: cross-harness, sub-ms context delivery via named pipes. No other tool 
 |-------|---------------|--------|
 | **0. Stabilize** | Zero dead resolvers. Per-resolver timeouts. | **Done** (`8719fab`) |
 | **1. Trim** | MCP server gone. Task CLI gone. ~836 LOC removed. | **Done** (`8719fab`) |
-| **2. Harden** | 38 block types across 7 ecosystems. Compact quality summaries. Token budgets enforced. | **In Progress** |
-| **2B. Measure** | Token cost, latency, and accuracy contracts per resolver. CI ratchet. | Planned |
+| **2. Harden** | 41 block types across 7 ecosystems. Compact quality summaries. Token budgets enforced. | **In Progress** |
+| **2B. Measure** | Token cost, latency, and accuracy contracts per resolver. CI ratchet. Agent A/B bench. | **In Progress** (Layer 3 first) |
 | **3. Inter-Harness** | Two harnesses, same machine, shared context via relay. | Planned |
 | **4. Network** | Multi-machine relay. Gated on Phases 2-3. | Paused |
 
@@ -36,7 +36,7 @@ One commit that cut scope rather than adding it. Removed:
 
 Kept: `tasks.ts` (handoff resolver reads `tasks.json`), relay (works, don't extend), crew mechanism.
 
-### Phase 2 Progress (2026-06-08 to 2026-06-09)
+### Phase 2 Progress (2026-06-08 to 2026-06-11)
 
 | Shipped | Commit | Detail |
 |---------|--------|--------|
@@ -51,12 +51,21 @@ Kept: `tasks.ts` (handoff resolver reads `tasks.json`), relay (works, don't exte
 | Django-urls block | `4caf297` | URL patterns from `urls.py` files |
 | Detection fixes | `4caf297` | manage.py → Python, angular.json → Angular, Cargo workspace + go.work → workspace-map |
 | Dead import cleanup | `0ee95e1` | 30 unused imports removed, duplicate import fixed, eslint env for plugin |
+| Hotspots block | `b2cb434` | Git churn frequency for bug-prone file identification |
+| Now block | `7eb6485` | Timestamp with configurable interval rounding, crew solo suppression |
+| ast-grep integration | `4819d19` | Structural code parsing for express-routes, fastapi-routes, react-components. Regex fallback when binary unavailable. |
+| ESM binary resolution fix | `7b865dc` | `createRequire(import.meta.url)` for resolving `@ast-grep/cli` binary in ESM daemon |
+| Env-parity test harness | `dbf3e67` + `611430b` | Plain-node test suite under `test:parity`: verifies binary resolution, env propagation, dead-code contracts. Both tsx and plain-node guards catch the createRequire bug. |
+| Dead-code block with knip | `5de3fee` + `33ca017` | Self-caching stale-while-revalidate, knip runner, JSON formatter. Dogfooded on day one: removed 42 unused exports, 15 unused types, and the zod dependency. |
+| Dead exports cleanup | `67f798b` | 42 symbols unexported, 4 dead constants removed, zod dropped from dependencies |
+| Now source + express-routes scoping | `b36865f` | `now` source in injection.yml, search paths scoped to src/routes/app/lib |
+| Project lexicon | `5341394` | Complete glossary of ~165 domain terms in `docs/lexicon.md` |
 
 ---
 
 ## Current State
 
-### Codebase — 10,900 LOC (src/) + 4,864 LOC (scripts/)
+### Codebase — 10,693 LOC (src/) + ~5,200 LOC (scripts/)
 
 | Concern | LOC | Verdict |
 |---|---|---|
@@ -70,33 +79,36 @@ Kept: `tasks.ts` (handoff resolver reads `tasks.json`), relay (works, don't exte
 | Statusline | 332 | Keep. |
 | Crew sessions | 308 | Minimal mechanism. |
 | Utilities | 321 | Keep. |
-| Bash scripts | 4,864 | **The content.** 81 resolver scripts (57 ecosystem + 24 shared), 10 library scripts. |
+| Bash scripts | ~5,200 | **The content.** 96 resolver scripts (per-ecosystem + shared), 10 library scripts. |
 
-### 38 Block Types
+### 41 Block Types
 
 | Category | Blocks |
 |----------|--------|
 | **Architecture** | `arch` |
 | **Project** | `tree`, `deps`, `todos`, `exports`, `workspace-map` |
-| **Quality** | `lint`, `type-check`, `test-summary` |
-| **Git** | `git-log`, `git-branch`, `git-status`, `diff-stat` |
+| **Quality** | `lint`, `type-check`, `test-summary`, `dead-code` |
+| **Git** | `git-log`, `git-branch`, `git-status`, `diff-stat`, `hotspots` |
 | **API** | `express-routes`, `nest-controllers`, `fastapi-routes`, `django-urls` |
 | **Frontend** | `nextjs-app-router`, `react-components`, `angular-routes`, `angular-structure` |
 | **Database** | `prisma-schema` (via compose), `django-models`, `sqlalchemy` |
 | **Systems** | `cargo-deps`, `cargo-features`, `go-packages`, `go-interfaces`, `cmake-targets`, `class-diagram`, `interfaces`, `include-graph` |
 | **DevOps** | `docker-stats`, `compose`, `k8s-unhealthy`, `tf-state`, `aws-context` |
+| **Context** | `now` |
 | **Crew** | `crew` |
 
 ### Test & Quality
 
 | Gate | Result |
 |------|--------|
-| `pnpm build` | Clean (319 KB) |
+| `pnpm build` | Clean (321 KB) |
 | `tsc --noEmit` | 0 errors |
-| `eslint src/` | 0 errors, 7 warnings (all `no-explicit-any`) |
-| Test suite | 33/33 pass |
+| `eslint .` | 0 errors, 17 warnings (all `no-explicit-any` or internal-only vars) |
+| `test:parity` | 16/16 pass (3 env-parity + 13 dead-code, plain node) |
+| `test:unit` | 23 suites, ~350+ tests, 0 failures |
+| `test:e2e` | 81 scripts pass |
 | Fixtures | 15 (6 ecosystems + DevOps + monorepo) |
-| Test files | 24 |
+| Test files | 27 |
 
 ---
 
@@ -141,36 +153,44 @@ Replace the dead `claimed-errors` with a resolver that actually RUNS validation.
 
 ## Phase 2B: Measure
 
-**Goal:** Every resolver has a measurable token cost, latency, and accuracy contract. Regressions caught by CI, not by agents.
+**Goal:** Every resolver has a measurable token cost, latency, and accuracy contract. Regressions caught by CI, not by agents. Agent-level value validated by A/B bench.
 
 ### Core insight
 
-PipeMD's claim: the block is cheaper and fresher than the shell command it replaces. Two measurable axes:
+PipeMD's claim: the block is cheaper and fresher than the shell command it replaces. Three measurable axes:
 
 - **Efficiency** = information delivered / tokens spent
 - **Accuracy** = does the block match ground truth right now?
+- **Exploration reduction** = tool calls an agent didn't have to make
 
-And one earned axis: **exploration reduction** = tool calls an agent didn't have to make.
+### Layering decision
 
-### 2B.1 Intrinsic benchmark harness
+Layer 2 (intrinsic, CI, deterministic) and Layer 3 (agent A/B, manual, expensive) are complementary, not substitutable:
+
+- **Layer 2** is regression discipline — catches 40% token bloat on every commit, cheaply, in CI. Still planned.
+- **Layer 3** answers the value question — do the 41 blocks actually help agents? Only an agent A/B can answer this.
+
+Layer 3 is being done first because it's the most important unanswered question: at 41 blocks and growing, "do these earn their tokens in real agent behavior?" must be answered before investing in CI ratchets. If Layer 3 reveals blocks don't help, Layer 2's targets change.
+
+### 2B.1 Intrinsic benchmark harness (Layer 2 — planned)
 
 | Action | Detail |
 |---|---|
-| Create `bench/` directory | One test file per ecosystem, running each ecosystem's resolvers against its fixture |
+| Create intrinsic bench | One test file per ecosystem, running each ecosystem's resolvers against its fixture |
 | Token snapshot | For each fixture x resolver: run script, estimate tokens via `estimateTokens()`, record in `BENCHMARKS.md` |
 | Latency snapshot | Wall-clock time per resolver. Fail if exceeds `commandTimeouts` budget |
 | Accuracy golden | For structural resolvers (arch, exports, workspace-map): compare output against committed golden file |
 | CI gate | `pnpm bench` runs on every PR. Fail if any resolver: empty output, exceeds token budget, exceeds timeout, golden mismatch |
 
-### 2B.2 Resolver contract tests
+### 2B.2 Resolver contract tests (Layer 2 — planned)
 
 | Action | Detail |
 |---|---|
 | Every fixture x every applicable resolver | Non-empty output, under token limit, under timeout |
 | Grow fixture corpus | 5-8 fixtures per ecosystem (vendor trimmed copies of real OSS repos) |
-| Refresh integration test | Copy fixture -> `pmd refresh` -> assert all configured blocks produce non-empty output |
+| Refresh integration test | Copy fixture → `pmd refresh` → assert all configured blocks produce non-empty output |
 
-### 2B.3 Token ratchet
+### 2B.3 Token ratchet (Layer 2 — planned)
 
 | Action | Detail |
 |---|---|
@@ -178,17 +198,54 @@ And one earned axis: **exploration reduction** = tool calls an agent didn't have
 | Fail CI if any block grows >15% | Prevents silent token bloat |
 | Fail CI if any block shrinks >50% | Catches silent failures (empty output that passes "non-empty" by having a header) |
 
+### 2B.4 Agent A/B Benchmark (Layer 3 — in progress)
+
+**Goal:** Measure whether PipeMD context reduces exploration cost on real development tasks.
+
+**Methodology:**
+
+| Parameter | Value |
+|-----------|-------|
+| Agent | GLM-5.1 via OpenCode CLI (`opencode run`) |
+| Runs per cell | N=5, report median + min/max |
+| WITH PipeMD | Full active mode: daemon running, context file rendered, hooks injecting per tool call |
+| WITHOUT PipeMD | Pristine git clone, never touched by PipeMD |
+| Isolation | Fresh `git worktree` per run |
+| Quality gate | Automated per-scenario (build/lint/test). Report quality alongside efficiency. Only compare at equal quality. |
+| Temperature | 0 (reduce variance) |
+
+**Three scenarios (designed for low block alignment):**
+
+| # | Target | Task | Block alignment |
+|---|--------|------|-----------------|
+| 1 | pipemd | Add `pmd crew export` subcommand | Low — no single block answers this |
+| 2 | hono | Add request logging middleware | Low — requires understanding middleware wiring |
+| 3 | hono | Refactor error handling to centralized handler | Low — requires understanding full API layer |
+
+**Metrics (reported separately, never combined):**
+
+- Input tokens (context overhead — PipeMD should increase this)
+- Output tokens (agent reasoning — PipeMD should decrease this)
+- Tool calls by type: read, glob, grep, edit, write
+- Wall time (seconds)
+- Quality score: 0 (broken) / 1 (partial) / 2 (complete, passes checks)
+
+**Design principles for trustworthiness:**
+
+1. **The bench can tell us PipeMD loses.** If 41 blocks add token tax without reducing exploration, that's the finding.
+2. **Quality gates prevent "fast but wrong" from winning.** Only compare efficiency at equal quality levels.
+3. **Block alignment is audited.** Scenarios are general development tasks where context helps incidentally.
+4. **Variance is reported.** If WITH/WITHOUT distributions overlap, there's no effect regardless of medians.
+5. **Repos are pinned to tags.** Reproducible baselines.
+
 ### Phase 2B Success Criteria
 
-- [ ] `pnpm bench` runs in <30s across all fixtures
-- [ ] Every default resolver has a committed token + latency baseline
-- [ ] Golden files exist for structural resolvers (arch, exports, workspace-map)
-- [ ] Token ratchet catches >15% growth
-- [ ] Refresh integration test covers at least 3 ecosystems
-
-### Why Layer 2 first (not agent benchmarks)
-
-Agent-level A/B tests ("PipeMD on vs off") are seductive but high-variance and expensive. The intrinsic bench gives 80% of the regression protection at 5% of the cost. Ship it first, prove stability, then measure agent impact if the numbers don't convince.
+- [ ] Agent A/B bench runs 3 scenarios × 2 conditions × 5 repetitions
+- [ ] Every scenario has an automated quality gate
+- [ ] Results report all six metric axes separately with variance
+- [ ] Finding is reported neutrally — whether PipeMD wins or loses on efficiency
+- [ ] `pnpm bench` intrinsic harness runs in <30s (Layer 2 — still planned)
+- [ ] Token ratchet catches >15% growth (Layer 2 — still planned)
 
 ---
 
@@ -202,8 +259,8 @@ Agent-level A/B tests ("PipeMD on vs off") are seductive but high-variance and e
 
 | Action | Detail |
 |---|---|
-| Push shared blocks every 30s | Daemon already has a relay client. Add periodic `pushBlocks()` for shared sources |
-| Fetch shared blocks every 30s | Existing `fetchBlocks()` already does this. Wire into injection pipeline |
+| Push shared blocks every 30s | Daemon already has a relay client. Add periodic block push for shared sources |
+| Fetch shared blocks every 30s | Existing fetch mechanism already does this. Wire into injection pipeline |
 | Shared block injection | Check both local cache AND remote blocks. Prefer freshest. |
 
 ### 3.2 Cross-harness injection rules
@@ -263,4 +320,4 @@ Multi-machine relay. Context sharing, not orchestration.
 | Agent vendors ship native injection | Medium | PipeMD's moat is cross-agent universality + named-pipe PUSH speed. |
 | Solo agents dominate, crew has zero pull | Medium-High | Phases 2-2B serve solo agents perfectly. Crew is additive. |
 | Named pipes break on new platforms | Low | Legacy mode (file watcher) is first-class fallback. |
-| Token bloat from rich blocks | Medium | Token ratchet (Phase 2B) catches growth before it compounds. |
+| Token bloat from rich blocks | Medium | Token ratchet (Phase 2B) catches growth before it compounds. Agent bench validates that blocks earn their tokens. |
