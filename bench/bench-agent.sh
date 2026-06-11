@@ -264,6 +264,8 @@ run_cell() {
   # Stop daemon if we started it
   if [ "$condition" = "with" ]; then
     (cd "$work_dir" && pmd stop) 2>/dev/null || true
+    # Clean up stale crew sessions left by opencode run
+    pmd crew clean --force 2>/dev/null || true
   fi
 
   # Parse metrics
