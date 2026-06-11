@@ -229,7 +229,7 @@ function renderTraceRoute(api) {
       evt.preventDefault();
       evt.stopPropagation();
       setCursor(Math.min(total - 1, cursor() + 1));
-    } else if (evt.name === "enter") {
+    } else if (evt.name === "space") {
       evt.preventDefault();
       evt.stopPropagation();
       if (view() === "timeline") {
@@ -391,6 +391,7 @@ function renderTraceRoute(api) {
 
     // ══ BODY ROWS ══
     const rows = [];
+    const selectableRowIndices = [];
 
     if (view() === "tree") {
       for (const c of coordSessions) {
@@ -464,6 +465,7 @@ function renderTraceRoute(api) {
         if (isInjected) lineChildren.push(textNode(isExpanded ? "\u25BC" : "\u25B6", th.textMuted));
         if (e.session) lineChildren.push(textNode(truncStr(e.session, 8), RGBA.fromInts(80, 80, 120, 255)));
 
+        selectableRowIndices.push(rows.length);
         rows.push(hbox(lineChildren, { gap: 1, paddingLeft: 1 }));
 
         if (isExpanded) {
@@ -531,8 +533,15 @@ function renderTraceRoute(api) {
 
     // ══ WINDOWED DISPLAY ══
     const totalRows = rows.length;
-    const cur = Math.min(cursor(), Math.max(0, totalRows - 1));
-    if (cur !== cursor()) setCursor(cur);
+    let cur;
+    if (view() === "timeline" && selectableRowIndices.length > 0) {
+      const clamped = Math.min(cursor(), selectableRowIndices.length - 1);
+      if (clamped !== cursor()) setCursor(clamped);
+      cur = selectableRowIndices[clamped] ?? 0;
+    } else {
+      cur = Math.min(cursor(), Math.max(0, totalRows - 1));
+      if (cur !== cursor()) setCursor(cur);
+    }
     const vr = Math.max(1, visibleRows() - headerLineCount);
     let so = scrollOffset();
     if (cur < so) so = cur;
@@ -569,7 +578,7 @@ function renderTraceRoute(api) {
       textNode("[esc] close", th.textMuted),
       textNode("[\u2191\u2193] navigate", th.textMuted),
       textNode("[\u2190\u2192] views", th.textMuted),
-      view() === "timeline" ? textNode("[enter] expand", th.textMuted) : textNode("", th.textMuted),
+      view() === "timeline" ? textNode("[space] expand", th.textMuted) : textNode("", th.textMuted),
     ], { gap: 2 }));
 
     return vbox([...header, ...body, ...footer], {});
