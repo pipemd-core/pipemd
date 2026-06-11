@@ -10,6 +10,7 @@ describe("getBlockScope", () => {
     assert.equal(getBlockScope("git-staged"), "shared");
     assert.equal(getBlockScope("handoff"), "shared");
     assert.equal(getBlockScope("now"), "shared");
+    assert.equal(getBlockScope("dead-code"), "shared");
   });
 
   it("returns 'local' for local sources", () => {
@@ -38,6 +39,7 @@ describe("isSharedBlock", () => {
     assert.ok(isSharedBlock("git-delta"));
     assert.ok(isSharedBlock("handoff"));
     assert.ok(isSharedBlock("now"));
+    assert.ok(isSharedBlock("dead-code"));
   });
 
   it("returns false for local sources", () => {
@@ -54,14 +56,14 @@ describe("isSharedBlock", () => {
 describe("getAllBlockScopes", () => {
   it("returns a complete scope map", () => {
     const scopes = getAllBlockScopes();
-    assert.equal(Object.keys(scopes).length, 17);
+    assert.equal(Object.keys(scopes).length, 18);
     let shared = 0;
     let local = 0;
     for (const v of Object.values(scopes)) {
       if (v === "shared") shared++;
       else local++;
     }
-    assert.equal(shared, 6);
+    assert.equal(shared, 7);
     assert.equal(local, 11);
   });
 
