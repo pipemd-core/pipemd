@@ -84,6 +84,13 @@ echo "{\"type\":\"meta\",\"timestamp\":\"$TIMESTAMP\",\"model\":\"$MODEL\",\"run
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# Stop any running PipeMD daemon in the main repo — it would interfere
+# with bench worktrees (nested subdirectories, stale PID files, chokidar overlap)
+if [ -f "$REPO_ROOT/.pipemd/.daemon.pid" ]; then
+  log "Stopping main repo daemon..."
+  (cd "$REPO_ROOT" && pmd stop) 2>/dev/null || true
+fi
+
 # Parse NDJSON from opencode run --format json
 parse_run_metrics() {
   local ndjson_file="$1"
@@ -188,6 +195,9 @@ run_cell() {
 
   if [ "$condition" = "with" ]; then
     if [ -f "$work_dir/.pipemd/config.yml" ]; then
+      # Clean stale state from cp -r (PID file, FIFOs, old daemon log)
+      rm -f "$work_dir/.pipemd/.daemon.pid" "$work_dir/.pipemd/daemon.log" 2>/dev/null || true
+      rm -f "$work_dir/AGENTS.md" "$work_dir/CLAUDE.md" "$work_dir/AI_CONTEXT.md" 2>/dev/null || true
       log "    Starting daemon in $work_dir"
       (cd "$work_dir" && pmd start) 2>/dev/null || true
       local waited=0
@@ -211,7 +221,7 @@ run_cell() {
   fi
 
   if [ "$render_failed" = true ]; then
-    echo "{\"scenario\":\"$scenario\",\"condition\":\"with\",\"run\":$run,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
+    echo "{\"scenario\":\"$scenario\",\"condition\":\"with\",\"run\":$run_idx,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
       >> "$RESULTS_FILE"
     (cd "$work_dir" && pmd stop) 2>/dev/null || true
     return 1
