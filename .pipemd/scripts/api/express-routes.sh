@@ -8,7 +8,7 @@ source "$(dirname "$0")/../lib/resolve-sg.sh" 2>/dev/null || source "$(cd "$(dir
 if [ -x "$SG" ]; then
   out=""
   for m in get post put delete patch all; do
-    matches=$("$SG" -p "\$OBJ.$m(\$PATH, \$\$REST)" -l typescript --json . 2>/dev/null) || continue
+    matches=$("$SG" -p "\$OBJ.$m(\$PATH, \$\$REST)" -l typescript --json src/ routes/ app/ lib/ 2>/dev/null) || continue
     paths=$(echo "$matches" | jq -r '.[] | .metaVariables.single.PATH.text // empty' 2>/dev/null | sed "s/^[\"'\`]//;s/[\"'\`]$//") || continue
     [ -z "$paths" ] && continue
     upper_m=$(echo "$m" | tr '[:lower:]' '[:upper:]')
@@ -28,9 +28,12 @@ if [ -x "$SG" ]; then
 else
   out=$(grep -rn --include='*.js' --include='*.ts' --include='*.mjs' \
     -E '(app|router)\.(get|post|put|delete|patch|all)\(' \
-    . 2>/dev/null | grep -v 'node_modules' \
+    src/ routes/ app/ lib/ 2>/dev/null | grep -v 'node_modules' \
     | sed -E 's/.*\.(get|post|put|delete|patch|all)\([[:space:]]*['\''"](\/[^'\''"]*)['\''"].*/\U\1 \2/' \
     | head -"$MAX_EXPRESS")
-  [ -z "$out" ] && echo "No Express routes found" && exit 0
+  if [ -z "$out" ]; then
+    echo "No Express routes found"
+    exit 0
+  fi
   echo "$out"
 fi

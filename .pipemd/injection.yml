@@ -6,11 +6,12 @@
 #   expert  = full customization of injection rules
 #
 # triggers: before-read | before-edit | after-edit | on-idle | on-start
-# sources:  crew-status | crew-locks | crew-todos | file-errors
+# sources:  crew-status | crew-locks | file-errors
 #           git-context | git-delta | git-staged | git-diff-stat
 #           edit-diff | syntax-check | test-failures | custom
 #           import-graph | handoff | session-diff | exports | now
 # scope:    target-file | global
+# interval-min: (now source only) minutes to round time to, controlling refresh frequency
 delivery: active
 rules:
   before-read:
@@ -48,6 +49,9 @@ rules:
     - source: handoff
       scope: global
       max-lines: 30
+    - source: now
+      scope: global
+      interval-min: 1
   on-idle:
     - source: git-staged
       scope: global
@@ -58,6 +62,9 @@ rules:
     - source: handoff
       scope: global
       max-lines: 30
+    - source: now
+      scope: global
+      interval-min: 5
   after-edit:
     - source: edit-diff
       scope: target-file
