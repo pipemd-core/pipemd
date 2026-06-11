@@ -149,7 +149,7 @@ parse_run_metrics() {
   fi
 
   # Write result
-  jq -n \
+  jq -n -c \
     --arg input "$input_tokens" \
     --arg output "$output_tokens" \
     --argjson tool_calls "$tool_calls" \
@@ -287,7 +287,7 @@ run_cell() {
   local metrics_json
   metrics_json=$(cat "$metrics_file" 2>/dev/null || echo "{}")
 
-  jq -n \
+  jq -n -c \
     --argjson scenario "$scenario" \
     --arg condition "$condition" \
     --argjson run "$run_idx" \
