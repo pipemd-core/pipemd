@@ -25,13 +25,13 @@ export interface BlockEntry {
   hash: string;
 }
 
-export interface BlockFetchRequest {
+interface BlockFetchRequest {
   group: string;
   commitSha: string;
   sources?: string[];
 }
 
-export interface BlockFetchResponse {
+interface BlockFetchResponse {
   blocks: BlockEntry[];
   hostname: string;
 }

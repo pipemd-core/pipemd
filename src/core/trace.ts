@@ -35,7 +35,7 @@ export interface TraceSession {
   children: TraceSession[];
 }
 
-export interface TraceConflict {
+interface TraceConflict {
   path: string;
   sessionIds: string[];
   sessions: Array<{ id: string; role: string; harness: string }>;

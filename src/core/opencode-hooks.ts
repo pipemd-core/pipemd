@@ -37,7 +37,7 @@ function buildPluginConfig(delivery: DeliveryMode): string {
   return JSON.stringify({ delivery, version: OPENCODE_PLUGIN_VERSION }, null, 2) + "\n";
 }
 
-export function installOpenCodeHooks(
+function installOpenCodeHooks(
   cwd: string = process.cwd(),
   delivery: DeliveryMode = "passive",
   dryRun: boolean = false,
@@ -152,7 +152,7 @@ export const opencodeAdapter: HarnessAdapter = {
   removeHooks: removeOpenCodeHooks,
 };
 
-export function removeOpenCodeHooks(cwd: string): HookInstallResult {
+function removeOpenCodeHooks(cwd: string): HookInstallResult {
   const results: string[] = [];
   let removed = false;
   const serverFile = path.join(cwd, ".opencode", "plugin", "pmd-crew.js");

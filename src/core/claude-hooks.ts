@@ -40,7 +40,7 @@ const INJECT_HOOKS: HookEntry[] = [
 
 const ALL_HOOKS = [...CREW_HOOKS, ...INJECT_HOOKS];
 
-export function installClaudeCodeHooks(
+function installClaudeCodeHooks(
   cwd: string = process.cwd(),
   delivery: DeliveryMode = "passive",
   dryRun: boolean = false,
@@ -64,7 +64,7 @@ export const claudeAdapter: HarnessAdapter = {
   removeHooks: removeClaudeCodeHooks,
 };
 
-export function removeClaudeCodeHooks(cwd: string): HookInstallResult {
+function removeClaudeCodeHooks(cwd: string): HookInstallResult {
   const file = path.join(cwd, ".claude", "settings.json");
   const result = stripPmdHooksFromSettings(file, "Claude Code");
 

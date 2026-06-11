@@ -115,7 +115,7 @@ async function isTreeDirty(): Promise<boolean> {
   }
 }
 
-export async function pushBlocks(group: string): Promise<number> {
+async function pushBlocks(group: string): Promise<number> {
   const urlStr = relayUrl();
   if (!urlStr) return 0;
 
@@ -170,7 +170,7 @@ export async function pushBlocks(group: string): Promise<number> {
   }
 }
 
-export async function fetchBlocks(group: string, commitSha: string): Promise<BlockEntry[]> {
+async function fetchBlocks(group: string, commitSha: string): Promise<BlockEntry[]> {
   const urlStr = relayUrl();
   if (!urlStr || !commitSha) return [];
 

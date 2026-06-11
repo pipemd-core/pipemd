@@ -11,14 +11,14 @@ import { LIVE_DIR, STATUS_FILE } from "./paths.js";
 
 const execFileAsync = promisify(execFile);
 
-export const ENXIO_MAX_RETRIES = 100;
-export const ENXIO_RETRY_WINDOW_MS = 60000;
+const ENXIO_MAX_RETRIES = 100;
+const ENXIO_RETRY_WINDOW_MS = 60000;
 
 const WRITE_BUFFER_DEBOUNCE_MS = 1000;
 
 const activeTimeouts: NodeJS.Timeout[] = [];
 const activeIntervals: NodeJS.Timer[] = [];
-export const contextStreamEntries: { fd: number; stream: fs.ReadStream }[] = [];
+const contextStreamEntries: { fd: number; stream: fs.ReadStream }[] = [];
 
 let shuttingDown = false;
 
@@ -87,7 +87,7 @@ export function createPipe(pipePath: string): boolean {
   }
 }
 
-export function writeSafe(writeFd: number, data: string): boolean {
+function writeSafe(writeFd: number, data: string): boolean {
   try {
     fs.writeSync(writeFd, data);
     return true;
@@ -113,7 +113,7 @@ export function updateStatus(status: {
   }
 }
 
-export function closeSafe(writeFd: number) {
+function closeSafe(writeFd: number) {
   try {
     fs.closeSync(writeFd);
   } catch (err: unknown) {

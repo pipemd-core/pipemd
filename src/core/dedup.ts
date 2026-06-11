@@ -5,7 +5,7 @@ import { atomicWrite } from "./fs-utils.js";
 import { log, errMsg } from "./logger.js";
 import { TtlCache } from "./ttl-cache.js";
 
-export interface InjectedRecord {
+interface InjectedRecord {
   sessionId: string;
   source: string;
   hash: string;

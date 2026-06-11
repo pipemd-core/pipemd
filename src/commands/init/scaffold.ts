@@ -28,7 +28,6 @@ import { loadScriptContent, getAllScripts } from "./scripts.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export type { ScriptDef } from "./constants.js";
 export { getAllScripts, loadScriptContent } from "./scripts.js";
 
 function mkdirp(dir: string) {
@@ -358,7 +357,7 @@ function writeLibraryFiles(
   }
 }
 
-export function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: TokenProfile): ScaffoldResult {
+function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: TokenProfile): ScaffoldResult {
   const allScripts = getAllScripts();
   const selectedScripts = allScripts.filter((s) => selectedIds.includes(s.id));
 

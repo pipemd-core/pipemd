@@ -15,7 +15,7 @@ import { getAllScripts } from "./scripts.js";
 
 const execFileAsync = promisify(execFile);
 
-export function extractComposeFiles(stdout: string): string[] {
+function extractComposeFiles(stdout: string): string[] {
   return stdout.split("\n")
     .filter((line: string) => line.startsWith("### "))
     .map((line: string) => line.replace(/^### /, "").trim())
@@ -159,7 +159,7 @@ export function renderPromptBlueprint(
   console.log();
 }
 
-export function buildHarnessPrompt(
+function buildHarnessPrompt(
   agent: AiAgent,
   ecosystem: Ecosystem,
   selectedIds: string[],

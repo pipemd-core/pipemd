@@ -24,11 +24,11 @@ const adapters: Map<string, HarnessAdapter> = new Map([
   ["Gemini", geminiAdapter],
 ]);
 
-export function registerAdapter(adapter: HarnessAdapter): void {
+function registerAdapter(adapter: HarnessAdapter): void {
   adapters.set(adapter.name, adapter);
 }
 
-export function getAdapter(name: string): HarnessAdapter | undefined {
+function getAdapter(name: string): HarnessAdapter | undefined {
   return adapters.get(name);
 }
 

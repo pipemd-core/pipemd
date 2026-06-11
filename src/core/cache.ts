@@ -21,7 +21,7 @@ export interface CacheEntry {
 
 export const CACHE_DIR = ".pipemd/cache/sources";
 export const VALIDATION_DIR = ".pipemd/cache/validation";
-export const CACHE_MANIFEST = ".pipemd/cache/manifest.json";
+const CACHE_MANIFEST = ".pipemd/cache/manifest.json";
 
 export const DEFAULT_TTLS: Record<string, number> = {
   crew: 5000,

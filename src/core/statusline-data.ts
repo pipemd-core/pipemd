@@ -13,14 +13,14 @@ import { atomicWrite } from "./fs-utils.js";
 import { DEFAULT_STALE_MS } from "./crew.js";
 import { CONTEXT_FILES } from "./paths.js";
 
-export const STATUS_FILE = ".status.json";
+const STATUS_FILE = ".status.json";
 const INJECT_STATS_FILE = ".inject-stats.json";
 export const CREW_STATUS_FILE = ".crew-status.json";
 export const DAEMON_PID_FILE = ".daemon.pid";
 export const GEMINI_STATUSLINE_STATE = ".statusline-gemini.json";
 const GEMINI_STATUSLINE_DEBOUNCE_MS = 3_000;
 
-export interface InjectEvent {
+interface InjectEvent {
   trigger: string;
   file: string;
   result: "delivered" | "dedup";

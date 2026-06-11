@@ -13,7 +13,7 @@ export interface HookEntry {
   injectOnly?: boolean;
 }
 
-export interface StatuslineConfig {
+interface StatuslineConfig {
   command: string;
   padding?: number;
 }
@@ -29,7 +29,7 @@ export interface JsonHooksOpts {
   settingsDir: string;
 }
 
-export function hasPmdHookInEvent(hooks: Record<string, unknown>, event: string, needle: string, matcher?: string): boolean {
+function hasPmdHookInEvent(hooks: Record<string, unknown>, event: string, needle: string, matcher?: string): boolean {
   const entries = Array.isArray(hooks?.[event]) ? hooks[event] : [];
   for (const entry of entries) {
     if (matcher && (entry as Record<string, unknown>)?.matcher !== matcher) continue;
@@ -40,15 +40,15 @@ export function hasPmdHookInEvent(hooks: Record<string, unknown>, event: string,
   return false;
 }
 
-export function hasPmdCrewHookInEvent(hooks: Record<string, unknown>, event: string): boolean {
+function hasPmdCrewHookInEvent(hooks: Record<string, unknown>, event: string): boolean {
   return hasPmdHookInEvent(hooks, event, "pmd crew");
 }
 
-export function hasPmdInjectHookInEvent(hooks: Record<string, unknown>, event: string, matcher?: string): boolean {
+function hasPmdInjectHookInEvent(hooks: Record<string, unknown>, event: string, matcher?: string): boolean {
   return hasPmdHookInEvent(hooks, event, "pmd inject", matcher);
 }
 
-export function hasPmdStatuslineHookInEvent(hooks: Record<string, unknown>, event: string): boolean {
+function hasPmdStatuslineHookInEvent(hooks: Record<string, unknown>, event: string): boolean {
   return hasPmdHookInEvent(hooks, event, "pmd statusline");
 }
 
@@ -64,7 +64,7 @@ export function writeJsonSettings(file: string, data: unknown): void {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf-8");
 }
 
-export function ensureEventArray(hooks: Record<string, unknown>, event: string): unknown[] {
+function ensureEventArray(hooks: Record<string, unknown>, event: string): unknown[] {
   if (!Array.isArray(hooks[event])) hooks[event] = [];
   return hooks[event] as unknown[];
 }

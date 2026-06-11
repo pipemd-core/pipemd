@@ -7,7 +7,7 @@ import type { TokenProfile } from "../../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const SCRIPTS_ROOT = path.join(__dirname, "..", "scripts");
-export const TEMPLATES_ROOT = path.join(__dirname, "..", "templates");
+const TEMPLATES_ROOT = path.join(__dirname, "..", "templates");
 
 export function loadTemplate(name: string): string {
   return fs.readFileSync(path.join(TEMPLATES_ROOT, name), "utf8").trimEnd();
@@ -34,15 +34,6 @@ export interface RunResult {
   lines: number;
 }
 
-export const AGENT_CLI: Record<string, string[]> = {
-  "Claude Code": ["claude"],
-  "Cursor": ["cursor-agent"],
-  "Aider": ["aider"],
-  "Gemini": ["gemini"],
-  "OpenClaw": ["openclaw"],
-  "Hermes": ["hermes"],
-};
-
 export const HARNESS_CLI: Record<string, string[]> = {
   "OpenCode": ["opencode"],
   "Claude Code": ["claude"],
@@ -53,7 +44,7 @@ export const HARNESS_CLI: Record<string, string[]> = {
 };
 
 export const TEST_RUN_TIMEOUT_MS = 5000;
-export const TOKENS_PER_LINE = 15;
+const TOKENS_PER_LINE = 15;
 
 export const TOKEN_PROFILES: Record<TokenProfile, { num: number; den: number; label: string; description: string }> = {
   low:       { num: 1, den: 2, label: "Low",       description: "~3K tokens — minimal, compact context" },
@@ -163,21 +154,6 @@ export const VALID_AGENTS: AiAgent[] = ["Claude Code", "Cursor", "Aider", "Gemin
 export const VALID_ECOSYSTEMS: Ecosystem[] = ["Node/TypeScript", "Python", "C-CPP", "Rust", "Go", "DevOps", "Generic"];
 export const VALID_PROFILES: TokenProfile[] = ["low", "medium", "high", "xhigh", "unlimited"];
 export const VALID_HARNESSES: Harness[] = ["OpenCode", "Claude Code", "Cursor", "Gemini", "None", "OpenClaw", "Hermes"];
-
-export const DELIVERY_PROMPTS: Record<string, { title: string; description: string }> = {
-  passive: {
-    title: "Passive",
-    description: "Context rendered to file/pipe. No hooks. Zero agent overhead. Best for Cursor, Aider, CI/CD.",
-  },
-  active: {
-    title: "Active (recommended)",
-    description: "Fresh context injected via hooks on every tool call. Agent sees: crew locks, file errors, validation. Best for Claude Code, OpenCode, Gemini.",
-  },
-  expert: {
-    title: "Expert",
-    description: "Full control over injection rules. Configure per-hook behavior in injection.yml.",
-  },
-};
 
 export const HARNESS_DESCRIPTIONS: Record<HarnessName, string> = {
   "OpenCode": "CLI-based AI coding agent",

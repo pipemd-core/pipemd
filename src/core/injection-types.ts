@@ -27,7 +27,7 @@ export type ContextSource =
   | "exports"
   | "now";
 
-export type InjectionScope = "target-file" | "global";
+type InjectionScope = "target-file" | "global";
 
 export interface InjectionRule {
   source: ContextSource;
@@ -56,7 +56,7 @@ export interface InjectionPayload {
 
 const VALID_DELIVERY_MODES: DeliveryMode[] = ["passive", "active", "expert"];
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
-export const VALID_SOURCES: ContextSource[] = [
+const VALID_SOURCES: ContextSource[] = [
   "crew-status",
   "crew-locks",
   "crew-todos",

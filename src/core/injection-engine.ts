@@ -29,7 +29,7 @@ const RESOLVER_TOTAL_BUDGET_MS = 5000
 const MAX_SESSION_TRACKS = 256
 const injectionTimestamps = new Map<string, number[]>()
 
-export interface ResolverContext {
+interface ResolverContext {
   trigger: InjectionTrigger;
   targetFile?: string;
   sessionId?: string;
@@ -840,10 +840,4 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
   } finally {
     invalidate(guardKey);
   }
-}
-
-export {
-  RATE_LIMIT_WINDOW_MS,
-  MAX_INJECTIONS_PER_WINDOW,
-  RESOLVER_TOTAL_BUDGET_MS,
 }

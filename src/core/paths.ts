@@ -2,7 +2,7 @@ import path from "node:path";
 import os from "node:os";
 
 export const PIPEMD_DIR = ".pipemd";
-export const HOME_LINK_DIR = path.join(os.homedir(), ".pipemd", "link");
+const HOME_LINK_DIR = path.join(os.homedir(), ".pipemd", "link");
 
 export const LIVE_DIR = path.join(PIPEMD_DIR, "live");
 export const PID_FILE = path.join(PIPEMD_DIR, ".daemon.pid");

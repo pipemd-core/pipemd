@@ -7,11 +7,11 @@ import { tryReadJson, isPidAlive } from "./json-utils.js";
 import { findContextBytes, readInjectStats } from "./statusline-data.js";
 import { log, errMsg } from "./logger.js";
 
-export const DASHBOARD_FILE = path.join(PIPEMD_DIR, ".dashboard.json");
+const DASHBOARD_FILE = path.join(PIPEMD_DIR, ".dashboard.json");
 
 const PLUGIN_ERROR_STALE_MS = 300_000;
 
-export interface DashboardData {
+interface DashboardData {
   ts: number;
   daemon: {
     pid: number | null;
@@ -124,7 +124,7 @@ export function writeDashboard(): void {
   atomicWrite(DASHBOARD_FILE, JSON.stringify(dashboard) + "\n");
 }
 
-export function readDashboard(): DashboardData | null {
+function readDashboard(): DashboardData | null {
   return tryReadJson<DashboardData>(DASHBOARD_FILE);
 }
 

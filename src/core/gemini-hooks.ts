@@ -31,7 +31,7 @@ const INJECT_HOOKS: HookEntry[] = [
 
 const ALL_HOOKS = [...CREW_HOOKS, ...INJECT_HOOKS];
 
-export function installGeminiHooks(
+function installGeminiHooks(
   cwd: string = process.cwd(),
   delivery: DeliveryMode = "passive",
   dryRun: boolean = false,
@@ -54,7 +54,7 @@ export const geminiAdapter: HarnessAdapter = {
   removeHooks: removeGeminiHooks,
 };
 
-export function removeGeminiHooks(cwd: string): HookInstallResult {
+function removeGeminiHooks(cwd: string): HookInstallResult {
   return stripPmdHooksFromSettings(
     path.join(cwd, ".gemini", "settings.json"),
     "Gemini",

@@ -6,7 +6,7 @@ import { resolveActiveSession } from "./crew.js";
 import { log, errMsg } from "./logger.js";
 import { PIPEMD_DIR } from "./paths.js";
 
-export type TaskStatus = "pending" | "in_progress" | "completed" | "blocked";
+type TaskStatus = "pending" | "in_progress" | "completed" | "blocked";
 export type TaskPriority = "high" | "medium" | "low";
 
 export interface Task {

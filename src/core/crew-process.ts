@@ -10,7 +10,7 @@ export interface ProcInfo {
   cwd?: string;
 }
 
-export const HARNESS_PROCESS_PATTERNS: { harness: string; pattern: RegExp }[] = [
+const HARNESS_PROCESS_PATTERNS: { harness: string; pattern: RegExp }[] = [
   { harness: "Claude Code", pattern: /(?:^|\/)\bclaude\b(?:\s|$)/i },
   { harness: "OpenCode", pattern: /(?:^|\/)\bopencode\b(?:\s|$)/i },
   { harness: "Aider", pattern: /(?:^|\/)\baider\b(?:\s|$)/i },
@@ -27,7 +27,7 @@ function isWindows(): boolean {
   return process.platform === "win32";
 }
 
-export function resolveProcessCwd(pid: number): string | undefined {
+function resolveProcessCwd(pid: number): string | undefined {
   if (isWindows()) return undefined;
   try {
     const link = fs.readlinkSync(`/proc/${pid}/cwd`);
@@ -86,7 +86,7 @@ export async function snapshotProcessesAsync(): Promise<Map<number, ProcInfo>> {
   return map;
 }
 
-export function clearProcessCache(): void {
+function clearProcessCache(): void {
   procCache = null;
 }
 

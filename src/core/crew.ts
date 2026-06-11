@@ -7,14 +7,12 @@ import { PIPEMD_DIR as _PIPEMD_DIR, CREW_DIR as _CREW_DIR } from "./paths.js";
 import { resolveAgentIdentity } from "./crew-process.js";
 import { log, errMsg } from "./logger.js";
 import { TtlCache } from "./ttl-cache.js";
-export { resolveAgentIdentity, snapshotProcesses, clearProcessCache } from "./crew-process.js";
-export type { ProcInfo } from "./crew-process.js";
-export { renderCrewBlock, renderCrewBlockAsync, getStatusJson } from "./crew-render.js";
-export type { CrewStatusJson } from "./crew-render.js";
+export { resolveAgentIdentity } from "./crew-process.js";
+export { renderCrewBlock, getStatusJson } from "./crew-render.js";
 
 export type CrewRole = "coordinator" | "worker";
 
-export interface CrewClaim {
+interface CrewClaim {
   path: string;
   claimedAt: string;
   note?: string;
@@ -39,9 +37,9 @@ export interface CrewSession {
   _origin?: string;
 }
 
-export const CREW_SCHEMA = 1;
+const CREW_SCHEMA = 1;
 export const PIPEMD_DIR = _PIPEMD_DIR;
-export const CREW_DIR = _CREW_DIR;
+const CREW_DIR = _CREW_DIR;
 export const DEFAULT_STALE_MS = 90_000;
 export const PID_GRACE_MS = 15_000;
 
@@ -49,7 +47,7 @@ export const PID_GRACE_MS = 15_000;
 // Filesystem layer — one JSON file per session, atomic writes.
 // ---------------------------------------------------------------------------
 
-export function crewSessionPath(id: string): string {
+function crewSessionPath(id: string): string {
   return path.join(CREW_DIR, `${id}.json`);
 }
 
@@ -57,7 +55,7 @@ export function generateSessionId(): string {
   return "cr_" + crypto.randomBytes(6).toString("hex");
 }
 
-export function ensureCrewDir(): void {
+function ensureCrewDir(): void {
   fs.mkdirSync(CREW_DIR, { recursive: true });
 }
 

@@ -6,7 +6,7 @@ import { readPidFile, writePidFile } from "./daemon.js";
 import { LIVE_DIR, CONFIG_PATH, PID_FILE } from "./paths.js";
 import { UserError } from "./errors.js";
 
-export function isDaemonRunning(pid: number): boolean {
+function isDaemonRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -25,7 +25,7 @@ export function stopLogic(): void {
   cleanStaleState();
 }
 
-export function cleanStaleState() {
+function cleanStaleState() {
   try {
     if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
   } catch {}
