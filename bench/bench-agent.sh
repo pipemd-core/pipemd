@@ -69,6 +69,7 @@ parse_run_metrics() {
   local result_file="$2"
 
   local input_tokens=0 output_tokens=0 tool_calls=0 reads=0 edits=0 writes=0 greps=0 globs=0
+  local context_reads=0
   local wall_start="" wall_end=""
 
   while IFS= read -r line; do
@@ -90,6 +91,11 @@ parse_run_metrics() {
           write|file_write) writes=$((writes + 1)) ;;
           grep|search) greps=$((greps + 1)) ;;
           glob|list) globs=$((globs + 1)) ;;
+        esac
+        # Track context file reads (AGENTS.md, AI_CONTEXT.md, CLAUDE.md)
+        local tool_input=$(echo "$line" | jq -r '.part.input // .part.path // .part.args // empty' 2>/dev/null || echo "")
+        case "$tool_input" in
+          *AGENTS.md*|*AI_CONTEXT.md*|*CLAUDE.md*) context_reads=$((context_reads + 1)) ;;
         esac
         ;;
       step_finish)
@@ -125,7 +131,8 @@ parse_run_metrics() {
     --argjson greps "$greps" \
     --argjson globs "$globs" \
     --argjson wall_ms "$wall_ms" \
-    '{input_tokens: ($input|tonumber), output_tokens: ($output|tonumber), tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms}' \
+    --argjson context_reads "$context_reads" \
+    '{input_tokens: ($input|tonumber), output_tokens: ($output|tonumber), tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms, context_reads: $context_reads}' \
     > "$result_file"
 }
 
@@ -161,7 +168,15 @@ run_cell() {
     if [ -f "$work_dir/.pipemd/config.yml" ]; then
       log "    Starting daemon in $work_dir"
       (cd "$work_dir" && pmd start) 2>/dev/null || true
-      sleep 3
+      # Wait for initial render (commands run synchronously, ~5-8s)
+      local waited=0
+      while [ $waited -lt 30 ]; do
+        sleep 1
+        waited=$((waited + 1))
+        if [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null; then
+          break
+        fi
+      done
       # Verify context was rendered as a regular file with pmd: blocks
       local ctx_file="$work_dir/AGENTS.md"
       if [ -f "$ctx_file" ]; then
