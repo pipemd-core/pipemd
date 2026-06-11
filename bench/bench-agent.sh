@@ -22,6 +22,7 @@ RUNS=5
 MODEL="zai-coding-plan/glm-5.1"
 SCENARIOS="1,2,3"
 DRY_RUN=false
+REPORT_ONLY=""
 
 RETROSPECTIVE_PROMPT="You just completed a task using PipeMD context (the AGENTS.md file with <!-- pmd: --> blocks). Give honest, concise feedback in a numbered list.
 
@@ -40,12 +41,22 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift 2 ;;
     --scenarios) SCENARIOS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --report)
+      if [ -z "${2:-}" ]; then echo "Usage: --report <results.jsonl>"; exit 1; fi
+      REPORT_ONLY="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: bash bench/bench-agent.sh [--runs N] [--model MODEL] [--scenarios 1,2,3] [--dry-run]"
+      echo "       bash bench/bench-agent.sh --report <results.jsonl>"
       exit 0 ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
+
+# Report-only mode: regenerate HTML from an existing JSONL
+if [ -n "$REPORT_ONLY" ]; then
+  bash "$SCRIPT_DIR/report-html.sh" "$REPORT_ONLY"
+  exit $?
+fi
 
 # Scenario definitions
 declare -A SCENARIO_TARGET SCENARIO_PROMPT SCENARIO_PROJECT SCENARIO_REPO SCENARIO_CHECK
@@ -489,12 +500,16 @@ console.log('Note: input_tokens will likely be HIGHER with PipeMD (context tax).
 console.log('      output_tokens / tool_calls should be LOWER if PipeMD helps.');
 console.log('      Delta is relative to WITHOUT (negative = WITH is smaller).');
 // List retrospectives
-const retros = allData.filter(d => d.retrospective).map(d => d.retrospective);
+const retros = runs.filter(d => d.retrospective).map(d => d.retrospective);
 if (retros.length > 0) {
   console.log('');
   console.log('=== Retrospectives ===');
   retros.forEach(r => console.log('  ' + r));
 }
 " 2>/dev/null
+
+# Generate HTML report
+log "Generating HTML report..."
+bash "$SCRIPT_DIR/report-html.sh" "$RESULTS_FILE" 2>/dev/null || log "  (report generation failed)"
 
 log "Done."
