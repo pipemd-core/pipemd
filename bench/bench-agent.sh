@@ -428,19 +428,24 @@ for (const s of scenarios) {
   console.log(row('wall_ms', sw.w, swo.w));
   console.log(row('context_reads', sw.cr, swo.cr));
   // Smoke-test verdict
-  const crWith = sw.cr && sw.cr.med || 0;
-  const crWithout = swo.cr && swo.cr.med || 0;
+  // Consumption signal: input_tokens(WITH) >> input_tokens(WITHOUT) because
+  // AGENTS.md is loaded into system prompt at session start (not a read tool-call).
+  // context_reads is kept as secondary signal only.
+  const itW = sw.it && sw.it.med || 0;
+  const itWo = swo.it && swo.it.med || 0;
+  const itDelta = itWo > 0 ? ((itW - itWo) / itWo * 100) : 0;
+  const consumed = itDelta > 20; // ~5k tokens / ~19KB context on a typical prompt
   const readsW = sw.r && sw.r.med || 0;
   const readsWo = swo.r && swo.r.med || 0;
   const qW = sw.q, qWo = swo.q;
-  if (crWith === 0 && withData.length > 0) {
-    console.log('  VERDICT: VOID — opencode did not read AGENTS.md (context_reads=0)');
-  } else if (crWith > 0 && qW === qWo && readsW < readsWo) {
-    console.log('  VERDICT: PASS — context consumed, equal quality, fewer exploration reads');
-  } else if (crWith > 0 && qW === qWo && readsW >= readsWo) {
-    console.log('  VERDICT: WEAK — context consumed, equal quality, but no reduction in reads');
-  } else if (crWith > 0 && qW !== qWo) {
-    console.log('  VERDICT: INCONCLUSIVE — quality grades differ, cannot compare efficiency');
+  if (!consumed && withData.length > 0) {
+    console.log('  VERDICT: VOID — context not consumed (input_tokens WITH=' + itW + ' vs WITHOUT=' + itWo + ', delta=' + itDelta.toFixed(0) + '%)');
+  } else if (consumed && qW === qWo && readsW < readsWo) {
+    console.log('  VERDICT: PASS — context consumed (+' + itDelta.toFixed(0) + '% input tokens), equal quality, fewer exploration reads');
+  } else if (consumed && qW === qWo && readsW >= readsWo) {
+    console.log('  VERDICT: WEAK — context consumed (+' + itDelta.toFixed(0) + '% input tokens), equal quality, but no reduction in reads');
+  } else if (consumed && qW !== qWo) {
+    console.log('  VERDICT: INCONCLUSIVE — quality grades differ (' + qW + ' vs ' + qWo + '), cannot compare efficiency');
   } else {
     console.log('  VERDICT: (insufficient data)');
   }
