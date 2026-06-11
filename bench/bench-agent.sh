@@ -162,6 +162,15 @@ run_cell() {
       log "    Starting daemon in $work_dir"
       (cd "$work_dir" && pmd start) 2>/dev/null || true
       sleep 3
+      # Verify context was rendered as a regular file with pmd: blocks
+      local ctx_file="$work_dir/AGENTS.md"
+      if [ -f "$ctx_file" ]; then
+        local block_count
+        block_count=$(grep -c 'pmd:' "$ctx_file" 2>/dev/null || echo "0")
+        log "    Context OK: $block_count pmd: blocks in $(basename "$ctx_file")"
+      else
+        log "    WARNING: AGENTS.md not found or is not a regular file — context may be missing"
+      fi
     fi
   fi
 
@@ -212,6 +221,37 @@ run_cell() {
     >> "$RESULTS_FILE"
 
   log "    Quality: $quality, Tool calls: $(jq -r '.tool_calls // "?"' "$metrics_file" 2>/dev/null)"
+}
+
+# Force all pipes to legacy/file mode in a worktree's config.yml.
+# Bench requires real files (not FIFOs) so context is inspectable and
+# survives rsync/cp without a running daemon.
+force_legacy_mode() {
+  local dir="$1"
+  local config="$dir/.pipemd/config.yml"
+  if [ ! -f "$config" ]; then return; fi
+  # Add or replace mode: legacy on every pipe entry
+  node -e "
+    const fs = require('fs');
+    const YAML = require('$REPO_ROOT/node_modules/yaml');
+    const raw = fs.readFileSync('$config', 'utf8');
+    const cfg = YAML.parse(raw);
+    if (cfg.pipes && Array.isArray(cfg.pipes)) {
+      for (const p of cfg.pipes) { p.mode = 'legacy'; }
+    }
+    fs.writeFileSync('$config', YAML.stringify(cfg));
+  " 2>/dev/null || true
+}
+
+# Remove any stale FIFOs and ensure context files are regular files
+clean_fifos() {
+  local dir="$1"
+  for f in AGENTS.md CLAUDE.md AI_CONTEXT.md; do
+    local target="$dir/$f"
+    if [ -p "$target" ]; then
+      rm -f "$target"
+    fi
+  done
 }
 
 # Setup worktree for a condition
@@ -276,13 +316,14 @@ for s in "${SCEN[@]}"; do
     if [ ! -d "$worktree_base" ]; then
       log "  Setting up $condition base..."
       if [ "$target" = "pipemd" ]; then
-        # Can't cp -r repo into itself; use rsync with exclusions
         mkdir -p "$worktree_base"
         rsync -a --exclude='node_modules' --exclude='.git' --exclude='bench/results' --exclude='dist' "$base/" "$worktree_base/"
-        # Install deps in copy
         (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
         if [ "$condition" = "without" ]; then
           rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
+        else
+          force_legacy_mode "$worktree_base"
+          clean_fifos "$worktree_base"
         fi
       else
         setup_worktree "$base" "$worktree_base" "$condition"
@@ -290,6 +331,8 @@ for s in "${SCEN[@]}"; do
         if [ "$condition" = "with" ]; then
           log "  Running pmd init on hono ($condition)..."
           (cd "$worktree_base" && pmd init --headless) 2>/dev/null || true
+          force_legacy_mode "$worktree_base"
+          clean_fifos "$worktree_base"
         fi
       fi
     fi
