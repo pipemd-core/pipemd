@@ -460,6 +460,11 @@ for s in "${SCEN[@]}"; do
       fi
     fi
 
+    # Commit baseline so quality checks see a clean git diff
+    if [ -d "$worktree_base/.git" ]; then
+      (cd "$worktree_base" && git add -A && git commit -qm "pmd baseline" 2>/dev/null || true)
+    fi
+
     for (( r=1; r<=RUNS; r++ )); do
       # Resume: skip runs already present in JSONL
       if [ -f "$RESULTS_FILE" ] && grep -q "\"scenario\":$s,\"condition\":\"$condition\",\"run\":$r" "$RESULTS_FILE" 2>/dev/null; then
