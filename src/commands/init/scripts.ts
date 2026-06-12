@@ -22,6 +22,7 @@ export function loadScriptContent(ecosystem: Ecosystem, scriptFile: string): str
   const paths = [
     path.join(SCRIPTS_ROOT, dir, scriptFile),
     path.join(SCRIPTS_ROOT, "Shared", scriptFile),
+    path.join(SCRIPTS_ROOT, "DevOps", scriptFile),
   ];
   for (const p of paths) {
     try {

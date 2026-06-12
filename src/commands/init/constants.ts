@@ -88,6 +88,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "git-status", label: "Git Status", description: "Changed, staged, and untracked files", command: "bash .pipemd/scripts/git/git-status.sh", category: "git", volatile: 3, file: "git/git-status.sh" },
     { id: "diff-stat", label: "Diff Stats", description: "File change summary (additions/deletions)", command: "bash .pipemd/scripts/git/diff-stat.sh", category: "git", volatile: 4, file: "git/diff-stat.sh" },
     { id: "hotspots", label: "Churn Hotspots", description: "Files with highest change frequency and churn volume", command: "bash .pipemd/scripts/git/hotspots.sh", category: "git", volatile: 2, file: "git/hotspots.sh" },
+    { id: "git-context", label: "Git Context", description: "Unified branch, recent commits, and changes in one block", command: "bash .pipemd/scripts/git/git-context.sh", category: "git", volatile: 3, file: "git/git-context.sh" },
   ],
   quality: [
     { id: "type-check", label: "Type Errors", description: "Static type errors (tsc, mypy, etc.)", command: "bash .pipemd/scripts/quality/type-check.sh", category: "quality", volatile: 2, file: "quality/type-check.sh" },

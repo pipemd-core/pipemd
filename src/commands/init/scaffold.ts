@@ -50,7 +50,7 @@ export function ensurePmdTags(filepath: string, tagNames: string[]): string[] {
   const appended: string[] = [];
 
   const existingTags = new Set<string>();
-  for (const m of content.matchAll(/<!--\s*pmd:\s*(\w+)\s*-->/g)) {
+  for (const m of content.matchAll(/<!--\s*pmd:\s*(\w+)\s*-->[\s\S]*?<!--\s*\/pmd\s*-->/g)) {
     existingTags.add(m[1]);
   }
 
@@ -155,6 +155,8 @@ function generateTemplate(agent: AiAgent, selectedScripts: ScriptDef[]): string 
 
   const sections: string[] = [];
 
+  const hasCrew = selectedScripts.some((s) => s.id === "crew");
+
   sections.push(`# 🏴‍☠️ Context — powered by PipeMD
 
 > **🤖 PipeMD Context File**
@@ -172,7 +174,8 @@ function generateTemplate(agent: AiAgent, selectedScripts: ScriptDef[]): string 
 
 ${loadTemplate("static-rules.md")}
 
-${loadTemplate("agent-decision-tree.md")}`);
+${loadTemplate("agent-decision-tree.md")}
+${hasCrew ? "\n" + loadTemplate("agent-decision-tree-crew.md") : ""}`);
 
   if (stableScripts.length > 0) {
     sections.push(``);

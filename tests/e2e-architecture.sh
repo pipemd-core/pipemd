@@ -271,7 +271,7 @@ echo ""
 GMD="node $ROOT_DIR/dist/index.js"
 
 # ── Test: arch is recommended by default in pmd init ──
-echo -e "${YELLOW}Test: pmd init --yes includes arch script${NC}"
+echo -e "${YELLOW}Test: pmd init --yes with --scripts arch includes arch script${NC}"
 WORKSPACE=$(mktemp -d)
 cd "$WORKSPACE"
 git init --initial-branch=main 2>/dev/null
@@ -281,7 +281,7 @@ echo "import { x } from './utils'; console.log(x);" > src/index.ts
 echo "export const x = 42;" > src/utils.ts
 git add -A && git commit -m "init" --quiet 2>/dev/null
 
-OUT=$($GMD init --yes 2>&1)
+OUT=$($GMD init --yes --scripts tree,deps,exports,arch 2>&1)
 assert_contains "$OUT" "arch" "init output includes arch"
 assert_contains "$OUT" "Architecture Map" "init output includes Architecture Map label"
 
@@ -345,7 +345,7 @@ assert_contains "$OUT" "ext_commander" "PipeMD arch"
 echo ""
 
 # ── Test: pmd init for C-CPP includes arch ──
-echo -e "${YELLOW}Test: pmd init --yes for C-CPP includes arch${NC}"
+echo -e "${YELLOW}Test: pmd init --yes --scripts arch for C-CPP includes arch${NC}"
 WORKSPACE=$(mktemp -d)
 cd "$WORKSPACE"
 git init --initial-branch=main 2>/dev/null
@@ -353,7 +353,7 @@ cp -r "$FIXTURES/cpp-project/"* . 2>/dev/null
 cp "$FIXTURES/cpp-project/CMakeLists.txt" . 2>/dev/null
 git add -A && git commit -m "init" --quiet 2>/dev/null
 
-OUT=$($GMD init --yes --ecosystem C-CPP 2>&1)
+OUT=$($GMD init --yes --ecosystem C-CPP --scripts arch 2>&1)
 assert_contains "$OUT" "arch" "C-CPP init includes arch"
 if [ -f ".pipemd/scripts/architecture/arch.sh" ]; then
   echo -e "  ${GREEN}✓${NC} arch.sh copied for C-CPP"
@@ -366,27 +366,27 @@ rm -rf "$WORKSPACE"
 echo ""
 
 # ── Test: pmd init for Python includes arch ──
-echo -e "${YELLOW}Test: pmd init --yes for Python includes arch${NC}"
+echo -e "${YELLOW}Test: pmd init --yes --scripts arch for Python includes arch${NC}"
 WORKSPACE=$(mktemp -d)
 cd "$WORKSPACE"
 git init --initial-branch=main 2>/dev/null
 cp -r "$FIXTURES/fastapi-project/"* . 2>/dev/null
 git add -A && git commit -m "init" --quiet 2>/dev/null
 
-OUT=$($GMD init --yes --ecosystem Python 2>&1)
+OUT=$($GMD init --yes --ecosystem Python --scripts arch 2>&1)
 assert_contains "$OUT" "arch" "Python init includes arch"
 rm -rf "$WORKSPACE"
 echo ""
 
 # ── Test: pmd init for Go includes arch ──
-echo -e "${YELLOW}Test: pmd init --yes for Go includes arch${NC}"
+echo -e "${YELLOW}Test: pmd init --yes --scripts arch for Go includes arch${NC}"
 WORKSPACE=$(mktemp -d)
 cd "$WORKSPACE"
 git init --initial-branch=main 2>/dev/null
 cp -r "$FIXTURES/go-project/"* . 2>/dev/null
 git add -A && git commit -m "init" --quiet 2>/dev/null
 
-OUT=$($GMD init --yes --ecosystem Go 2>&1)
+OUT=$($GMD init --yes --ecosystem Go --scripts arch 2>&1)
 assert_contains "$OUT" "arch" "Go init includes arch"
 rm -rf "$WORKSPACE"
 echo ""

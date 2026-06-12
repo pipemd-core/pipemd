@@ -43,8 +43,13 @@ if [ -f "$pid_file" ]; then
   fi
 fi
 
+if ! command -v npx &>/dev/null; then
+  exit 0
+fi
+
 run_knip="$(dirname "$0")/run-knip.sh"
 (
+  echo $$ > "$pid_file"
   "$run_knip" > "${cache_file}.tmp" 2>/dev/null
   mv -f "${cache_file}.tmp" "$cache_file"
   rm -f "$pid_file"

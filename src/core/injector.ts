@@ -87,13 +87,33 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
   );
 
   const blockRe = /<!--\s*pmd:\s*([\w-]+)\s*-->[\s\S]*?<!--\s*\/pmd\s*-->\n?/g;
-  const rendered = template.replace(blockRe, (_match, name: string) => {
-    const replacement = results.get(name);
-    if (!replacement) {
-      return "";
+
+  const allMatches: { start: number; end: number; name: string }[] = [];
+  let bMatch: RegExpExecArray | null;
+  while ((bMatch = blockRe.exec(template)) !== null) {
+    allMatches.push({ start: bMatch.index, end: bMatch.index + bMatch[0].length, name: bMatch[1] });
+  }
+
+  const lastIdx = new Map<string, number>();
+  for (let i = 0; i < allMatches.length; i++) {
+    lastIdx.set(allMatches[i].name, i);
+  }
+  const surviving = new Set(lastIdx.values());
+
+  let rendered = "";
+  let pos = 0;
+  for (let i = 0; i < allMatches.length; i++) {
+    const m = allMatches[i];
+    rendered += template.slice(pos, m.start);
+    if (surviving.has(i)) {
+      const replacement = results.get(m.name);
+      rendered += replacement ?? "";
     }
-    return replacement;
-  });
+    pos = m.end;
+  }
+  rendered += template.slice(pos);
+
+  rendered = rendered.replace(/^### .*\n+(?=(?:### |---|$))/gm, "");
 
   const trimmed = rendered.trim();
 

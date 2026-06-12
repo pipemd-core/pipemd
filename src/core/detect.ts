@@ -13,7 +13,7 @@ export interface DetectionResult {
 }
 
 export function detectProject(cwd: string = process.cwd()): DetectionResult {
-  const recommended: string[] = ["arch", "tree", "todos"];
+  const recommended: string[] = ["tree", "deps", "exports"];
   const signals: string[] = [];
   let ecosystem: Ecosystem = "Generic";
 
@@ -104,24 +104,14 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
   // ── Git Detection ──
 
   if (has(".git")) {
-    signals.push(".git → git scripts");
-    recommended.push("git-log", "git-branch", "git-status", "diff-stat", "hotspots");
+    signals.push(".git → git-context");
+    recommended.push("git-context");
   }
 
-  // ── DevOps Detection (supplementary — adds scripts to any ecosystem) ──
-
-  const devopsSignals: string[] = [];
-  if (has("Dockerfile")) { devopsSignals.push("Dockerfile → docker-stats"); recommended.push("docker-stats"); }
-  if (has("docker-compose.yml") || has("docker-compose.yaml")) { devopsSignals.push("docker-compose → docker-stats"); recommended.push("docker-stats"); }
-  if (hasIn(".", /\.tf$/) || has(".terraform")) { devopsSignals.push("Terraform → tf-state"); recommended.push("tf-state"); }
-  if (hasIn(".", /chart\.yaml$/i)) { devopsSignals.push("Helm chart → k8s-unhealthy"); recommended.push("k8s-unhealthy"); }
-  if (has("kustomization.yaml")) { devopsSignals.push("Kustomize → k8s-unhealthy"); recommended.push("k8s-unhealthy"); }
-  if (has("skaffold.yaml")) { devopsSignals.push("Skaffold → k8s-unhealthy"); recommended.push("k8s-unhealthy"); }
-  if (hasIn(".", /Dockerfile/i) && !has("Dockerfile")) { devopsSignals.push("Dockerfile (subdir) → docker-stats"); recommended.push("docker-stats"); }
-  // Only push DevOps supplementary signals if ecosystem is NOT already DevOps
-  if (ecosystem !== "DevOps" && devopsSignals.length > 0) {
-    signals.push(...devopsSignals);
-  }
+  // ── DevOps Detection (supplementary — only for DevOps-primary ecosystem) ──
+  // Note: DevOps blocks (docker-stats, tf-state, k8s-unhealthy, aws-context)
+  // are only added when the primary ecosystem is DevOps. Non-DevOps projects
+  // must opt in via --blocks flag or manual config.yml editing.
 
   // ── Lint Detection ──
 
@@ -137,27 +127,9 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     recommended.push("lint");
   }
 
-  // ── Test Detection ──
+  // ── Test Detection (opt-in only — often exceeds daemon timeout) ──
 
-  const testConfigs = [
-    "jest.config.js", "jest.config.ts", "jest.config.mjs",
-    "vitest.config.ts", "vitest.config.js",
-    "pytest.ini", "conftest.py",
-    "Cargo.toml",
-    "go.mod",
-  ];
-  const foundTest = testConfigs.find(has);
-  if (foundTest) {
-    signals.push(`${foundTest} → test-summary`);
-    recommended.push("test-summary");
-  }
-
-  // ── Dead-Code Detection ──
-
-  if (has("package.json") && (has("tsconfig.json") || foundLint)) {
-    signals.push("package.json + tsconfig/lint → dead-code");
-    recommended.push("dead-code");
-  }
+  // ── Dead-Code Detection (opt-in only — requires knip and first-render delay) ──
 
   // ── Database / ORM Detection ──
 
@@ -314,75 +286,7 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     }
   }
 
-  // ── Monorepo / Multi-package Detection ──
-
-  const monorepoSignals: string[] = [];
-  if (has("turbo.json")) { monorepoSignals.push("turbo.json → monorepo"); }
-  if (has("nx.json")) { monorepoSignals.push("nx.json → monorepo"); }
-  if (has("lerna.json")) { monorepoSignals.push("lerna.json → monorepo"); }
-  if (has("pnpm-workspace.yaml") || has("pnpm-workspace.yml")) { monorepoSignals.push("pnpm workspace → monorepo"); }
-
-  const monorepoDirPatterns = ["apps", "packages", "services", "libs", "modules", "workspaces"];
-  let hasMonorepoDirs = false;
-  for (const dir of monorepoDirPatterns) {
-    if (fs.existsSync(path.join(cwd, dir)) && fs.statSync(path.join(cwd, dir)).isDirectory()) {
-      hasMonorepoDirs = true;
-      break;
-    }
-  }
-
-  let subReadmeCount = 0;
-  try {
-    const entries = fs.readdirSync(cwd, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
-        const subReadme = path.join(cwd, entry.name, "README.md");
-        if (fs.existsSync(subReadme)) {
-          subReadmeCount++;
-        }
-        try {
-          const subEntries = fs.readdirSync(path.join(cwd, entry.name), { withFileTypes: true });
-          for (const sub of subEntries) {
-            if (sub.isDirectory() && !sub.name.startsWith(".")) {
-              const deepReadme = path.join(cwd, entry.name, sub.name, "README.md");
-              if (fs.existsSync(deepReadme)) {
-                subReadmeCount++;
-              }
-            }
-          }
-        } catch (err: unknown) { log.debug(`monorepo subdirectory readdir failed: ${errMsg(err)}`); }
-      }
-    }
-  } catch (err: unknown) { log.debug(`monorepo detection readdir failed: ${errMsg(err)}`); }
-
-  if (monorepoSignals.length > 0 || hasMonorepoDirs || subReadmeCount >= 2) {
-    if (monorepoSignals.length > 0) {
-      signals.push(...monorepoSignals);
-    }
-    if (hasMonorepoDirs) {
-      signals.push("monorepo directory structure detected → compose");
-    }
-    if (subReadmeCount >= 2) {
-      signals.push(`${subReadmeCount} sub-directory READMEs → compose`);
-    }
-    recommended.push("compose");
-    recommended.push("workspace-map");
-  }
-
-  if (ecosystem === "Rust" && has("Cargo.toml")) {
-    try {
-      const cargoContent = fs.readFileSync(path.join(cwd, "Cargo.toml"), "utf-8");
-      if (cargoContent.includes("[workspace]")) {
-        signals.push("Cargo workspace → workspace-map");
-        recommended.push("workspace-map");
-      }
-    } catch (err: unknown) { log.debug(`Cargo.toml workspace check failed: ${errMsg(err)}`); }
-  }
-
-  if (ecosystem === "Go" && has("go.work")) {
-    signals.push("go.work → workspace-map");
-    recommended.push("workspace-map");
-  }
+  // ── Monorepo / Multi-package Detection (opt-in only — low signal-to-noise) ──
 
   return {
     ecosystem,

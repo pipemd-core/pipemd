@@ -63,10 +63,13 @@ function formatCrewHelp(): string {
   lines.push(w("note", "Post a status message for this agent"));
   lines.push(w("status", "Show all active crew sessions"));
   lines.push("");
+  lines.push(chalk.bold("Output:"));
+  lines.push(w("export", "Output all active crew sessions as JSON"));
+  lines.push(w("render", "Print the crew context block for template rendering"));
+  lines.push("");
   lines.push(chalk.bold("Admin:"));
   lines.push(w("install-hooks", "Wire harness hooks so edits self-report to the crew"));
   lines.push(w("reap", "Remove stale sessions (dead process or expired heartbeat)"));
-  lines.push(w("render", "Print the crew context block for template rendering"));
   lines.push(
     chalk.dim(
       `\nRun ${chalk.reset("pmd crew <command> --help")} for usage on any command.`,
@@ -215,6 +218,35 @@ crew
       console.log(chalk.dim("No active crew sessions."));
     }
     console.log(renderCrewBlock({ maxLines: 999 }));
+  });
+
+crew
+  .command("export")
+  .description("Output all active crew sessions as JSON")
+  .action(() => {
+    if (!requireProjectOrExit()) return;
+    const sessions = listSessions();
+    if (sessions.length === 0) {
+      console.error("No active crew sessions");
+      process.exit(1);
+    }
+    const out = sessions.map((s) => ({
+      sessionId: s.id,
+      role: s.role,
+      harness: s.harness,
+      label: s.label ?? null,
+      pid: s.pid,
+      coordinatorId: s.coordinatorId ?? null,
+      claimedFiles: s.claimedFiles.map((c) => ({
+        path: c.path,
+        claimedAt: c.claimedAt,
+      })),
+      note: s.note ?? null,
+      startedAt: s.startedAt,
+      lastHeartbeat: s.lastHeartbeat,
+    }));
+    console.log(`// Total sessions: ${sessions.length}`);
+    console.log(JSON.stringify(out, null, 2));
   });
 
 crew

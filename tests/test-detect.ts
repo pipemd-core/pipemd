@@ -102,8 +102,8 @@ describe("detectProject — signal detection", () => {
     const dir = copyFixture("express-project")
     fs.mkdirSync(path.join(dir, ".git"), { recursive: true })
     const result = detectProject(dir)
-    assert.ok(result.signals.some((s) => s.includes(".git → git scripts")))
-    assert.ok(result.recommendedScripts.includes("git-log"))
+    assert.ok(result.signals.some((s) => s.includes(".git → git-context")))
+    assert.ok(result.recommendedScripts.includes("git-context"))
   })
 
   it("detects Express routes in express-project fixture", () => {
@@ -140,11 +140,11 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.signals.some((s) => s.includes("C++ headers detected")))
   })
 
-  it("detects monorepo from monorepo-project fixture", () => {
+  it("monorepo signals are not added to defaults (opt-in only)", () => {
     const dir = copyFixture("monorepo-project")
     const result = detectProject(dir)
-    assert.ok(result.signals.some((s) => s.includes("pnpm workspace")))
-    assert.ok(result.recommendedScripts.includes("compose"))
+    assert.ok(!result.recommendedScripts.includes("compose"))
+    assert.ok(!result.recommendedScripts.includes("workspace-map"))
   })
 
   it("detects Next.js App Router from nextjs-project fixture", () => {
@@ -192,16 +192,16 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.signals.some((s) => s.includes("Terraform")))
   })
 
-  it("detects test-summary for project with go.mod", () => {
+  it("does not add test-summary to defaults (opt-in only)", () => {
     const dir = copyFixture("go-project")
     const result = detectProject(dir)
-    assert.ok(result.recommendedScripts.includes("test-summary"))
+    assert.ok(!result.recommendedScripts.includes("test-summary"))
   })
 
-  it("detects test-summary for project with Cargo.toml", () => {
+  it("does not add test-summary to Rust defaults (opt-in only)", () => {
     const dir = copyFixture("rust-project")
     const result = detectProject(dir)
-    assert.ok(result.recommendedScripts.includes("test-summary"))
+    assert.ok(!result.recommendedScripts.includes("test-summary"))
   })
 
   it("detects Django models from django-project fixture", () => {
@@ -216,13 +216,15 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.signals.some((s) => s.includes("sqlalchemy")))
   })
 
-  it("includes arch, tree, todos in all recommendations", () => {
+  it("includes tree, deps, exports in all recommendations", () => {
     const emptyDir = path.join(tmpDir, "bare-project")
     fs.mkdirSync(emptyDir, { recursive: true })
     const result = detectProject(emptyDir)
-    assert.ok(result.recommendedScripts.includes("arch"))
     assert.ok(result.recommendedScripts.includes("tree"))
-    assert.ok(result.recommendedScripts.includes("todos"))
+    assert.ok(result.recommendedScripts.includes("deps"))
+    assert.ok(result.recommendedScripts.includes("exports"))
+    assert.ok(!result.recommendedScripts.includes("arch"))
+    assert.ok(!result.recommendedScripts.includes("todos"))
   })
 })
 
@@ -252,16 +254,16 @@ describe("detectProject — deduplication of recommended scripts", () => {
   })
 })
 
-describe("detectProject — DevOps supplementary signals", () => {
-  it("adds DevOps scripts to Node/TypeScript project with Dockerfile", () => {
+describe("detectProject — DevOps scripts only for DevOps-primary ecosystem", () => {
+  it("does not add DevOps scripts to Node/TypeScript project with Dockerfile", () => {
     const dir = path.join(tmpDir, "node-with-docker")
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, "package.json"), '{"name":"test"}')
     fs.writeFileSync(path.join(dir, "Dockerfile"), "FROM node:20\n")
     const result = detectProject(dir)
     assert.equal(result.ecosystem, "Node/TypeScript")
-    assert.ok(result.signals.some((s) => s.includes("Dockerfile")))
-    assert.ok(result.recommendedScripts.includes("docker-stats"))
+    assert.ok(!result.recommendedScripts.includes("docker-stats"))
+    assert.ok(!result.recommendedScripts.includes("tf-state"))
   })
 })
 
