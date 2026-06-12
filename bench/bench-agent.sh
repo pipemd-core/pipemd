@@ -275,7 +275,13 @@ run_cell() {
   fi
 
   # Stop daemon if we started it
+  local injections_delivered=0
   if [ "$condition" = "with" ]; then
+    # Capture injection stats before stopping daemon
+    local tui_stats="$work_dir/.pipemd/.tui-stats.json"
+    if [ -f "$tui_stats" ]; then
+      injections_delivered=$(jq -r '.injectionsDelivered // 0' "$tui_stats" 2>/dev/null || echo "0")
+    fi
     (cd "$work_dir" && pmd stop) 2>/dev/null || true
     # Clean up stale crew sessions left by opencode run
     pmd crew clean --force 2>/dev/null || true
@@ -306,6 +312,10 @@ run_cell() {
   # Validate — if metrics file is missing or invalid, use empty defaults
   if ! (echo "$metrics_json" | jq empty 2>/dev/null); then
     metrics_json='{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0}'
+  fi
+  # Add injection count for WITH runs
+  if [ "$injections_delivered" -gt 0 ] 2>/dev/null; then
+    metrics_json=$(echo "$metrics_json" | jq --argjson inj "$injections_delivered" '.injections_delivered = $inj' 2>/dev/null || echo "$metrics_json")
   fi
 
   local record
@@ -418,6 +428,7 @@ for s in "${SCEN[@]}"; do
       if [ "$target" = "pipemd" ]; then
         mkdir -p "$worktree_base"
         rsync -a --exclude='node_modules' --exclude='.git' --exclude='bench/results' --exclude='dist' "$base/" "$worktree_base/"
+        (cd "$worktree_base" && git init -q && git add -A && git commit -qm "baseline" 2>/dev/null || true)
         (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
         if [ "$condition" = "without" ]; then
           rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
@@ -500,6 +511,7 @@ for (const s of scenarios) {
       w: metric(m => m.wall_ms), q: qMed(),
       cr: metric(m => m.context_reads || 0),
       fti: metric(m => m.first_turn_input || 0),
+      inj: metric(m => m.injections_delivered || 0),
     };
   };
   const sw = stats(withData), swo = stats(withoutData);
@@ -520,6 +532,9 @@ for (const s of scenarios) {
   console.log(row('wall_ms', sw.w, swo.w));
   console.log(row('context_reads', sw.cr, swo.cr));
   console.log(row('first_turn_in', sw.fti, swo.fti));
+  // Injection verification
+  const injW = withData.filter(d => d.metrics && d.metrics.injections_delivered > 0).length;
+  console.log('  injections:    ' + injW + '/' + withData.length + ' WITH runs had active injection');
   // Verdict based on first-turn input tokens (consumption signal)
   // AGENTS.md is auto-loaded into system prompt at session start.
   // first_turn_input(WITH) >> first_turn_input(WITHOUT) = context consumed.
