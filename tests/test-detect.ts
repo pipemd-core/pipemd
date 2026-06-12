@@ -106,11 +106,11 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.recommendedScripts.includes("git-context"))
   })
 
-  it("detects Express routes in express-project fixture", () => {
+  it("Express routes not auto-detected (opt-in via --blocks)", () => {
     const dir = copyFixture("express-project")
     const result = detectProject(dir)
-    assert.ok(result.signals.some((s) => s.includes("Express routes detected")))
-    assert.ok(result.recommendedScripts.includes("express-routes"))
+    assert.ok(!result.recommendedScripts.includes("express-routes"),
+      "express-routes should not be auto-detected (removed from defaults)")
   })
 
   it("detects FastAPI in fastapi-project fixture", () => {
@@ -153,10 +153,11 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.signals.some((s) => s.includes("Next.js App Router")))
   })
 
-  it("detects NestJS controllers from nestjs-project fixture", () => {
+  it("NestJS controllers not auto-detected (opt-in via --blocks)", () => {
     const dir = copyFixture("nestjs-project")
     const result = detectProject(dir)
-    assert.ok(result.signals.some((s) => s.includes("NestJS controllers")))
+    assert.ok(!result.recommendedScripts.includes("nest-controllers"),
+      "nest-controllers should not be auto-detected (removed from defaults)")
   })
 
   it("detects Angular routing from angular-project fixture", () => {
@@ -173,10 +174,11 @@ describe("detectProject — signal detection", () => {
     assert.ok(result.recommendedScripts.includes("angular-structure"))
   })
 
-  it("detects React components from react-project fixture", () => {
+  it("React components not auto-detected (opt-in via --blocks)", () => {
     const dir = copyFixture("react-project")
     const result = detectProject(dir)
-    assert.ok(result.signals.some((s) => s.includes("React components")))
+    assert.ok(!result.recommendedScripts.includes("react-components"),
+      "react-components should not be auto-detected (removed from defaults)")
   })
 
   it("detects Prisma from prisma-project fixture", () => {

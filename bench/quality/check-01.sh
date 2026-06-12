@@ -12,7 +12,7 @@ if ! npx tsc --noEmit >/dev/null 2>&1; then
 fi
 
 # Grade 1 check: did the agent modify any files?
-modified=$(git diff --name-only 2>/dev/null | wc -l)
+modified=$(git status --porcelain -- src/ 2>/dev/null | wc -l)
 if [ "$modified" -eq 0 ]; then
   echo "0"
   exit 0

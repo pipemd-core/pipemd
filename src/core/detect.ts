@@ -155,31 +155,9 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
     } catch (err: unknown) { log.debug(`pyproject.toml read failed: ${errMsg(err)}`); }
   }
 
-  // ── API Framework Detection ──
-
-  if (ecosystem === "Node/TypeScript") {
-    const srcDirs = ["src", "routes", "app", "lib", "server", "api", "v1"];
-    for (const d of srcDirs) {
-      if (fs.existsSync(path.join(cwd, d))) {
-        try {
-          const allFiles = fs.readdirSync(path.join(cwd, d), { recursive: true }).map(String);
-          const jsFiles = allFiles.filter(f => !f.includes("node_modules") && /\.(ts|js|mjs)$/.test(f));
-          const content = jsFiles.slice(0, 40).map((f) => {
-            try { return fs.readFileSync(path.join(cwd, d, f), "utf-8"); } catch (err: unknown) { log.debug(`readFile failed for ${f}: ${errMsg(err)}`); return ""; }
-          }).join("\n");
-          if (content.includes("app.get") || content.includes("router.get") || content.includes("router.post")) {
-            signals.push("Express routes detected → express-routes");
-            recommended.push("express-routes");
-            break;
-          }
-        } catch (err: unknown) { log.debug(`Express route detection readdir failed for ${d}: ${errMsg(err)}`); }
-      }
-    }
-    if (hasIn("src", /controller.*\.ts/) || hasIn("src", /\.controller\.ts/)) {
-      signals.push("NestJS controllers detected → nest-controllers");
-      recommended.push("nest-controllers");
-    }
-  }
+  // ── API Framework Detection (opt-in only via --blocks) ──
+  // Express/NestJS detection removed from auto-detect: 15/15 agent retrospectives
+  // flagged express-routes as useless. Available via --blocks or config.yml.
 
   if (ecosystem === "Python") {
     try {
@@ -254,10 +232,9 @@ export function detectProject(cwd: string = process.cwd()): DetectionResult {
       signals.push("Next.js App Router detected → nextjs-app-router");
       recommended.push("nextjs-app-router");
     }
-    if (hasIn("src", /\.tsx$/) || hasIn("src", /\.jsx$/)) {
-      signals.push("React components detected → react-components");
-      recommended.push("react-components");
-    }
+    // React detection (opt-in only via --blocks)
+    // Removed from auto-detect: 10/15 agent retrospectives flagged react-components
+    // as useless. Available via --blocks or config.yml.
     if (hasIn("src", /-routing\.module\.ts$/) || hasIn("src", /app-routing/) || hasIn("src", /\.routes\.ts$/) || has("angular.json")) {
       signals.push("Angular detected → angular-structure");
       recommended.push("angular-structure");

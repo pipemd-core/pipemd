@@ -25,6 +25,7 @@ export type ContextSource =
   | "import-graph"
   | "session-diff"
   | "exports"
+  | "file-content"
   | "now";
 
 type InjectionScope = "target-file" | "global";
@@ -73,6 +74,7 @@ const VALID_SOURCES: ContextSource[] = [
   "import-graph",
   "session-diff",
   "exports",
+  "file-content",
   "now",
 ];
 const VALID_SCOPES: InjectionScope[] = ["target-file", "global"];
@@ -81,6 +83,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
   delivery: "active",
   rules: {
     "before-read": [
+      { source: "file-content", scope: "target-file", "max-lines": 60 },
       { source: "crew-status", scope: "global", "max-lines": 3 },
       { source: "crew-todos", scope: "global", "max-lines": 10 },
     ],

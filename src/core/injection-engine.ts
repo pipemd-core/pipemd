@@ -35,6 +35,7 @@ interface ResolverContext {
   sessionId?: string;
   config: InjectionConfig;
   intervalMin?: number;
+  maxLines?: number;
 }
 
 type SourceResolver = (ctx: ResolverContext) => Promise<string>;
@@ -640,6 +641,21 @@ async function resolveNow(ctx: ResolverContext): Promise<string> {
   return formatNow(now);
 }
 
+async function resolveFileContent(ctx: ResolverContext): Promise<string> {
+  const file = ctx.targetFile;
+  if (!file) return "";
+  const maxLines = ctx.maxLines ?? 60;
+  try {
+    if (!fs.existsSync(file)) return "";
+    const stat = fs.statSync(file);
+    if (stat.size > 20000) return `(file too large: ${(stat.size / 1024).toFixed(0)}KB)`;
+    const content = fs.readFileSync(file, "utf-8");
+    const lines = content.split("\n");
+    if (lines.length <= maxLines) return content;
+    return lines.slice(0, maxLines).join("\n") + `\n... (${lines.length - maxLines} more lines)`;
+  } catch { return ""; }
+}
+
 export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
@@ -657,6 +673,7 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "import-graph": resolveImportGraph,
   "session-diff": resolveSessionDiff,
   "exports": resolveExports,
+  "file-content": resolveFileContent,
   now: resolveNow,
 };
 
@@ -738,6 +755,7 @@ export async function resolveInjections(
       sessionId: effectiveSessionId,
       config,
       intervalMin: rule["interval-min"],
+      maxLines: rule["max-lines"],
     };
 
     const resolver = RESOLVERS[rule.source];

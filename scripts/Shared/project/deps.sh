@@ -5,11 +5,16 @@ source "$(dirname "$0")/../lib/limit.sh"
 
 eco="${PMD_ECOSYSTEM:-}"
 
+show_scripts() {
+  node -e "const p=require('./package.json');if(p.scripts){console.log('Scripts:');Object.entries(p.scripts).forEach(([k,v])=>console.log('  '+k+': '+v))}" 2>/dev/null | head -"$MAX_DEPS"
+}
+
 check_node() {
   if [ -f package.json ]; then
     out=$(node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies,...p.peerDependencies};if(!Object.keys(d).length){console.log('No dependencies');process.exit()};Object.entries(d).forEach(([k,v])=>console.log(k+' '+v))" 2>/dev/null)
     if [ -n "$out" ]; then
       limit_output "$out" "$MAX_DEPS" "$(echo "$out" | head -5 && echo "... and $(echo "$out" | wc -l) total dependencies")"
+      node -e "const p=require('./package.json');if(p.scripts){console.log('Scripts:');Object.entries(p.scripts).slice(0,${MAX_DEPS}).forEach(([k,v])=>console.log('  '+k+': '+v))}" 2>/dev/null || true
       exit 0
     fi
   fi

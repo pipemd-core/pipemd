@@ -130,7 +130,9 @@ parse_run_metrics() {
           glob|list) globs=$((globs + 1)) ;;
         esac
         # Track context file reads (AGENTS.md, AI_CONTEXT.md, CLAUDE.md)
-        local tool_input=$(echo "$line" | jq -r '.part.input // .part.path // .part.args // empty' 2>/dev/null || echo "")
+        local tool_input=$(echo "$line" | jq -r '
+          (.part.state.input.filePath // .part.state.input.path // .part.state.input.pattern // .part.state.input.command // empty) // empty
+        ' 2>/dev/null || echo "")
         case "$tool_input" in
           *AGENTS.md*|*AI_CONTEXT.md*|*CLAUDE.md*) context_reads=$((context_reads + 1)) ;;
         esac
@@ -293,6 +295,38 @@ run_cell() {
   # Parse metrics
   parse_run_metrics "$ndjson_file" "$metrics_file"
 
+  # Detect VOID runs (infrastructure failures, not agent failures)
+  local is_void=false
+  local void_reason=""
+  local parsed_tool_calls=0
+  if [ -f "$metrics_file" ]; then
+    parsed_tool_calls=$(jq -r '.tool_calls // 0' "$metrics_file" 2>/dev/null || echo "0")
+  fi
+  if [ "$parsed_tool_calls" -eq 0 ] || [ "$elapsed_ms" -ge $(( (${OPENCODE_TIMEOUT:-600} - 1) * 1000 )) ]; then
+    is_void=true
+    void_reason="agent_timeout"
+    log "    VOID: agent timeout (tool_calls=$parsed_tool_calls, wall_ms=$elapsed_ms)"
+  fi
+
+  if [ "$is_void" = true ]; then
+    local void_metrics
+    void_metrics=$(cat "$metrics_file" 2>/dev/null || echo '{}')
+    local void_record
+    void_record=$(jq -n -c \
+      --argjson scenario "$scenario" \
+      --arg condition "$condition" \
+      --argjson run "$run_idx" \
+      --argjson metrics "$void_metrics" \
+      --argjson wall "$elapsed_ms" \
+      '{scenario: $scenario, condition: $condition, run: $run_idx, quality: -1, metrics: ($metrics + {void: true, reason: "agent_timeout", wall_ms: $wall}), retrospective: null}' 2>/dev/null) \
+      || void_record='{"scenario":'"$scenario"',"condition":"'"$condition"'","run":'"$run_idx"',"quality":-1,"metrics":{"void":true,"reason":"agent_timeout"},"retrospective":null}'
+    echo "$void_record" >> "$RESULTS_FILE"
+    if [ "$condition" = "with" ]; then
+      (cd "$work_dir" && pmd stop) 2>/dev/null || true
+    fi
+    return 1
+  fi
+
   # Override wall_ms with external measurement
   if [ -f "$metrics_file" ]; then
     local tmp_metrics
@@ -316,8 +350,8 @@ run_cell() {
   if ! (echo "$metrics_json" | jq empty 2>/dev/null); then
     metrics_json='{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0}'
   fi
-  # Add injection count for WITH runs
-  if [ "$injections_delivered" -gt 0 ] 2>/dev/null; then
+  # Add injection count for WITH runs (always write, even if 0, so we can distinguish "not measured" from "measured 0")
+  if [ "$condition" = "with" ]; then
     metrics_json=$(echo "$metrics_json" | jq --argjson inj "$injections_delivered" '.injections_delivered = $inj' 2>/dev/null || echo "$metrics_json")
   fi
 
@@ -464,6 +498,23 @@ for s in "${SCEN[@]}"; do
     if [ -d "$worktree_base/.git" ]; then
       (cd "$worktree_base" && git add -A && git commit -qm "pmd baseline" 2>/dev/null || true)
     fi
+
+    # Write opencode.json with auto-approve permissions for the worktree
+    cat > "$worktree_base/opencode.json" << 'PERM_EOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow",
+    "edit": "allow",
+    "write": "allow",
+    "bash": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "task": "allow"
+  }
+}
+PERM_EOF
 
     for (( r=1; r<=RUNS; r++ )); do
       # Resume: skip runs already present in JSONL
