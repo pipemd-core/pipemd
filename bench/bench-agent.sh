@@ -68,7 +68,7 @@ SCENARIO_TARGET[1]="pipemd"
 SCENARIO_TARGET[2]="hono"
 SCENARIO_TARGET[3]="hono"
 
-SCENARIO_PROMPT[1]="$SCRIPT_DIR/prompts/01-crew-export.pipemd.md"
+SCENARIO_PROMPT[1]="$SCRIPT_DIR/prompts/01-status-json.pipemd.md"
 SCENARIO_PROMPT[2]="$SCRIPT_DIR/prompts/02-middleware-timing.hono.md"
 SCENARIO_PROMPT[3]="$SCRIPT_DIR/prompts/03-error-handler.hono.md"
 
@@ -281,6 +281,9 @@ run_cell() {
     local tui_stats="$work_dir/.pipemd/.tui-stats.json"
     if [ -f "$tui_stats" ]; then
       injections_delivered=$(jq -r '.injectionsDelivered // 0' "$tui_stats" 2>/dev/null || echo "0")
+      log "    Injections delivered: $injections_delivered"
+    else
+      log "    No injection stats found (.tui-stats.json missing)"
     fi
     (cd "$work_dir" && pmd stop) 2>/dev/null || true
     # Clean up stale crew sessions left by opencode run
@@ -422,37 +425,38 @@ for s in "${SCEN[@]}"; do
       worktree_base="$RESULTS_DIR/hono-$condition"
     fi
 
-    # Setup base worktree once per condition
-    if [ ! -d "$worktree_base" ]; then
-      log "  Setting up $condition base..."
-      if [ "$target" = "pipemd" ]; then
-        mkdir -p "$worktree_base"
-        rsync -a --exclude='node_modules' --exclude='.git' --exclude='bench/results' --exclude='dist' "$base/" "$worktree_base/"
-        (cd "$worktree_base" && git init -q && git add -A && git commit -qm "baseline" 2>/dev/null || true)
-        (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
-        if [ "$condition" = "without" ]; then
-          rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
-        else
-          force_legacy_mode "$worktree_base"
-          clean_fifos "$worktree_base"
-          # Install opencode plugin for active injection
-          mkdir -p "$worktree_base/.opencode/plugin"
-          cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
-          cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
-        fi
+    # Setup base worktree — always recreate for clean state
+    if [ -d "$worktree_base" ]; then
+      rm -rf "$worktree_base"
+    fi
+    log "  Setting up $condition base..."
+    if [ "$target" = "pipemd" ]; then
+      mkdir -p "$worktree_base"
+      rsync -a --exclude='node_modules' --exclude='.git' --exclude='bench/results' --exclude='dist' "$base/" "$worktree_base/"
+      (cd "$worktree_base" && git init -q && git add -A && git commit -qm "baseline" 2>/dev/null || true)
+      (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
+      if [ "$condition" = "without" ]; then
+        rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
       else
-        setup_worktree "$base" "$worktree_base" "$condition"
-        # For "with" on hono: run pmd init inside the worktree
-        if [ "$condition" = "with" ]; then
-          log "  Running pmd init on hono ($condition)..."
-          (cd "$worktree_base" && pmd init --headless) 2>/dev/null || true
-          force_legacy_mode "$worktree_base"
-          clean_fifos "$worktree_base"
-          # Install opencode plugin for active injection
-          mkdir -p "$worktree_base/.opencode/plugin"
-          cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
-          cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
-        fi
+        force_legacy_mode "$worktree_base"
+        clean_fifos "$worktree_base"
+        # Install opencode plugin for active injection
+        mkdir -p "$worktree_base/.opencode/plugin"
+        cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+        cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+      fi
+    else
+      setup_worktree "$base" "$worktree_base" "$condition"
+      # For "with" on hono: run pmd init inside the worktree
+      if [ "$condition" = "with" ]; then
+        log "  Running pmd init on hono ($condition)..."
+        (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
+        force_legacy_mode "$worktree_base"
+        clean_fifos "$worktree_base"
+        # Install opencode plugin for active injection
+        mkdir -p "$worktree_base/.opencode/plugin"
+        cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+        cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
       fi
     fi
 

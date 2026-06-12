@@ -6,7 +6,7 @@ set -euo pipefail
 SCORE=0
 
 # Grade 0 check: does it compile?
-if ! npx tsc --noEmit 2>/dev/null; then
+if ! npx tsc --noEmit >/dev/null 2>&1; then
   echo "0"
   exit 0
 fi
