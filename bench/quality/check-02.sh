@@ -10,6 +10,13 @@ if ! npx tsc --noEmit 2>/dev/null; then
   echo "0"
   exit 0
 fi
+
+# Grade 1 check: did the agent modify any files?
+modified=$(git diff --name-only 2>/dev/null | wc -l)
+if [ "$modified" -eq 0 ]; then
+  echo "0"
+  exit 0
+fi
 SCORE=1
 
 # Grade 2 check: is the middleware file created with correct pattern?

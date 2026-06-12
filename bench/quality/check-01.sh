@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quality check for scenario 01: pmd crew export command
+# Quality check for scenario 01: pmd status --format json
 # Runs INSIDE a git worktree of the pipemd repo
 set -euo pipefail
 
@@ -10,19 +10,28 @@ if ! npx tsc --noEmit 2>/dev/null; then
   echo "0"
   exit 0
 fi
+
+# Grade 1 check: did the agent modify any files?
+modified=$(git diff --name-only 2>/dev/null | wc -l)
+if [ "$modified" -eq 0 ]; then
+  echo "0"
+  exit 0
+fi
 SCORE=1
 
-# Grade 2 check: look for a new crew export subcommand
-# Must have "export" as a subcommand/action in the crew command area
-# AND must produce JSON output (JSON.stringify or similar)
-
-# Check for new or modified files that contain crew export logic
-# Look for explicit subcommand registration: .command('export') or exportCommand
-if grep -rq "\.command.*['\"]export['\"]\|exportCommand\|'crew export'\|\"crew export\"" src/commands/ --include='*.ts' 2>/dev/null; then
-  # Check that it reads actual session data
-  if grep -rq 'readSession\|listSessions' src/commands/ --include='*.ts' 2>/dev/null; then
-    # Check that it outputs JSON
-    if grep -rq 'JSON.stringify\|json.*output\|console.*JSON' src/commands/ --include='*.ts' 2>/dev/null; then
+# Grade 2 check: is --format json implemented in the status command?
+# Must have the --format option AND produce JSON output with required fields
+if grep -q "\.option.*--format" src/commands/status.ts 2>/dev/null; then
+  # Check for JSON.stringify or JSON output
+  if grep -q 'JSON.stringify\|"running"\|"format".*"json"' src/commands/status.ts 2>/dev/null; then
+    # Check for at least 3 of the required fields
+    found_fields=0
+    for field in "running" "pid" "uptime" "version" "pipes" "lastRender" "injectStats"; do
+      if grep -q "$field" src/commands/status.ts 2>/dev/null; then
+        found_fields=$((found_fields + 1))
+      fi
+    done
+    if [ "$found_fields" -ge 3 ]; then
       SCORE=2
     fi
   fi

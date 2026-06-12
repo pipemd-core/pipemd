@@ -44,8 +44,12 @@ while [[ $# -gt 0 ]]; do
     --report)
       if [ -z "${2:-}" ]; then echo "Usage: --report <results.jsonl>"; exit 1; fi
       REPORT_ONLY="$2"; shift 2 ;;
+    --resume)
+      if [ -z "${2:-}" ]; then echo "Usage: --resume <results.jsonl>"; exit 1; fi
+      RESUME_FILE="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: bash bench/bench-agent.sh [--runs N] [--model MODEL] [--scenarios 1,2,3] [--dry-run]"
+      echo "       bash bench/bench-agent.sh --resume <results.jsonl>"
       echo "       bash bench/bench-agent.sh --report <results.jsonl>"
       exit 0 ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
@@ -78,9 +82,13 @@ IFS=',' read -ra SCEN <<< "$SCENARIOS"
 # Results file
 RESULTS_DIR="$SCRIPT_DIR/results"
 mkdir -p "$RESULTS_DIR"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-RESULTS_FILE="$RESULTS_DIR/run-${TIMESTAMP}.jsonl"
-echo "{\"type\":\"meta\",\"timestamp\":\"$TIMESTAMP\",\"model\":\"$MODEL\",\"runs_per_cell\":$RUNS}" > "$RESULTS_FILE"
+if [ -n "${RESUME_FILE:-}" ]; then
+  RESULTS_FILE="$RESUME_FILE"
+else
+  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+  RESULTS_FILE="$RESULTS_DIR/run-${TIMESTAMP}.jsonl"
+  echo "{\"type\":\"meta\",\"timestamp\":\"$TIMESTAMP\",\"model\":\"$MODEL\",\"runs_per_cell\":$RUNS}" > "$RESULTS_FILE"
+fi
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -99,6 +107,7 @@ parse_run_metrics() {
   local input_tokens=0 output_tokens=0 tool_calls=0 reads=0 edits=0 writes=0 greps=0 globs=0
   local context_reads=0
   local wall_start="" wall_end=""
+  local first_turn_input=0
 
   while IFS= read -r line; do
     [ -z "$line" ] && continue
@@ -137,6 +146,9 @@ parse_run_metrics() {
           local out=$(echo "$part_tokens" | jq -r '.output // 0')
           input_tokens=$((input_tokens + inp))
           output_tokens=$((output_tokens + out))
+          if [ "$first_turn_input" -eq 0 ] && [ "$inp" -gt 0 ]; then
+            first_turn_input=$inp
+          fi
         fi
         ;;
     esac
@@ -160,7 +172,8 @@ parse_run_metrics() {
     --argjson globs "$globs" \
     --argjson wall_ms "$wall_ms" \
     --argjson context_reads "$context_reads" \
-    '{input_tokens: ($input|tonumber), output_tokens: ($output|tonumber), tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms, context_reads: $context_reads}' \
+    --argjson first_turn_input "$first_turn_input" \
+    '{input_tokens: ($input|tonumber), output_tokens: ($output|tonumber), tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms, context_reads: $context_reads, first_turn_input: $first_turn_input}' \
     > "$result_file"
 }
 
@@ -231,7 +244,7 @@ run_cell() {
   local start_ms
   start_ms=$(date +%s%3N)
 
-  opencode run --format json --model "$MODEL" --dir "$work_dir" "$prompt" \
+  timeout "${OPENCODE_TIMEOUT:-600}" opencode run --format json --model "$MODEL" --dir "$work_dir" "$prompt" \
     > "$ndjson_file" 2>/dev/null || true
 
   local end_ms
@@ -243,7 +256,7 @@ run_cell() {
   if [ "$condition" = "with" ]; then
     local retro_ndjson="$RESULTS_DIR/${label}.retro.ndjson"
     log "    Running retrospective follow-up..."
-    opencode run --continue --format json --model "$MODEL" --dir "$work_dir" \
+    timeout "${OPENCODE_TIMEOUT:-300}" opencode run --continue --format json --model "$MODEL" --dir "$work_dir" \
       "$RETROSPECTIVE_PROMPT" > "$retro_ndjson" 2>/dev/null || true
 
     local retro_dir="$RESULTS_DIR/retrospectives"
@@ -274,8 +287,10 @@ run_cell() {
   # Override wall_ms with external measurement
   if [ -f "$metrics_file" ]; then
     local tmp_metrics
-    tmp_metrics=$(jq --argjson wall "$elapsed_ms" '.wall_ms = $wall' "$metrics_file")
-    echo "$tmp_metrics" > "$metrics_file"
+    tmp_metrics=$(jq --argjson wall "$elapsed_ms" '.wall_ms = $wall' "$metrics_file" 2>/dev/null) || true
+    if [ -n "$tmp_metrics" ]; then
+      echo "$tmp_metrics" > "$metrics_file"
+    fi
   fi
 
   # Quality check — run INSIDE the worktree so relative paths resolve correctly
@@ -287,19 +302,25 @@ run_cell() {
 
   # Record result
   local metrics_json
-  metrics_json=$(cat "$metrics_file" 2>/dev/null || echo "{}")
+  metrics_json=$(cat "$metrics_file" 2>/dev/null || true)
+  # Validate — if metrics file is missing or invalid, use empty defaults
+  if ! (echo "$metrics_json" | jq empty 2>/dev/null); then
+    metrics_json='{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0}'
+  fi
 
-  jq -n -c \
+  local record
+  record=$(jq -n -c \
     --argjson scenario "$scenario" \
     --arg condition "$condition" \
     --argjson run "$run_idx" \
     --argjson quality "$quality" \
     --argjson metrics "$metrics_json" \
     --arg retro "${retro_path:-}" \
-    '{scenario: $scenario, condition: $condition, run: $run, quality: $quality, metrics: $metrics, retrospective: (if $retro == "" then null else $retro end)}' \
-    >> "$RESULTS_FILE"
+    '{scenario: $scenario, condition: $condition, run: $run, quality: $quality, metrics: $metrics, retrospective: (if $retro == "" then null else $retro end)}' 2>/dev/null) \
+    || record='{"scenario":'"$scenario"',"condition":"'"$condition"'","run":'"$run_idx"',"quality":'"$quality"',"metrics":{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0},"retrospective":null}'
+  echo "$record" >> "$RESULTS_FILE"
 
-  log "    Quality: $quality, Tool calls: $(jq -r '.tool_calls // "?"' "$metrics_file" 2>/dev/null)"
+  log "    Quality: $quality, Tool calls: $(jq -r '.tool_calls // "?"' <<< "$metrics_json" 2>/dev/null || echo "?")"
 }
 
 # Force all pipes to legacy/file mode in a worktree's config.yml.
@@ -403,6 +424,10 @@ for s in "${SCEN[@]}"; do
         else
           force_legacy_mode "$worktree_base"
           clean_fifos "$worktree_base"
+          # Install opencode plugin for active injection
+          mkdir -p "$worktree_base/.opencode/plugin"
+          cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+          cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
         fi
       else
         setup_worktree "$base" "$worktree_base" "$condition"
@@ -412,11 +437,20 @@ for s in "${SCEN[@]}"; do
           (cd "$worktree_base" && pmd init --headless) 2>/dev/null || true
           force_legacy_mode "$worktree_base"
           clean_fifos "$worktree_base"
+          # Install opencode plugin for active injection
+          mkdir -p "$worktree_base/.opencode/plugin"
+          cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+          cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
         fi
       fi
     fi
 
     for (( r=1; r<=RUNS; r++ )); do
+      # Resume: skip runs already present in JSONL
+      if [ -f "$RESULTS_FILE" ] && grep -q "\"scenario\":$s,\"condition\":\"$condition\",\"run\":$r" "$RESULTS_FILE" 2>/dev/null; then
+        log "  Run $r/$RUNS: s${s}-${condition}-r${r} (skip — already recorded)"
+        continue
+      fi
       # Create per-run worktree from the base
       run_dir="$RESULTS_DIR/run-s${s}-${condition}-r${r}"
       rm -rf "$run_dir" 2>/dev/null || true
@@ -465,6 +499,7 @@ for (const s of scenarios) {
       it: metric(m => m.input_tokens), ot: metric(m => m.output_tokens),
       w: metric(m => m.wall_ms), q: qMed(),
       cr: metric(m => m.context_reads || 0),
+      fti: metric(m => m.first_turn_input || 0),
     };
   };
   const sw = stats(withData), swo = stats(withoutData);
@@ -484,23 +519,22 @@ for (const s of scenarios) {
   console.log(row('output_tokens', sw.ot, swo.ot));
   console.log(row('wall_ms', sw.w, swo.w));
   console.log(row('context_reads', sw.cr, swo.cr));
-  // Smoke-test verdict
-  // Consumption signal: input_tokens(WITH) >> input_tokens(WITHOUT) because
-  // AGENTS.md is loaded into system prompt at session start (not a read tool-call).
-  // context_reads is kept as secondary signal only.
-  const itW = sw.it && sw.it.med || 0;
-  const itWo = swo.it && swo.it.med || 0;
-  const itDelta = itWo > 0 ? ((itW - itWo) / itWo * 100) : 0;
-  const consumed = itDelta > 20; // ~5k tokens / ~19KB context on a typical prompt
+  console.log(row('first_turn_in', sw.fti, swo.fti));
+  // Verdict based on first-turn input tokens (consumption signal)
+  // AGENTS.md is auto-loaded into system prompt at session start.
+  // first_turn_input(WITH) >> first_turn_input(WITHOUT) = context consumed.
+  const ftiW = sw.fti && sw.fti.med || 0;
+  const ftiWo = swo.fti && swo.fti.med || 0;
+  const consumed = ftiWo > 0 && ftiW > ftiWo * 1.5;
   const readsW = sw.r && sw.r.med || 0;
   const readsWo = swo.r && swo.r.med || 0;
   const qW = sw.q, qWo = swo.q;
   if (!consumed && withData.length > 0) {
-    console.log('  VERDICT: VOID — context not consumed (input_tokens WITH=' + itW + ' vs WITHOUT=' + itWo + ', delta=' + itDelta.toFixed(0) + '%)');
+    console.log('  VERDICT: VOID — context not consumed (first_turn_in WITH=' + ftiW + ' vs WITHOUT=' + ftiWo + ')');
   } else if (consumed && qW === qWo && readsW < readsWo) {
-    console.log('  VERDICT: PASS — context consumed (+' + itDelta.toFixed(0) + '% input tokens), equal quality, fewer exploration reads');
+    console.log('  VERDICT: PASS — context consumed (first_turn_in ' + ftiW + ' vs ' + ftiWo + '), equal quality, fewer exploration reads');
   } else if (consumed && qW === qWo && readsW >= readsWo) {
-    console.log('  VERDICT: WEAK — context consumed (+' + itDelta.toFixed(0) + '% input tokens), equal quality, but no reduction in reads');
+    console.log('  VERDICT: WEAK — context consumed (first_turn_in ' + ftiW + ' vs ' + ftiWo + '), equal quality, but no reduction in reads');
   } else if (consumed && qW !== qWo) {
     console.log('  VERDICT: INCONCLUSIVE — quality grades differ (' + qW + ' vs ' + qWo + '), cannot compare efficiency');
   } else {
