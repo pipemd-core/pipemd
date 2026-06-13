@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # bench-agent.sh — PipeMD Agent A/B Benchmark Runner
 #
-# Runs 3 scenarios × 2 conditions (with/without PipeMD) × N repetitions.
+# Runs N scenarios × 3 conditions (full/passive/none) × N repetitions.
+#   full    = PipeMD daemon + plugin + live injection
+#   passive = rendered AGENTS.md snapshot, no daemon, no plugin
+#   none    = no PipeMD at all
 # Uses git worktrees for per-run isolation.
 # Parses OpenCode NDJSON output for tokens, tool calls, and wall time.
 #
-# Usage: bash bench/bench-agent.sh [--runs N] [--model MODEL] [--scenarios 1,2,3]
+# Usage: bash bench/bench-agent.sh [--runs N] [--model MODEL] [--scenarios 1,2,3,4]
 #
 # Prerequisites:
 #   - opencode in PATH
@@ -18,9 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Defaults
-RUNS=5
+RUNS=3
 MODEL="zai-coding-plan/glm-5.1"
-SCENARIOS="2,3,4"
+SCENARIOS="1,2,3,4"
 DRY_RUN=false
 REPORT_ONLY=""
 
@@ -69,7 +72,7 @@ SCENARIO_TARGET[2]="hono"
 SCENARIO_TARGET[3]="hono"
 SCENARIO_TARGET[4]="bt-lua"
 
-SCENARIO_PROMPT[1]="$SCRIPT_DIR/prompts/01-status-json.pipemd.md"
+SCENARIO_PROMPT[1]="$SCRIPT_DIR/prompts/01-doctor.pipemd.md"
 SCENARIO_PROMPT[2]="$SCRIPT_DIR/prompts/02-middleware-timing.hono.md"
 SCENARIO_PROMPT[3]="$SCRIPT_DIR/prompts/03-error-handler.hono.md"
 SCENARIO_PROMPT[4]="$SCRIPT_DIR/prompts/04-parallel-bug.bt-lua.md"
@@ -78,6 +81,13 @@ SCENARIO_CHECK[1]="$SCRIPT_DIR/quality/check-01.sh"
 SCENARIO_CHECK[2]="$SCRIPT_DIR/quality/check-02.sh"
 SCENARIO_CHECK[3]="$SCRIPT_DIR/quality/check-03.sh"
 SCENARIO_CHECK[4]="$SCRIPT_DIR/quality/check-04.sh"
+
+# Per-scenario run overrides: long/medium = 2, short = 3
+declare -A SCENARIO_RUNS
+SCENARIO_RUNS[1]=2   # long: improve pmd doctor
+SCENARIO_RUNS[2]=3   # short: hono middleware
+SCENARIO_RUNS[3]=2   # medium: hono error handler
+SCENARIO_RUNS[4]=3   # short: bt-lua bug fix
 
 # Parse scenario list
 IFS=',' read -ra SCEN <<< "$SCENARIOS"
@@ -236,12 +246,26 @@ run_cell() {
         render_failed=true
       fi
     fi
+  elif [ "$condition" = "passive" ]; then
+    # Passive: AGENTS.md already rendered as snapshot during setup.
+    # Just verify it exists — no daemon, no plugin.
+    rm -f "$work_dir/.pipemd/.daemon.pid" "$work_dir/.pipemd/daemon.log" 2>/dev/null || true
+    if [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null; then
+      local block_count
+      block_count=$(grep -c 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null || echo "0")
+      log "    Passive context OK: $block_count pmd: blocks (frozen snapshot)"
+    else
+      log "    VOID: AGENTS.md snapshot missing — excluding cell"
+      render_failed=true
+    fi
   fi
 
   if [ "$render_failed" = true ]; then
-    echo "{\"scenario\":\"$scenario\",\"condition\":\"with\",\"run\":$run_idx,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
+    echo "{\"scenario\":\"$scenario\",\"condition\":\"$condition\",\"run\":$run_idx,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
       >> "$RESULTS_FILE"
-    (cd "$work_dir" && pmd stop) 2>/dev/null || true
+    if [ "$condition" = "with" ]; then
+      (cd "$work_dir" && pmd stop) 2>/dev/null || true
+    fi
     return 1
   fi
 
@@ -256,9 +280,9 @@ run_cell() {
   end_ms=$(date +%s%3N)
   local elapsed_ms=$(( end_ms - start_ms ))
 
-  # Retrospective: ask the agent which blocks helped (WITH only, daemon still running)
+  # Retrospective: ask the agent which blocks helped (with + passive, context was consumed)
   local retro_path=""
-  if [ "$condition" = "with" ]; then
+  if [ "$condition" = "with" ] || [ "$condition" = "passive" ]; then
     local retro_ndjson="$RESULTS_DIR/${label}.retro.ndjson"
     log "    Running retrospective follow-up..."
     timeout "${OPENCODE_TIMEOUT:-300}" opencode run --continue --format json --model "$MODEL" --dir "$work_dir" \
@@ -281,12 +305,14 @@ run_cell() {
 
   # Stop daemon if we started it
   local injections_delivered=0
+  local dedup_hits=0
   if [ "$condition" = "with" ]; then
     # Capture injection stats before stopping daemon
     local tui_stats="$work_dir/.pipemd/.tui-stats.json"
     if [ -f "$tui_stats" ]; then
       injections_delivered=$(jq -r '.injectionsDelivered // 0' "$tui_stats" 2>/dev/null || echo "0")
-      log "    Injections delivered: $injections_delivered"
+      dedup_hits=$(jq -r '.dedupHits // 0' "$tui_stats" 2>/dev/null || echo "0")
+      log "    Injections delivered: $injections_delivered, dedup hits: $dedup_hits"
     else
       log "    No injection stats found (.tui-stats.json missing)"
     fi
@@ -355,7 +381,7 @@ run_cell() {
   fi
   # Add injection count for WITH runs (always write, even if 0, so we can distinguish "not measured" from "measured 0")
   if [ "$condition" = "with" ]; then
-    metrics_json=$(echo "$metrics_json" | jq --argjson inj "$injections_delivered" '.injections_delivered = $inj' 2>/dev/null || echo "$metrics_json")
+    metrics_json=$(echo "$metrics_json" | jq --argjson inj "$injections_delivered" --argjson dedup "$dedup_hits" '.injections_delivered = $inj | .dedup_hits = $dedup' 2>/dev/null || echo "$metrics_json")
   fi
 
   local record
@@ -412,14 +438,7 @@ setup_worktree() {
 
   rm -rf "$worktree_dir" 2>/dev/null || true
 
-  if [ "$condition" = "with" ]; then
-    # Full copy with .pipemd/ and context file
-    cp -r "$base_repo" "$worktree_dir"
-    # Ensure dependencies are installed
-    if [ -f "$worktree_dir/package.json" ]; then
-      (cd "$worktree_dir" && npm install --silent 2>/dev/null || pnpm install --silent 2>/dev/null || bun install --silent 2>/dev/null || true)
-    fi
-  else
+  if [ "$condition" = "without" ]; then
     # Pristine copy — no .pipemd/, no AGENTS.md
     cp -r "$base_repo" "$worktree_dir"
     rm -rf "$worktree_dir/.pipemd" 2>/dev/null || true
@@ -428,14 +447,22 @@ setup_worktree() {
     if [ -f "$worktree_dir/package.json" ]; then
       (cd "$worktree_dir" && npm install --silent 2>/dev/null || pnpm install --silent 2>/dev/null || bun install --silent 2>/dev/null || true)
     fi
+  else
+    # Full copy with .pipemd/ (used by both "with" and "passive")
+    cp -r "$base_repo" "$worktree_dir"
+    # Ensure dependencies are installed
+    if [ -f "$worktree_dir/package.json" ]; then
+      (cd "$worktree_dir" && npm install --silent 2>/dev/null || pnpm install --silent 2>/dev/null || bun install --silent 2>/dev/null || true)
+    fi
   fi
 }
 
 # Main execution
-log "=== PipeMD Agent A/B Benchmark ==="
+log "=== PipeMD Agent A/B Benchmark (3-condition) ==="
 log "Model: $MODEL"
-log "Runs per cell: $RUNS"
+log "Default runs per cell: $RUNS (overridden per-scenario)"
 log "Scenarios: $SCENARIOS"
+log "Conditions: full (daemon+plugin), passive (snapshot only), none"
 log ""
 
 # Prepare the "with PipeMD" version of each target repo
@@ -451,7 +478,7 @@ for s in "${SCEN[@]}"; do
   target="${SCENARIO_TARGET[$s]}"
   log "Scenario $s ($target): $(basename "${SCENARIO_PROMPT[$s]}")"
 
-  for condition in with without; do
+  for condition in with passive without; do
     log "  Condition: $condition"
 
     if [ "$target" = "pipemd" ]; then
@@ -477,6 +504,19 @@ for s in "${SCEN[@]}"; do
       (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
       if [ "$condition" = "without" ]; then
         rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
+      elif [ "$condition" = "passive" ]; then
+        force_legacy_mode "$worktree_base"
+        clean_fifos "$worktree_base"
+        # Render AGENTS.md snapshot, then freeze
+        (cd "$worktree_base" && pmd start) 2>/dev/null || true
+        _pmd_wait=0
+        while [ $_pmd_wait -lt 30 ]; do
+          sleep 1; _pmd_wait=$((_pmd_wait + 1))
+          [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
+        done
+        (cd "$worktree_base" && pmd stop) 2>/dev/null || true
+        rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
+        log "    Passive snapshot rendered (${_pmd_wait}s)"
       else
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
@@ -487,7 +527,6 @@ for s in "${SCEN[@]}"; do
       fi
     else
       setup_worktree "$base" "$worktree_base" "$condition"
-      # For "with" on hono: run pmd init inside the worktree
       if [ "$condition" = "with" ]; then
         log "  Running pmd init on $target ($condition)..."
         (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
@@ -497,6 +536,20 @@ for s in "${SCEN[@]}"; do
         mkdir -p "$worktree_base/.opencode/plugin"
         cp "$REPO_ROOT/.opencode/plugin/pmd-crew.js" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
         cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
+      elif [ "$condition" = "passive" ]; then
+        log "  Running pmd init on $target (passive snapshot)..."
+        (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
+        force_legacy_mode "$worktree_base"
+        clean_fifos "$worktree_base"
+        # Render AGENTS.md snapshot, then freeze — no plugin, no daemon
+        _pmd_wait=0
+        while [ $_pmd_wait -lt 30 ]; do
+          sleep 1; _pmd_wait=$((_pmd_wait + 1))
+          [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
+        done
+        (cd "$worktree_base" && pmd stop) 2>/dev/null || true
+        rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
+        log "    Passive snapshot rendered (${_pmd_wait}s)"
       fi
     fi
 
@@ -522,10 +575,11 @@ for s in "${SCEN[@]}"; do
 }
 PERM_EOF
 
-    for (( r=1; r<=RUNS; r++ )); do
+    cell_runs=${SCENARIO_RUNS[$s]:-$RUNS}
+    for (( r=1; r<=cell_runs; r++ )); do
       # Resume: skip runs already present in JSONL
       if [ -f "$RESULTS_FILE" ] && grep -q "\"scenario\":$s,\"condition\":\"$condition\",\"run\":$r" "$RESULTS_FILE" 2>/dev/null; then
-        log "  Run $r/$RUNS: s${s}-${condition}-r${r} (skip — already recorded)"
+        log "  Run $r/$cell_runs: s${s}-${condition}-r${r} (skip — already recorded)"
         continue
       fi
       # Create per-run worktree from the base
@@ -558,83 +612,56 @@ const groups = {};
 for (const r of runs) { if (r.quality === -1) continue; const key = r.scenario + '-' + r.condition; if (!groups[key]) groups[key] = []; groups[key].push(r); }
 const scenarios = [...new Set(runs.filter(r => r.quality !== -1).map(r => r.scenario))].sort();
 if (voidRuns.length > 0) console.log('VOID runs excluded: ' + voidRuns.length + ' (' + voidRuns.map(v => 's' + v.scenario + '-' + v.condition + '-r' + v.run + ' (' + (v.metrics.reason || 'unknown') + ')').join(', ') + ')');
-const pct = (a, b) => { if (!a || !b) return ''; const d = ((a - b) / b * 100).toFixed(0); return (d > 0 ? '+' : '') + d + '%'; };
+const OUTPUT_WEIGHT = 4;
+const pct = (a, b) => { if (a == null || b == null || !b) return '-'; const d = ((a - b) / b * 100).toFixed(0); return (d > 0 ? '+' : '') + d + '%'; };
+const med = (arr) => { if (!arr || !arr.length) return null; const s = [...arr].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
 for (const s of scenarios) {
-  const withData = groups[s + '-with'] || [];
-  const withoutData = groups[s + '-without'] || [];
+  const full = groups[s + '-with'] || [];
+  const passive = groups[s + '-passive'] || [];
+  const none = groups[s + '-without'] || [];
   const stats = (data) => {
-    if (data.length === 0) return {};
-    const metrics = data.map(d => d.metrics);
-    const quality = data.map(d => d.quality);
-    const metric = (fn) => {
-      const vals = metrics.map(fn).filter(v => v !== undefined && v !== null);
-      if (vals.length === 0) return { med: null, min: null, max: null };
-      vals.sort((a, b) => a - b);
-      return { med: vals[Math.floor(vals.length / 2)], min: vals[0], max: vals[vals.length - 1] };
-    };
-    const qMed = () => { quality.sort(); return quality[Math.floor(quality.length / 2)]; };
+    if (!data.length) return null;
+    const m = data.map(d => d.metrics);
     return {
-      tc: metric(m => m.tool_calls), r: metric(m => m.reads), e: metric(m => m.edits),
-      it: metric(m => m.input_tokens), ot: metric(m => m.output_tokens),
-      w: metric(m => m.wall_ms), q: qMed(),
-      cr: metric(m => m.context_reads || 0),
-      fti: metric(m => m.first_turn_input || 0),
-      inj: metric(m => m.injections_delivered || 0),
+      tc: med(m.map(x => x.tool_calls)), r: med(m.map(x => x.reads)),
+      search: med(m.map(x => (x.greps||0) + (x.globs||0))),
+      it: med(m.map(x => x.input_tokens)), ot: med(m.map(x => x.output_tokens)),
+      blend: med(m.map(x => (x.input_tokens||0) + OUTPUT_WEIGHT * (x.output_tokens||0))),
+      w: med(m.map(x => x.wall_ms)), fti: med(m.map(x => x.first_turn_input || 0)),
+      inj: med(m.map(x => x.injections_delivered || 0)), dedup: med(m.map(x => x.dedup_hits || 0)),
+      q: med(data.map(d => d.quality)),
     };
   };
-  const sw = stats(withData), swo = stats(withoutData);
-  const fmt = (v) => v && v.med !== null ? v.med + ' (' + v.min + '-' + v.max + ')' : '-';
-  const row = (label, wv, wov) => {
-    const w = fmt(wv).padEnd(22), wo = fmt(wov).padEnd(22);
-    const delta = (wv && wov && wv.med && wov.med) ? pct(wv.med, wov.med) : '';
-    return '  ' + label.padEnd(15) + w + wo + delta;
-  };
+  const sf = stats(full), sp = stats(passive), sn = stats(none);
+  const fmt = (v) => v != null ? String(v) : '-';
+  const n = (d) => d ? d.length : 0;
+  const qstr = (sf?sf.q:'?') + '/' + (sp?sp.q:'?') + '/' + (sn?sn.q:'?');
   console.log('');
-  console.log('=== Scenario ' + s + ' (N=' + withData.length + '/' + withoutData.length + ', quality ' + sw.q + '/' + swo.q + ') ===');
-  console.log('                    WITH PipeMD             WITHOUT PipeMD          Delta');
-  console.log(row('tool_calls', sw.tc, swo.tc));
-  console.log(row('reads', sw.r, swo.r));
-  console.log(row('edits', sw.e, swo.e));
-  console.log(row('input_tokens', sw.it, swo.it));
-  console.log(row('output_tokens', sw.ot, swo.ot));
-  console.log(row('wall_ms', sw.w, swo.w));
-  console.log(row('context_reads', sw.cr, swo.cr));
-  console.log(row('first_turn_in', sw.fti, swo.fti));
-  // Injection verification
-  const injW = withData.filter(d => d.metrics && d.metrics.injections_delivered > 0).length;
-  console.log('  injections:    ' + injW + '/' + withData.length + ' WITH runs had active injection');
-  // Verdict based on first-turn input tokens (consumption signal)
-  // AGENTS.md is auto-loaded into system prompt at session start.
-  // first_turn_input(WITH) >> first_turn_input(WITHOUT) = context consumed.
-  const ftiW = sw.fti && sw.fti.med || 0;
-  const ftiWo = swo.fti && swo.fti.med || 0;
-  const consumed = ftiWo > 0 && ftiW > ftiWo * 1.5;
-  const readsW = sw.r && sw.r.med || 0;
-  const readsWo = swo.r && swo.r.med || 0;
-  const qW = sw.q, qWo = swo.q;
-  if (!consumed && withData.length > 0) {
-    console.log('  VERDICT: VOID — context not consumed (first_turn_in WITH=' + ftiW + ' vs WITHOUT=' + ftiWo + ')');
-  } else if (consumed && qW === qWo && readsW < readsWo) {
-    console.log('  VERDICT: PASS — context consumed (first_turn_in ' + ftiW + ' vs ' + ftiWo + '), equal quality, fewer exploration reads');
-  } else if (consumed && qW === qWo && readsW >= readsWo) {
-    console.log('  VERDICT: WEAK — context consumed (first_turn_in ' + ftiW + ' vs ' + ftiWo + '), equal quality, but no reduction in reads');
-  } else if (consumed && qW !== qWo) {
-    console.log('  VERDICT: INCONCLUSIVE — quality grades differ (' + qW + ' vs ' + qWo + '), cannot compare efficiency');
-  } else {
-    console.log('  VERDICT: (insufficient data)');
-  }
+  console.log('=== Scenario ' + s + ' (N=' + n(full) + '/' + n(passive) + '/' + n(none) + ', Q=' + qstr + ') ===');
+  console.log('                      FULL            PASSIVE         NONE');
+  const conditions = [['F', sf], ['P', sp], ['N', sn]];
+  const printRow = (label, fn) => {
+    const vals = conditions.map(([, st]) => fmt(st ? fn(st) : null).padEnd(16)).join('');
+    console.log('  ' + label.padEnd(18) + vals);
+  };
+  printRow('tool_calls', st => st.tc);
+  printRow('reads', st => st.r);
+  printRow('greps+globs', st => st.search);
+  printRow('input_tokens', st => st.it);
+  printRow('output_tokens', st => st.ot);
+  printRow('blended_cost', st => st.blend);
+  printRow('wall_ms', st => st.w);
+  printRow('first_turn_in', st => st.fti);
+  printRow('injections', st => st.inj);
+  printRow('dedup_hits', st => st.dedup);
+  if (sp && sn) console.log('  Static Δ  (P vs N):   reads ' + pct(sp.r, sn.r) + ', blended ' + pct(sp.blend, sn.blend) + ', wall ' + pct(sp.w, sn.w) + ', output ' + pct(sp.ot, sn.ot));
+  if (sf && sp) console.log('  Inject Δ  (F vs P):   reads ' + pct(sf.r, sp.r) + ', blended ' + pct(sf.blend, sp.blend) + ', wall ' + pct(sf.w, sp.w) + ', output ' + pct(sf.ot, sp.ot));
+  if (sf && sn) console.log('  Total Δ   (F vs N):   reads ' + pct(sf.r, sn.r) + ', blended ' + pct(sf.blend, sn.blend) + ', wall ' + pct(sf.w, sn.w) + ', output ' + pct(sf.ot, sn.ot));
 }
 console.log('');
-console.log('Note: input_tokens will likely be HIGHER with PipeMD (context tax).');
-console.log('      output_tokens / tool_calls should be LOWER if PipeMD helps.');
-console.log('      Delta is relative to WITHOUT (negative = WITH is smaller).');
-// List retrospectives
+console.log('blended_cost = input + ' + OUTPUT_WEIGHT + 'x output | Static=passive vs none | Inject=full vs passive');
 const retros = runs.filter(d => d.retrospective).map(d => d.retrospective);
-if (retros.length > 0) {
-  console.log('');
-  console.log('=== Retrospectives ===');
-  retros.forEach(r => console.log('  ' + r));
-}
+if (retros.length > 0) { console.log(''); console.log('=== Retrospectives ==='); retros.forEach(r => console.log('  ' + r)); }
 " 2>/dev/null
 
 # Generate HTML report
