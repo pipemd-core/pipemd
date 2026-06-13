@@ -460,7 +460,10 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       ["-rnE", importPattern, ...includeFlags, "src/"],
       { encoding: "utf-8", timeout: 5000 },
     );
-    const whoImports = importedBy.trim().split("\n").filter(Boolean);
+    const whoImports = importedBy.trim().split("\n").filter(Boolean).filter(line => {
+      const content = line.replace(/^(?:[^:]+:)?\d+:/, "").trim();
+      return !/^[*/]/.test(content) && !/^\/\//.test(content);
+    });
     const confirmed: string[] = [];
     for (const line of whoImports) {
       const m = line.match(/from\s+['"]([^'"]+)['"]/);
@@ -496,7 +499,10 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       ["-rnE", "from\\s+['\"]", ...includeFlags, file],
       { encoding: "utf-8", timeout: 5000 },
     );
-    const imports = stdout.trim().split("\n").filter(Boolean);
+    const imports = stdout.trim().split("\n").filter(Boolean).filter(line => {
+      const content = line.replace(/^(?:[^:]+:)?\d+:/, "").trim();
+      return !/^[*/]/.test(content) && !/^\/\//.test(content);
+    });
     if (imports.length > 0) {
       lines.push("Imports:");
       const seen = new Map<string, string[]>();

@@ -20,7 +20,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Defaults
 RUNS=5
 MODEL="zai-coding-plan/glm-5.1"
-SCENARIOS="1,2,3"
+SCENARIOS="2,3,4"
 DRY_RUN=false
 REPORT_ONLY=""
 
@@ -67,14 +67,17 @@ declare -A SCENARIO_TARGET SCENARIO_PROMPT SCENARIO_PROJECT SCENARIO_REPO SCENAR
 SCENARIO_TARGET[1]="pipemd"
 SCENARIO_TARGET[2]="hono"
 SCENARIO_TARGET[3]="hono"
+SCENARIO_TARGET[4]="bt-lua"
 
 SCENARIO_PROMPT[1]="$SCRIPT_DIR/prompts/01-status-json.pipemd.md"
 SCENARIO_PROMPT[2]="$SCRIPT_DIR/prompts/02-middleware-timing.hono.md"
 SCENARIO_PROMPT[3]="$SCRIPT_DIR/prompts/03-error-handler.hono.md"
+SCENARIO_PROMPT[4]="$SCRIPT_DIR/prompts/04-parallel-bug.bt-lua.md"
 
 SCENARIO_CHECK[1]="$SCRIPT_DIR/quality/check-01.sh"
 SCENARIO_CHECK[2]="$SCRIPT_DIR/quality/check-02.sh"
 SCENARIO_CHECK[3]="$SCRIPT_DIR/quality/check-03.sh"
+SCENARIO_CHECK[4]="$SCRIPT_DIR/quality/check-04.sh"
 
 # Parse scenario list
 IFS=',' read -ra SCEN <<< "$SCENARIOS"
@@ -454,6 +457,9 @@ for s in "${SCEN[@]}"; do
     if [ "$target" = "pipemd" ]; then
       base="$REPO_ROOT"
       worktree_base="$RESULTS_DIR/pipemd-$condition"
+    elif [ "$target" = "bt-lua" ]; then
+      base="$SCRIPT_DIR/repos/bt-lua-clean"
+      worktree_base="$RESULTS_DIR/bt-lua-$condition"
     else
       base="$SCRIPT_DIR/repos/hono-clean"
       worktree_base="$RESULTS_DIR/hono-$condition"
@@ -483,7 +489,7 @@ for s in "${SCEN[@]}"; do
       setup_worktree "$base" "$worktree_base" "$condition"
       # For "with" on hono: run pmd init inside the worktree
       if [ "$condition" = "with" ]; then
-        log "  Running pmd init on hono ($condition)..."
+        log "  Running pmd init on $target ($condition)..."
         (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
@@ -527,7 +533,7 @@ PERM_EOF
       rm -rf "$run_dir" 2>/dev/null || true
       cp -r "$worktree_base" "$run_dir"
 
-      run_cell "$s" "$condition" "$r" "$run_dir" "${SCENARIO_PROMPT[$s]}" "$run_dir"
+      run_cell "$s" "$condition" "$r" "$run_dir" "${SCENARIO_PROMPT[$s]}" "$run_dir" || true
 
       # Clean up worktree
       rm -rf "$run_dir" 2>/dev/null || true
@@ -547,9 +553,11 @@ const fs = require('fs');
 const lines = fs.readFileSync('$RESULTS_FILE', 'utf8').split('\n').filter(l => l.trim());
 const meta = JSON.parse(lines[0]);
 const runs = lines.slice(1).map(l => JSON.parse(l));
+const voidRuns = runs.filter(r => r.quality === -1);
 const groups = {};
-for (const r of runs) { const key = r.scenario + '-' + r.condition; if (!groups[key]) groups[key] = []; groups[key].push(r); }
-const scenarios = [...new Set(runs.map(r => r.scenario))].sort();
+for (const r of runs) { if (r.quality === -1) continue; const key = r.scenario + '-' + r.condition; if (!groups[key]) groups[key] = []; groups[key].push(r); }
+const scenarios = [...new Set(runs.filter(r => r.quality !== -1).map(r => r.scenario))].sort();
+if (voidRuns.length > 0) console.log('VOID runs excluded: ' + voidRuns.length + ' (' + voidRuns.map(v => 's' + v.scenario + '-' + v.condition + '-r' + v.run + ' (' + (v.metrics.reason || 'unknown') + ')').join(', ') + ')');
 const pct = (a, b) => { if (!a || !b) return ''; const d = ((a - b) / b * 100).toFixed(0); return (d > 0 ? '+' : '') + d + '%'; };
 for (const s of scenarios) {
   const withData = groups[s + '-with'] || [];

@@ -29,8 +29,6 @@ commands:
     .pipemd/scripts/crew/crew.sh
   test-summary: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/quality/test-summary.sh
-  express-routes: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
-    .pipemd/scripts/api/express-routes.sh
   now: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/context/now.sh
   dead-code: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
@@ -74,8 +72,6 @@ pipes:
   - file: AI_CONTEXT.md
     render: .pipemd/template.md
     mode: pipe
-  - file: express-routes.md
-    command: express-routes
   - file: hotspots.md
     command: hotspots
   - file: now.md

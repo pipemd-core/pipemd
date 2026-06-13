@@ -6,7 +6,7 @@
 #   expert  = full customization of injection rules
 #
 # triggers: before-read | before-edit | after-edit | on-idle | on-start
-# sources:  crew-status | crew-locks | file-errors
+# sources:  crew-status | crew-locks | file-errors | file-content
 #           git-context | git-delta | git-staged | git-diff-stat
 #           edit-diff | syntax-check | test-failures | custom
 #           import-graph | handoff | session-diff | exports | now
@@ -40,9 +40,6 @@ rules:
       scope: target-file
       max-lines: 5
   on-start:
-    - source: git-delta
-      scope: global
-      max-lines: 3
     - source: test-failures
       scope: global
       max-lines: 15

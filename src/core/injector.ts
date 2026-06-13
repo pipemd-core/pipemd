@@ -79,9 +79,13 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
-        const execErr = err as { stderr?: string; message?: string } | null;
-        const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
-        results.set(name, buildBlock(name, ERROR_BLOCK(name, cmd, detail)));
+        const execErr = err as { stderr?: string; message?: string; killed?: boolean; signal?: string } | null;
+        if (execErr?.killed || execErr?.signal === "SIGTERM") {
+          results.set(name, "");
+        } else {
+          const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
+          results.set(name, buildBlock(name, ERROR_BLOCK(name, cmd, detail)));
+        }
       }
     })
   );

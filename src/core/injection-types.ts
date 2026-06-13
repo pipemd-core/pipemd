@@ -83,7 +83,6 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
   delivery: "active",
   rules: {
     "before-read": [
-      { source: "file-content", scope: "target-file", "max-lines": 60 },
       { source: "crew-status", scope: "global", "max-lines": 3 },
       { source: "crew-todos", scope: "global", "max-lines": 10 },
     ],
@@ -101,7 +100,6 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
       { source: "file-errors", scope: "target-file", async: true, "max-lines": 15 },
     ],
     "on-start": [
-      { source: "git-delta", scope: "global", "max-lines": 3 },
       { source: "now", scope: "global", "interval-min": 1 },
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
