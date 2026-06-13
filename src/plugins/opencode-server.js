@@ -454,7 +454,6 @@ async function afterHandler(input, output) {
 
     if (WITH_INJECTION && lastInjection && typeof (output && output.output) === "string") {
       output.output += "\n\n" + lastInjection.payload;
-      stats.injectionsDelivered++;
       storePayload(lastInjection.trigger + "-inline", lastInjection.payload);
       pushEvent(lastInjection.trigger + "-inline", tool, lastInjection.file || "", "injected-inline", lastInjection.bytes);
       lastInjection = null;

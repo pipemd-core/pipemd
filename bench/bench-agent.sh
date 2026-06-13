@@ -84,10 +84,10 @@ SCENARIO_CHECK[4]="$SCRIPT_DIR/quality/check-04.sh"
 
 # Per-scenario run overrides: long/medium = 2, short = 3
 declare -A SCENARIO_RUNS
-SCENARIO_RUNS[1]=2   # long: improve pmd doctor
-SCENARIO_RUNS[2]=3   # short: hono middleware
-SCENARIO_RUNS[3]=2   # medium: hono error handler
-SCENARIO_RUNS[4]=3   # short: bt-lua bug fix
+SCENARIO_RUNS[1]=3   # long: improve pmd doctor
+SCENARIO_RUNS[2]=5   # short: hono middleware
+SCENARIO_RUNS[3]=3   # medium: hono error handler
+SCENARIO_RUNS[4]=5   # short: bt-lua bug fix
 
 # Parse scenario list
 IFS=',' read -ra SCEN <<< "$SCENARIOS"

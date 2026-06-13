@@ -22,9 +22,11 @@ SCORE=1
 # Grade 2: at least 2 of the 3 requested features must be present
 features=0
 
-# Feature 1: script execution validation (running scripts with timeout)
-if grep -qE 'execSync|spawnSync|execFileSync' src/commands/doctor.ts 2>/dev/null; then
-  if grep -qiE 'script.*(timeout|exec|run)|timeout.*script' src/commands/doctor.ts 2>/dev/null; then
+# Feature 1: script execution with timeout
+# Base doctor.ts uses execSync (for mkfifo) but never execFileSync/spawnSync or timeouts.
+# Require evidence of genuinely running scripts with a timeout.
+if grep -qE 'execFileSync|spawnSync' src/commands/doctor.ts 2>/dev/null; then
+  if grep -qiE 'timeout.*[23]000|[23]000.*timeout|3.?-?second' src/commands/doctor.ts 2>/dev/null; then
     features=$((features + 1))
   fi
 fi
