@@ -35,6 +35,7 @@ Before writing a single line of code, gather your bearings from the blocks below
 |---|---|---|
 | Project structure, find a file | `tree` | `tree`, `find`, `ls -R` |
 | Architecture / module graph | `arch` | manual file inspection |
+| Ranked symbol map, what's where | `repomap` | manual `grep` for exports |
 | Dependencies and versions | `deps` | `cat package.json` |
 | Known TODOs, FIXMEs, HACKs | `todos` | `grep -r TODO` |
 | Exported symbols, env vars | `exports` | manual source scan |
@@ -144,6 +145,14 @@ Every change must be verified. Weak success criteria ("make it work") require co
 ### Architecture Map
 
 <!-- pmd: arch -->
+```
+
+```
+<!-- /pmd -->
+
+### Repo Map
+
+<!-- pmd: repomap -->
 ```
 
 ```

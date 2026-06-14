@@ -104,10 +104,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
     "on-idle": [
-      { source: "git-staged", scope: "global", "max-lines": 10 },
       { source: "now", scope: "global", "interval-min": 5 },
-      { source: "session-diff", scope: "global", "max-lines": 15 },
-      { source: "handoff", scope: "global", "max-lines": 30 },
     ],
   },
 };

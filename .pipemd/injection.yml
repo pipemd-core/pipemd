@@ -50,15 +50,6 @@ rules:
       scope: global
       interval-min: 1
   on-idle:
-    - source: git-staged
-      scope: global
-      max-lines: 10
-    - source: session-diff
-      scope: global
-      max-lines: 15
-    - source: handoff
-      scope: global
-      max-lines: 30
     - source: now
       scope: global
       interval-min: 5

@@ -33,6 +33,8 @@ commands:
     .pipemd/scripts/context/now.sh
   dead-code: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/quality/dead-code.sh
+  repomap: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/project/repomap.sh
 injected:
   - file: .pipemd/template.md
     watch: true

@@ -64,10 +64,12 @@ export const SCRIPT_MAX_LINES: Record<string, number> = {
   "cargo-deps": 40, "cargo-features": 20, "go-packages": 40, "go-interfaces": 30,
   "docker-stats": 30, "k8s-unhealthy": 20, "tf-state": 40, "aws-context": 10,
   crew: 40, "workspace-map": 60, "django-urls": 40, hotspots: 15, now: 1, "dead-code": 30,
+  repomap: 60,
 };
 
 export const SCRIPT_COMPANIONS: Record<string, string[]> = {
   "dead-code": ["quality/run-knip.sh", "quality/format-knip.mjs"],
+  "repomap": ["project/repomap.mjs"],
 };
 
 export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
@@ -81,6 +83,7 @@ export const SCRIPT_LIBRARY: Record<string, ScriptDef[]> = {
     { id: "todos", label: "TODOs / FIXMEs", description: "TODO, FIXME, HACK comments in source", command: "bash .pipemd/scripts/project/find-todos.sh", category: "project", volatile: 2, file: "project/find-todos.sh" },
     { id: "exports", label: "Exports & Env", description: "Exported symbols per module + env var references", command: "bash .pipemd/scripts/project/exports.sh", category: "project", volatile: 1, file: "project/exports.sh" },
     { id: "workspace-map", label: "Workspace Map", description: "Monorepo workspace members and inter-package dependencies", command: "bash .pipemd/scripts/project/workspace-map.sh", category: "project", volatile: 1, file: "project/workspace-map.sh" },
+    { id: "repomap", label: "Repo Map", description: "Ranked signature map with personalized PageRank (symbols, edges, tribal knowledge)", command: "bash .pipemd/scripts/project/repomap.sh", category: "project", volatile: 1, file: "project/repomap.sh" },
   ],
   git: [
     { id: "git-log", label: "Recent Commits", description: "Last 10 commits (hash, date, message)", command: "bash .pipemd/scripts/git/git-log.sh", category: "git", volatile: 2, file: "git/git-log.sh" },
