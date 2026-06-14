@@ -514,7 +514,10 @@ for s in "${SCEN[@]}"; do
           sleep 1; _pmd_wait=$((_pmd_wait + 1))
           [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
         done
-        (cd "$worktree_base" && pmd stop) 2>/dev/null || true
+        # Kill daemon directly — pmd stop calls cleanStaleState() which deletes AGENTS.md
+        local _pid
+        _pid=$(cat "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null)
+        [ -n "$_pid" ] && kill "$_pid" 2>/dev/null || true
         rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
         if [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null; then
           log "    Passive snapshot rendered (${_pmd_wait}s)"
@@ -552,7 +555,9 @@ for s in "${SCEN[@]}"; do
           sleep 1; _pmd_wait=$((_pmd_wait + 1))
           [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
         done
-        (cd "$worktree_base" && pmd stop) 2>/dev/null || true
+        # Kill daemon directly — pmd stop calls cleanStaleState() which deletes AGENTS.md
+        _pid=$(cat "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null)
+        [ -n "$_pid" ] && kill "$_pid" 2>/dev/null || true
         rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
         if [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null; then
           log "    Passive snapshot rendered (${_pmd_wait}s)"
