@@ -61,7 +61,6 @@ if section_enabled "status"; then
       if [ "$status_lines" -le "$budget" ]; then
         output+="$status_out"$'\n'
       else
-        echo "$status_out" | head -"$((budget - 2))"
         output+=$(echo "$status_out" | head -"$((budget - 2))")$'\n'
         output+="... and $((status_lines - budget + 2)) more"$'\n'
       fi

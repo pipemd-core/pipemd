@@ -85,9 +85,9 @@ SCENARIO_CHECK[4]="$SCRIPT_DIR/quality/check-04.sh"
 # Per-scenario run overrides: long/medium = 2, short = 3
 declare -A SCENARIO_RUNS
 SCENARIO_RUNS[1]=3   # long: improve pmd doctor
-SCENARIO_RUNS[2]=5   # short: hono middleware
+SCENARIO_RUNS[2]=3   # short: hono middleware
 SCENARIO_RUNS[3]=3   # medium: hono error handler
-SCENARIO_RUNS[4]=5   # short: bt-lua bug fix
+SCENARIO_RUNS[4]=3   # short: bt-lua bug fix
 
 # Parse scenario list
 IFS=',' read -ra SCEN <<< "$SCENARIOS"
@@ -134,7 +134,7 @@ parse_run_metrics() {
         ;;
       tool_use)
         tool_calls=$((tool_calls + 1))
-        local tool_name=$(echo "$line" | jq -r '.part.tool // empty' 2>/dev/null || echo "")
+        local tool_name=$(echo "$line" | jq -r '.part.tool // .part.name // empty' 2>/dev/null || echo "")
         case "$tool_name" in
           read|file_read) reads=$((reads + 1)) ;;
           edit|file_edit) edits=$((edits + 1)) ;;
@@ -261,7 +261,7 @@ run_cell() {
   fi
 
   if [ "$render_failed" = true ]; then
-    echo "{\"scenario\":\"$scenario\",\"condition\":\"$condition\",\"run\":$run_idx,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\"}}" \
+    echo "{\"scenario\":\"$scenario\",\"condition\":\"$condition\",\"run\":$run_idx,\"quality\":-1,\"metrics\":{\"void\":true,\"reason\":\"render_timeout\",\"wall_ms\":0}}" \
       >> "$RESULTS_FILE"
     if [ "$condition" = "with" ]; then
       (cd "$work_dir" && pmd stop) 2>/dev/null || true
@@ -348,7 +348,7 @@ run_cell() {
       --argjson metrics "$void_metrics" \
       --argjson wall "$elapsed_ms" \
       '{scenario: $scenario, condition: $condition, run: $run_idx, quality: -1, metrics: ($metrics + {void: true, reason: "agent_timeout", wall_ms: $wall}), retrospective: null}' 2>/dev/null) \
-      || void_record='{"scenario":'"$scenario"',"condition":"'"$condition"'","run":'"$run_idx"',"quality":-1,"metrics":{"void":true,"reason":"agent_timeout"},"retrospective":null}'
+      || void_record='{"scenario":'"$scenario"',"condition":"'"$condition"'","run":'"$run_idx"',"quality":-1,"metrics":{"void":true,"reason":"agent_timeout","wall_ms":0},"retrospective":null}'
     echo "$void_record" >> "$RESULTS_FILE"
     if [ "$condition" = "with" ]; then
       (cd "$work_dir" && pmd stop) 2>/dev/null || true
@@ -535,7 +535,9 @@ for s in "${SCEN[@]}"; do
       setup_worktree "$base" "$worktree_base" "$condition"
       if [ "$condition" = "with" ]; then
         log "  Running pmd init on $target ($condition)..."
-        (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
+        if ! (cd "$worktree_base" && pmd init --yes) >/dev/null 2>&1; then
+          log "  WARNING: pmd init failed — condition may degrade to 'without'"
+        fi
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
         # Install opencode plugin for active injection
@@ -544,7 +546,9 @@ for s in "${SCEN[@]}"; do
         cp "$REPO_ROOT/.opencode/plugin/pmd-config.json" "$worktree_base/.opencode/plugin/" 2>/dev/null || true
       elif [ "$condition" = "passive" ]; then
         log "  Running pmd init on $target (passive snapshot)..."
-        (cd "$worktree_base" && pmd init --yes) 2>/dev/null || true
+        if ! (cd "$worktree_base" && pmd init --yes) >/dev/null 2>&1; then
+          log "  WARNING: pmd init failed — passive snapshot may be empty"
+        fi
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
         # Render AGENTS.md snapshot, then freeze — no plugin, no daemon
@@ -591,7 +595,7 @@ PERM_EOF
     cell_runs=${SCENARIO_RUNS[$s]:-$RUNS}
     for (( r=1; r<=cell_runs; r++ )); do
       # Resume: skip runs already present in JSONL
-      if [ -f "$RESULTS_FILE" ] && grep -q "\"scenario\":$s,\"condition\":\"$condition\",\"run\":$r" "$RESULTS_FILE" 2>/dev/null; then
+      if [ -f "$RESULTS_FILE" ] && grep -q "\"scenario\":$s,\"condition\":\"$condition\",\"run\":$r[^0-9]" "$RESULTS_FILE" 2>/dev/null; then
         log "  Run $r/$cell_runs: s${s}-${condition}-r${r} (skip — already recorded)"
         continue
       fi

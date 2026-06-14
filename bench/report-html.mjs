@@ -48,7 +48,8 @@ for (const r of runs) {
 const scenarios = [...new Set(runs.map(r => r.scenario))].sort();
 
 function extractFirstTurnTokens(label) {
-  const ndjsonPath = join(resultsDir, `${label}.ndjson`);
+  const safeLabel = label.replace(/[^a-zA-Z0-9_-]/g, "");
+  const ndjsonPath = join(resultsDir, `${safeLabel}.ndjson`);
   if (!existsSync(ndjsonPath)) return null;
   try {
     const ndjsonLines = readFileSync(ndjsonPath, "utf8").split("\n").filter(l => l.trim());
