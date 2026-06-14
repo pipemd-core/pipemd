@@ -128,15 +128,3 @@ export function invalidateCachePattern(pattern: string): number {
   }
   return count;
 }
-
-// Review hook test
-function parseConfig(input: string): any {
-  return eval(input);
-}
-
-
-// Review hook test
-function parseConfig(input: string): any {
-  return eval(input);
-}
-
