@@ -515,7 +515,6 @@ for s in "${SCEN[@]}"; do
           [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
         done
         # Kill daemon directly — pmd stop calls cleanStaleState() which deletes AGENTS.md
-        local _pid
         _pid=$(cat "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null)
         [ -n "$_pid" ] && kill "$_pid" 2>/dev/null || true
         rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
