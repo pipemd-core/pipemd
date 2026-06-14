@@ -510,13 +510,17 @@ for s in "${SCEN[@]}"; do
         # Render AGENTS.md snapshot, then freeze
         (cd "$worktree_base" && pmd start) 2>/dev/null || true
         _pmd_wait=0
-        while [ $_pmd_wait -lt 30 ]; do
+        while [ $_pmd_wait -lt 90 ]; do
           sleep 1; _pmd_wait=$((_pmd_wait + 1))
           [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
         done
         (cd "$worktree_base" && pmd stop) 2>/dev/null || true
         rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
-        log "    Passive snapshot rendered (${_pmd_wait}s)"
+        if [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null; then
+          log "    Passive snapshot rendered (${_pmd_wait}s)"
+        else
+          log "    WARNING: Passive snapshot failed — AGENTS.md not rendered after ${_pmd_wait}s"
+        fi
       else
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
@@ -542,14 +546,19 @@ for s in "${SCEN[@]}"; do
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
         # Render AGENTS.md snapshot, then freeze — no plugin, no daemon
+        (cd "$worktree_base" && pmd start) 2>/dev/null || true
         _pmd_wait=0
-        while [ $_pmd_wait -lt 30 ]; do
+        while [ $_pmd_wait -lt 90 ]; do
           sleep 1; _pmd_wait=$((_pmd_wait + 1))
           [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null && break
         done
         (cd "$worktree_base" && pmd stop) 2>/dev/null || true
         rm -f "$worktree_base/.pipemd/.daemon.pid" 2>/dev/null || true
-        log "    Passive snapshot rendered (${_pmd_wait}s)"
+        if [ -f "$worktree_base/AGENTS.md" ] && grep -q 'pmd:' "$worktree_base/AGENTS.md" 2>/dev/null; then
+          log "    Passive snapshot rendered (${_pmd_wait}s)"
+        else
+          log "    WARNING: Passive snapshot failed — AGENTS.md not rendered after ${_pmd_wait}s"
+        fi
       fi
     fi
 
