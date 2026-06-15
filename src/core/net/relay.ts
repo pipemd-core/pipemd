@@ -87,6 +87,7 @@ const peerLastSync = new Map<string, number>();
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let server: http.Server | null = null;
+let relayStartTime: number | null = null;
 
 type BlockKey = `${string}:${string}:${string}`;
 const blockStore = new Map<BlockKey, BlockEntry>();
@@ -380,6 +381,21 @@ function handleStatus(_req: http.IncomingMessage, res: http.ServerResponse) {
   jsonResponse(res, 200, { ok: true, hostname: myHost, groups, peers });
 }
 
+function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
+  const uptimeSeconds =
+    relayStartTime != null
+      ? Math.max(0, Math.round((Date.now() - relayStartTime) / 1000))
+      : 0;
+  jsonResponse(res, 200, {
+    ok: true,
+    daemon: "running",
+    hostname: hostname(),
+    uptime: uptimeSeconds,
+    peers: readPeers().length,
+    pid: process.pid,
+  });
+}
+
 function handleBlocksPush(req: http.IncomingMessage, res: http.ServerResponse) {
   if (!isLocalhost(req)) {
     jsonResponse(res, 403, { error: "forbidden: /blocks is localhost-only" });
@@ -444,7 +460,7 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
   } else if (req.method === "GET" && req.url === "/status") {
     handleStatus(req, res);
   } else if (req.method === "GET" && req.url === "/health") {
-    jsonResponse(res, 200, { ok: true, hostname: hostname() });
+    handleHealth(req, res);
   } else {
     jsonResponse(res, 404, { error: "not found" });
   }
@@ -471,6 +487,7 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       syncTimer = setInterval(syncWithPeers, POLL_INTERVAL_MS);
       expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); }, POLL_INTERVAL_MS * 3);
 
+      relayStartTime = Date.now();
       resolve(actualPort);
     });
   });
@@ -489,6 +506,7 @@ export function stopRelay() {
     server.close();
     server = null;
   }
+  relayStartTime = null;
   blockStore.clear();
   log.info("Relay stopped");
 }
