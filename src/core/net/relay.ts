@@ -1,3 +1,67 @@
+/**
+ * ============================================================================
+ * RELAY AUDIT — feat/hermes-network, Track B.1 (Unfreeze Relay)
+ * Audited against the 464-line frozen baseline. Findings below are the basis
+ * for the unfreeze work and are intentionally retained as living docs.
+ * ============================================================================
+ *
+ * WHAT WORKS
+ * ----------
+ *  - Core HTTP server lifecycle: startRelay/stopRelay/runRelay boot, bind, and
+ *    tear down cleanly on SIGTERM/SIGINT (writes relay.pid / relay.port).
+ *  - Token auth on /sync uses crypto.timingSafeEqual — constant-time, good.
+ *  - /crew merge logic (mergeSessionsFor) correctly excludes the caller's own
+ *    origin and tags remote sessions with _remote/_origin.
+ *  - /sync handshake avoids echo: responder replies with groups from origins
+ *    OTHER than the requester (msg.hostname).
+ *  - Block store has TTL (30min) + max (1000) eviction in expireBlockStore().
+ *  - Body size guard (MAX_BODY_BYTES 1MiB) prevents unbounded memory growth.
+ *  - readBody / jsonResponse helpers are clean and reused everywhere.
+ *  - localhost-only enforcement on /crew and /blocks (isLocalhost) is correct.
+ *
+ * WHAT IS BROKEN (or latent bugs)
+ * --------------------------------
+ *  B1. startRelay() can only be called once per process safely. `server` is a
+ *      module singleton; a second startRelay() without stopRelay() overwrites
+ *      the reference and ORPHANS the listening server (un-stoppable, port leak)
+ *      and does not clear `store`/`blockStore`/`cachedRelayToken`. Critical for
+ *      tests and daemon restarts.
+ *  B2. stopRelay() clears blockStore but NOT the crew `store` map nor
+ *      peerLastSync nor cachedRelayToken. Result: restarts carry STALE crew
+ *      sessions and a stale token; inconsistent with blockStore.clear().
+ *  B3. startRelay()'s server "error" handler only rejects on EADDRINUSE. Any
+ *      OTHER listen error (e.g. EACCES) is logged but the Promise NEVER settles
+ *      — callers hang forever. Should reject on all errors pre-listen.
+ *  B4. Relay binds to "127.0.0.1" ONLY (startRelay listen call). The target
+ *      Empire topology needs exoserver <-> workstation reachability; peers
+ *      cannot POST /sync to a localhost-bound relay. This is the #1 blocker for
+ *      real cross-machine operation (intentional while frozen, must change).
+ *  B5. /status is fully unauthenticated AND returns peer hostnames + group
+ *      names + sync times. Safe only because of the localhost bind (B4); the
+ *      moment the bind opens up, this leaks topology. Needs an auth gate or
+ *      localhost check before B4 is resolved.
+ *  B6. peer host parsing in syncWithPeers uses lastIndexOf(":") to split
+ *      host:port — breaks for IPv6 literals (e.g. [::1]:9741).
+ *
+ * WHAT IS INCOMPLETE (per plan B.1-B.4)
+ * -------------------------------------
+ *  I1. /health is a stub: returns only { ok, hostname }. Plan B.1 requires
+ *      daemon status + hostname + uptime + peer count. (Addressed below.)
+ *  I2. No /metrics endpoint. Plan B.1 requires block count, crew session count,
+ *      and sync latency. (Addressed below.)
+ *  I3. No uptime tracking (no start timestamp recorded) — needed by /health.
+ *  I4. No sync-latency telemetry — needed by /metrics.
+ *  I5. Peer discovery is readPeers() from ~/.pipemd/link/peers.json (JSON),
+ *      but plan B.4 specifies ~/.pipemd/peers.yml. Format/path mismatch to
+ *      reconcile when wiring peer-discovery.ts.
+ *  I6. No block origin-hostname tagging / cross-machine dedup (plan B.2).
+ *  I7. No crew broadcast / claim propagation across machines (plan B.3).
+ *  I8. SESSION_EXPIRY_MS = 15s is aggressive vs POLL_INTERVAL_MS = 5s; plan
+ *      calls for TTL tuning once multi-machine latency is measured.
+ *
+ * END AUDIT
+ * ============================================================================
+ */
 import crypto from "node:crypto";
 import http from "node:http";
 import os from "node:os";
