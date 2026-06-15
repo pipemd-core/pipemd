@@ -283,3 +283,9 @@ Every change must be verified. Weak success criteria ("make it work") require co
 
 ```
 <!-- /pmd -->
+
+<!-- pmd: git-context -->
+```
+
+```
+<!-- /pmd -->

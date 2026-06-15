@@ -48,7 +48,13 @@ def module_name(rel_path):
     dirpath = parts[:-1] if len(parts) > 1 else []
 
     if len(dirpath) == 0:
-        return filename if filename in ENTRY_FILES else None
+        if filename in ENTRY_FILES:
+            return filename
+        if filename.endswith(('.test', '.spec')) or re.match(r'^(jest|webpack|vite|rollup|tsconfig|eslint|babel|postcss|tailwind)\.config', filename):
+            return None
+        if parts[-1].endswith(('.ts', '.tsx', '.js', '.jsx')):
+            return os.path.splitext(parts[-1])[0]
+        return None
 
     last_dir = dirpath[-1]
 

@@ -35,6 +35,8 @@ commands:
     .pipemd/scripts/quality/dead-code.sh
   repomap: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/project/repomap.sh
+  git-context: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
+    .pipemd/scripts/git/git-context.sh
 injected:
   - file: .pipemd/template.md
     watch: true
@@ -78,6 +80,8 @@ pipes:
     command: hotspots
   - file: now.md
     command: now
+  - file: git-context.md
+    command: git-context
 settings:
   debounceMs: 3000
   reServeDelayMs: 1000
