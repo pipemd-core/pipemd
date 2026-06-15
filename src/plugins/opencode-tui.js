@@ -175,7 +175,6 @@ function renderTraceRoute(api) {
   const [tick, setTick] = createSignal(Date.now());
   const [view, setView] = createSignal("timeline");
   const [cursor, setCursor] = createSignal(0);
-  const [scrollOffset, setScrollOffset] = createSignal(0);
   const [expandedKey, setExpandedKey] = createSignal(null);
   const timer = setInterval(() => setTick(Date.now()), POLL_MS);
   onCleanup(() => clearInterval(timer));
@@ -194,6 +193,20 @@ function renderTraceRoute(api) {
     }
     const raw = stats()?.passiveAgents || [];
     return raw.slice(0, 8);
+  });
+
+  let savedScrollOffset = 0;
+
+  createEffect(() => {
+    tick();
+    const v = view();
+    if (v === "timeline") {
+      const n = allEvents().length;
+      if (cursor() > n - 1) setCursor(Math.max(0, n - 1));
+    } else if (v === "tree") {
+      const n = sessions().length;
+      if (cursor() > n - 1) setCursor(Math.max(0, n - 1));
+    }
   });
 
   const h = () => process.stdout.rows || 24;
@@ -220,7 +233,14 @@ function renderTraceRoute(api) {
       return;
     }
     const evts = allEvents();
-    const total = view() === "tree" ? sessions().length : evts.length;
+    const v = view();
+    let total;
+    if (v === "tree") total = sessions().length;
+    else if (v === "locks") {
+      const byFile = new Map();
+      for (const s of sessions()) for (const cl of (s.claimedFiles || [])) { const o = byFile.get(cl.path) || []; o.push(s); byFile.set(cl.path, o); }
+      total = Math.max(1, byFile.size);
+    } else total = evts.length;
     if (evt.name === "up" || evt.name === "k") {
       evt.preventDefault();
       evt.stopPropagation();
@@ -242,12 +262,12 @@ function renderTraceRoute(api) {
     } else if (evt.name === "right" || evt.name === "l") {
       const views = ["tree", "timeline", "locks"];
       const next = (views.indexOf(view()) + 1) % views.length;
-      setView(views[next]); setCursor(0); setScrollOffset(0); setExpandedKey(null);
+      setView(views[next]); setCursor(0); savedScrollOffset = 0; setExpandedKey(null);
     } else if (evt.name === "left" || evt.name === "h") {
       evt.preventDefault(); evt.stopPropagation();
       const views = ["tree", "timeline", "locks"];
       const prev = (views.indexOf(view()) - 1 + views.length) % views.length;
-      setView(views[prev]); setCursor(0); setScrollOffset(0); setExpandedKey(null);
+      setView(views[prev]); setCursor(0); savedScrollOffset = 0; setExpandedKey(null);
     }
   });
 
@@ -275,10 +295,10 @@ function renderTraceRoute(api) {
   insert(root, panel);
 
   insert(panel, () => {
+    try {
     tick();
     view();
     cursor();
-    scrollOffset();
     expandedKey();
     const sess = sessions();
     const evts = allEvents();
@@ -533,20 +553,16 @@ function renderTraceRoute(api) {
 
     // ══ WINDOWED DISPLAY ══
     const totalRows = rows.length;
-    let cur;
-    if (view() === "timeline" && selectableRowIndices.length > 0) {
-      const clamped = Math.min(cursor(), selectableRowIndices.length - 1);
-      if (clamped !== cursor()) setCursor(clamped);
-      cur = selectableRowIndices[clamped] ?? 0;
-    } else {
-      cur = Math.min(cursor(), Math.max(0, totalRows - 1));
-      if (cur !== cursor()) setCursor(cur);
-    }
+    const v = view();
+    const itemCount = v === "timeline" ? Math.max(1, selectableRowIndices.length) : Math.max(1, totalRows);
+    const c = Math.min(Math.max(0, cursor()), itemCount - 1);
+    const cur = v === "timeline" ? (selectableRowIndices[c] ?? 0) : c;
     const vr = Math.max(1, visibleRows() - headerLineCount);
-    let so = scrollOffset();
+    let so = savedScrollOffset;
     if (cur < so) so = cur;
-    else if (cur >= so + vr) so = cur - vr + 1;
-    if (so !== scrollOffset()) setScrollOffset(so);
+    else if (cur >= so + vr) so = Math.max(0, cur - vr + 1);
+    if (so + vr > totalRows) so = Math.max(0, totalRows - vr);
+    savedScrollOffset = so;
     const sliced = rows.slice(so, so + vr);
 
     const cursorBarBg = RGBA.fromInts(60, 60, 120, 80);
@@ -558,7 +574,7 @@ function renderTraceRoute(api) {
       const rowEl = sliced[i] || textNode("", th.textMuted);
       if (isCursorRow) {
         const highlight = el("box");
-        spread(highlight, { backgroundColor: cursorBarBg, paddingLeft: 1, width: pw });
+        spread(highlight, { id: "cursor-row", backgroundColor: cursorBarBg, paddingLeft: 1, width: pw });
         insert(highlight, rowEl);
         body.push(highlight);
       } else {
@@ -578,10 +594,13 @@ function renderTraceRoute(api) {
       textNode("[esc] close", th.textMuted),
       textNode("[\u2191\u2193] navigate", th.textMuted),
       textNode("[\u2190\u2192] views", th.textMuted),
-      view() === "timeline" ? textNode("[space] expand", th.textMuted) : textNode("", th.textMuted),
+      v === "timeline" ? textNode("[space] expand", th.textMuted) : textNode("", th.textMuted),
     ], { gap: 2 }));
 
     return vbox([...header, ...body, ...footer], {});
+    } catch (err) {
+      return textNode("Render error: " + (err && err.message || String(err)), theme().error);
+    }
   });
 
   return root;
