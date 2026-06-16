@@ -43,7 +43,9 @@ export interface SyncMessage {
 
 export interface PeerConfig {
   host: string;
+  port?: number;
   token: string;
+  label?: string;
 }
 
 export interface RelayStatus {
@@ -51,4 +53,9 @@ export interface RelayStatus {
   hostname: string;
   groups: Record<string, { local: number; remote: number }>;
   peers: Array<{ host: string; lastSync: string | null }>;
+}
+
+export interface WorkspaceContextResponse {
+  last_updated: string;
+  content: string;
 }

@@ -76,6 +76,7 @@ import {
   type RelayStatus,
   type BlockPushMessage,
   type BlockEntry,
+  type WorkspaceContextResponse,
   DEFAULT_PORT,
   POLL_INTERVAL_MS,
   SESSION_EXPIRY_MS,
@@ -195,10 +196,23 @@ function expireBlockStore() {
 
 function readPeers(): PeerConfig[] {
   try {
-    const homeDir = os.homedir();
-    const peersFile = path.join(homeDir, ".pipemd", "link", "peers.json");
+    const peersFile = path.join(os.homedir(), ".pipemd", "link", "peers.json");
     if (!fs.existsSync(peersFile)) return [];
-    return JSON.parse(fs.readFileSync(peersFile, "utf-8")) as PeerConfig[];
+    const raw = JSON.parse(fs.readFileSync(peersFile, "utf-8"));
+    if (!Array.isArray(raw)) return [];
+    const peers: PeerConfig[] = [];
+    for (const entry of raw) {
+      if (typeof entry !== "object" || entry === null) continue;
+      if (typeof entry.host !== "string" || entry.host.length === 0) continue;
+      if (typeof entry.token !== "string" || entry.token.length === 0) continue;
+      peers.push({
+        host: entry.host,
+        port: typeof entry.port === "number" ? entry.port : undefined,
+        token: entry.token,
+        label: typeof entry.label === "string" ? entry.label : undefined,
+      });
+    }
+    return peers;
   } catch (err: unknown) { log.debug(`readPeers failed: ${errMsg(err)}`); return []; }
 }
 
@@ -212,30 +226,32 @@ function enforceFilePermissions(filePath: string): void {
 
 function readToken(): string {
   try {
-    const homeDir = os.homedir();
-    const tokenFile = path.join(homeDir, ".pipemd", "link", "relay.token");
+    const tokenFile = path.join(os.homedir(), ".pipemd", "link", "relay.token");
     if (fs.existsSync(tokenFile)) {
-      const token = fs.readFileSync(tokenFile, "utf-8").trim();
-      enforceFilePermissions(tokenFile);
-      return token;
+      return fs.readFileSync(tokenFile, "utf-8").trim();
     }
   } catch (err: unknown) { log.debug(`read relay token failed: ${errMsg(err)}`); }
   return "";
 }
 
-let cachedRelayToken: string | null = null;
-
 function enforceToken(): string {
-  if (cachedRelayToken) return cachedRelayToken;
   const token = readToken();
   if (!token) {
     throw new Error("Relay token not found — refusing to start without authentication. Delete .pipemd/link/ and run `pmd link` to regenerate.");
   }
-  cachedRelayToken = token;
+  enforceFilePermissions(path.join(os.homedir(), ".pipemd", "link", "relay.token"));
   return token;
 }
 
-function syncWithPeers() {
+function authMiddleware(req: http.IncomingMessage): boolean {
+  const token = readToken();
+  if (!token) return false;
+  const auth = req.headers.authorization;
+  if (!auth) return false;
+  return timingSafeEqual(auth, `Bearer ${token}`);
+}
+
+export function syncWithPeers() {
   expireStaleGroups();
 
   const peers = readPeers();
@@ -254,10 +270,8 @@ function syncWithPeers() {
   const myHostname = hostname();
 
   for (const peer of peers) {
-    const lastColon = peer.host.lastIndexOf(":");
-    const host = peer.host.slice(0, lastColon);
-    const portStr = peer.host.slice(lastColon + 1);
-    const port = parseInt(portStr || "9741", 10);
+    const host = peer.host;
+    const port = peer.port ?? DEFAULT_PORT;
     const payload: SyncMessage = { hostname: myHostname, groups: allGroups };
 
     const body = JSON.stringify(payload);
@@ -321,12 +335,6 @@ function handleCrew(req: http.IncomingMessage, res: http.ServerResponse) {
 
 function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
   const t0 = Date.now();
-  const token = cachedRelayToken || readToken();
-  const auth = req.headers.authorization;
-  if (!token || !auth || !timingSafeEqual(auth, `Bearer ${token}`)) {
-    jsonResponse(res, 403, { error: "unauthorized" });
-    return;
-  }
 
   readBody(req)
     .then((raw) => {
@@ -466,21 +474,69 @@ function handleBlocksFetch(req: http.IncomingMessage, res: http.ServerResponse) 
   jsonResponse(res, 200, { blocks, hostname: hostname() });
 }
 
+const WORKSPACE_SANDBOX_BASE = path.join(os.homedir(), ".pipemd", "workspaces");
+const AGENT_ID_RE = /^[A-Za-z0-9_-]+$/;
+
+function handleWorkspaceContext(res: http.ServerResponse, agentId: string) {
+  const resolved = path.resolve(WORKSPACE_SANDBOX_BASE, agentId, "context.md");
+  if (!resolved.startsWith(WORKSPACE_SANDBOX_BASE + path.sep)) {
+    jsonResponse(res, 400, { error: "invalid agent id" });
+    return;
+  }
+
+  try {
+    const stat = fs.statSync(resolved);
+    if (!stat.isFile()) {
+      jsonResponse(res, 404, { error: "workspace context not found" });
+      return;
+    }
+    const content = fs.readFileSync(resolved, "utf-8");
+    const body: WorkspaceContextResponse = {
+      last_updated: stat.mtime.toISOString(),
+      content,
+    };
+    jsonResponse(res, 200, body);
+  } catch (err: unknown) {
+    log.debug(`workspace context read failed: ${errMsg(err)}`);
+    jsonResponse(res, 404, { error: "workspace context not found" });
+  }
+}
+
 function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
-  if (req.method === "POST" && req.url === "/crew") {
+  const url = new URL(req.url || "/", "http://localhost");
+  const pathname = url.pathname;
+
+  if (req.method === "POST" && pathname === "/crew") {
     handleCrew(req, res);
-  } else if (req.method === "POST" && req.url === "/sync") {
+  } else if (req.method === "POST" && pathname === "/sync") {
+    if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleSync(req, res);
-  } else if (req.method === "POST" && req.url === "/blocks") {
+  } else if (req.method === "POST" && pathname === "/blocks") {
     handleBlocksPush(req, res);
-  } else if (req.method === "GET" && req.url?.startsWith("/blocks")) {
+  } else if (req.method === "GET" && pathname === "/blocks") {
     handleBlocksFetch(req, res);
-  } else if (req.method === "GET" && req.url === "/status") {
+  } else if (req.method === "GET" && pathname === "/status") {
+    if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleStatus(req, res);
-  } else if (req.method === "GET" && req.url === "/health") {
+  } else if (req.method === "GET" && pathname === "/health") {
+    if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleHealth(req, res);
-  } else if (req.method === "GET" && req.url === "/metrics") {
+  } else if (req.method === "GET" && pathname === "/metrics") {
+    if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleMetrics(req, res);
+  } else if (req.method === "GET") {
+    const workspaceMatch = pathname.match(/^\/workspace\/([^/]+)\/context$/);
+    if (workspaceMatch) {
+      const agentId = decodeURIComponent(workspaceMatch[1]);
+      if (!AGENT_ID_RE.test(agentId)) {
+        jsonResponse(res, 400, { error: "invalid agent id" });
+        return;
+      }
+      if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
+      handleWorkspaceContext(res, agentId);
+    } else {
+      jsonResponse(res, 404, { error: "not found" });
+    }
   } else {
     jsonResponse(res, 404, { error: "not found" });
   }
@@ -491,15 +547,12 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
     server = http.createServer(requestHandler);
 
     server.on("error", (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE") {
-        server = null;
-        reject(err);
-      } else {
-        log.error(`Relay error: ${err.message}`);
-      }
+      server = null;
+      reject(err);
     });
 
-    server.listen(port, "127.0.0.1", () => {
+    const bind = process.env.PMD_LINK_BIND || "0.0.0.0";
+    server.listen(port, bind, () => {
       const addr = server!.address();
       const actualPort = typeof addr === "object" && addr ? addr.port : port;
       log.info(`Relay listening on port ${actualPort}`);
@@ -529,6 +582,8 @@ export function stopRelay() {
   relayStartTime = null;
   lastSyncLatencyMs = null;
   blockStore.clear();
+  store.clear();
+  peerLastSync.clear();
   log.info("Relay stopped");
 }
 

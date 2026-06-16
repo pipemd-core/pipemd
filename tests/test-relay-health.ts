@@ -73,8 +73,10 @@ function request(
   });
 }
 
+const authHeader = { Authorization: `Bearer ${testToken}` };
+
 const get = (port: number, p: string, h: Record<string, string> = {}) =>
-  request(port, "GET", p, null, h);
+  request(port, "GET", p, null, { ...authHeader, ...h });
 const post = (
   port: number,
   p: string,
@@ -128,11 +130,14 @@ describe("GET /health", () => {
     );
   });
 
-  it("does not require authentication", async () => {
-    const { status } = await get(relayPort, "/health", {
+  it("requires authentication (rejects invalid token)", async () => {
+    const noAuth = await request(relayPort, "GET", "/health", null, {});
+    assert.equal(noAuth.status, 401);
+
+    const badAuth = await request(relayPort, "GET", "/health", null, {
       Authorization: "Bearer definitely-not-valid",
     });
-    assert.equal(status, 200);
+    assert.equal(badAuth.status, 401);
   });
 });
 

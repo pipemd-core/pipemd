@@ -40,6 +40,8 @@ function makeSession(overrides: Partial<CrewSession> = {}): CrewSession {
   };
 }
 
+const authHeader = { Authorization: `Bearer ${testToken}` };
+
 function post(port: number, path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
@@ -64,7 +66,7 @@ function post(port: number, path: string, body: unknown, headers: Record<string,
 function get(port: number, path: string, headers: Record<string, string> = {}): Promise<{ status: number; data: unknown }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: "127.0.0.1", port, path, method: "GET", headers },
+      { hostname: "127.0.0.1", port, path, method: "GET", headers: { ...authHeader, ...headers } },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c: Buffer) => chunks.push(c));
@@ -155,7 +157,7 @@ describe("POST /sync", () => {
       hostname: "sync-test",
       groups: {},
     });
-    assert.equal(status, 403);
+    assert.equal(status, 401);
   });
 
   it("rejects requests with wrong token", async () => {
@@ -163,7 +165,7 @@ describe("POST /sync", () => {
       hostname: "sync-test",
       groups: {},
     }, { Authorization: "Bearer wrong-token" });
-    assert.equal(status, 403);
+    assert.equal(status, 401);
   });
 
   it("accepts requests with correct token", async () => {
