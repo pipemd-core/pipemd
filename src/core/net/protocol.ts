@@ -1,4 +1,5 @@
 import type { CrewSession } from "../crew.js";
+import type { FleetSyncPayload } from "./fleet-schema.js";
 
 export const DEFAULT_PORT = 9741;
 export const POLL_INTERVAL_MS = 5_000;
@@ -39,6 +40,12 @@ interface BlockFetchResponse {
 export interface SyncMessage {
   hostname: string;
   groups: Record<string, CrewSession[]>;
+  /**
+   * B2-3 peer fleet federation. Carries the origin relay's self FleetMachine
+   * row(s). Optional for backwards compatibility with Phase-1 peers that
+   * don't send it; receivers treat absence as "no fleet data".
+   */
+  fleet?: FleetSyncPayload;
 }
 
 export interface PeerConfig {

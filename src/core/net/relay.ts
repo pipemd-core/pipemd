@@ -81,6 +81,8 @@ import {
   POLL_INTERVAL_MS,
   SESSION_EXPIRY_MS,
 } from "./protocol.js";
+import { fleetRuntime } from "./fleet-runtime.js";
+import type { FleetResponse } from "./fleet-schema.js";
 
 type OriginMap = Map<string, { sessions: CrewSession[]; lastSeen: number }>;
 const store = new Map<string, OriginMap>();
@@ -272,7 +274,8 @@ export function syncWithPeers() {
   for (const peer of peers) {
     const host = peer.host;
     const port = peer.port ?? DEFAULT_PORT;
-    const payload: SyncMessage = { hostname: myHostname, groups: allGroups };
+    // B2-3: include the fleet snapshot so peers can render our topology.
+    const payload: SyncMessage = { hostname: myHostname, groups: allGroups, fleet: fleetRuntime.buildSyncPayload() };
 
     const body = JSON.stringify(payload);
     const req = http.request(
@@ -365,6 +368,10 @@ function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
       }
 
       peerLastSync.set(safeHostname, now);
+      // B2-3: merge any federated fleet payload from the peer.
+      if (msg.fleet) {
+        fleetRuntime.importPeer(msg.fleet);
+      }
       lastSyncLatencyMs = Date.now() - t0;
       jsonResponse(res, 200, { hostname: hostname(), groups: myGroups });
     })
@@ -419,7 +426,23 @@ function handleMetrics(_req: http.IncomingMessage, res: http.ServerResponse) {
     blocks: blockStore.size,
     crewSessions,
     syncLatencyMs: lastSyncLatencyMs,
+    peerFleet: fleetRuntime.peerCount(),
   });
+}
+
+/**
+ * GET /fleet (B2-2) — the federated read view. Bearer-authed.
+ * Returns the frozen FleetResponse (see fleet-schema.ts): self row first
+ * (from the local opencode subscriber), then peer rows (from B2-3 federation).
+ */
+function handleFleet(_req: http.IncomingMessage, res: http.ServerResponse) {
+  const body: FleetResponse = {
+    schema: 1,
+    generatedAt: new Date().toISOString(),
+    relay: hostname(),
+    machines: fleetRuntime.snapshot(),
+  };
+  jsonResponse(res, 200, body);
 }
 
 function handleBlocksPush(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -524,6 +547,9 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
   } else if (req.method === "GET" && pathname === "/metrics") {
     if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleMetrics(req, res);
+  } else if (req.method === "GET" && pathname === "/fleet") {
+    if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
+    handleFleet(req, res);
   } else if (req.method === "GET") {
     const workspaceMatch = pathname.match(/^\/workspace\/([^/]+)\/context$/);
     if (workspaceMatch) {
@@ -558,9 +584,12 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       log.info(`Relay listening on port ${actualPort}`);
 
       syncTimer = setInterval(syncWithPeers, POLL_INTERVAL_MS);
-      expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); }, POLL_INTERVAL_MS * 3);
+      expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); fleetRuntime.expirePeers(); }, POLL_INTERVAL_MS * 3);
 
       relayStartTime = Date.now();
+      // B2-1: begin observing the local opencode event stream. Best-effort —
+      // the subscriber reconnects with backoff if opencode isn't up yet.
+      try { fleetRuntime.start(); } catch (err: unknown) { log.warn(`Relay: fleet subscriber start failed: ${errMsg(err)}`); }
       resolve(actualPort);
     });
   });
@@ -584,6 +613,8 @@ export function stopRelay() {
   blockStore.clear();
   store.clear();
   peerLastSync.clear();
+  // B2-1/B2-3: tear down the opencode subscriber and clear all fleet state.
+  fleetRuntime.reset();
   log.info("Relay stopped");
 }
 
