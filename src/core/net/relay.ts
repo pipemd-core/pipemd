@@ -218,6 +218,43 @@ function readPeers(): PeerConfig[] {
   } catch (err: unknown) { log.debug(`readPeers failed: ${errMsg(err)}`); return []; }
 }
 
+/**
+ * Resolve a `:machine` path segment to a proxy target.
+ *  - "self", "_local", or the local os.hostname() → local opencode hop
+ *  - otherwise match a peer by label, then by host
+ * Returns null when the machine is unknown (caller → 404/502).
+ */
+type ProxyTarget =
+  | { kind: "self" }
+  | { kind: "peer"; host: string; port: number; token: string };
+
+function resolveTarget(machine: string): ProxyTarget | null {
+  if (machine === "self" || machine === "_local" || machine === hostname()) {
+    return { kind: "self" };
+  }
+  const peers = readPeers();
+  const byLabel = peers.find((p) => p.label && p.label === machine);
+  const peer = byLabel ?? peers.find((p) => p.host === machine);
+  if (!peer) return null;
+  return { kind: "peer", host: peer.host, port: peer.port ?? DEFAULT_PORT, token: peer.token };
+}
+
+/** Base URL of the co-located opencode server (Option A: 127.0.0.1:4096). */
+function opencodeBaseUrl(): string {
+  return (process.env.OPENCODE_BASE_URL || "http://127.0.0.1:4096").replace(/\/$/, "");
+}
+
+/**
+ * Basic-auth header for the local opencode hop. User `opencode`,
+ * password OPENCODE_SERVER_PASSWORD. Hermes never sees this header — the
+ * relay injects it only on the localhost downstream leg.
+ */
+function opencodeBasicAuth(): string {
+  const user = process.env.OPENCODE_SERVER_USER || "opencode";
+  const pass = process.env.OPENCODE_SERVER_PASSWORD || "";
+  return "Basic " + Buffer.from(`${user}:${pass}`, "utf-8").toString("base64");
+}
+
 function enforceFilePermissions(filePath: string): void {
   try {
     fs.chmodSync(filePath, 0o600);
@@ -445,6 +482,152 @@ function handleFleet(_req: http.IncomingMessage, res: http.ServerResponse) {
   jsonResponse(res, 200, body);
 }
 
+/**
+ * POST /fleet/:machine/session/:id/message (B2-4) — dispatch proxy.
+ * Bearer-authed at the relay edge; the relay injects Basic auth on the
+ * localhost hop to opencode. For remote machines, forwards to that machine's
+ * peer relay (which performs its own local hop). Hermes never sees opencode
+ * creds. opencode never sees the Bearer token.
+ */
+function handleDispatch(req: http.IncomingMessage, res: http.ServerResponse, machine: string, sessionId: string) {
+  readBody(req)
+    .then((raw) => {
+      const target = resolveTarget(machine);
+      if (!target) {
+        jsonResponse(res, 404, { error: `unknown machine: ${machine}` });
+        return;
+      }
+      if (target.kind === "self") {
+        // Local hop to opencode with injected Basic auth.
+        const downstream = forwardToOpencode(
+          `/api/session/${encodeURIComponent(sessionId)}/message`,
+          "POST",
+          raw,
+          req.headers["content-type"] || "application/json",
+        );
+        downstream.then((r) => pipeRaw(res, r.status, r.body, r.contentType)).catch((err) => {
+          log.warn(`dispatch: opencode hop failed: ${errMsg(err)}`);
+          jsonResponse(res, 502, { error: "opencode unreachable" });
+        });
+      } else {
+        // Peer-relay hop. Forward to POST /fleet/self/session/:id/message so the
+        // peer relay performs its own local-hop with its own Basic auth.
+        const path = `/fleet/self/session/${encodeURIComponent(sessionId)}/message`;
+        forwardToPeer(target, path, "POST", raw, req.headers["content-type"] || "application/json")
+          .then((r) => pipeRaw(res, r.status, r.body, r.contentType))
+          .catch((err) => {
+            log.warn(`dispatch: peer hop failed: ${errMsg(err)}`);
+            jsonResponse(res, 502, { error: "peer relay unreachable" });
+          });
+      }
+    })
+    .catch(() => jsonResponse(res, 400, { error: "invalid body" }));
+}
+
+/**
+ * Forward a request to the co-located opencode server with injected Basic
+ * auth. Used by the dispatch proxy (B2-4) and the PTY takeover proxy (B2-5).
+ */
+function forwardToOpencode(
+  opencodePath: string,
+  method: string,
+  body: string,
+  contentType: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<{ status: number; body: string; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    let url: URL;
+    try {
+      url = new URL(opencodePath, opencodeBaseUrl());
+    } catch (err: unknown) {
+      reject(err);
+      return;
+    }
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      Authorization: opencodeBasicAuth(),
+      ...extraHeaders,
+    };
+    if (body.length > 0) headers["Content-Length"] = String(Buffer.byteLength(body));
+    const downstream = http.request(
+      {
+        hostname: url.hostname,
+        port: url.port || 4096,
+        path: url.pathname + url.search,
+        method,
+        timeout: 10_000,
+        headers,
+      },
+      (r) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => resolve({
+          status: r.statusCode || 502,
+          body: Buffer.concat(chunks).toString("utf-8"),
+          contentType: r.headers["content-type"] || "application/json",
+        }));
+      },
+    );
+    downstream.on("error", reject);
+    downstream.on("timeout", () => { downstream.destroy(); reject(new Error("opencode timeout")); });
+    if (body.length > 0) downstream.write(body);
+    downstream.end();
+  });
+}
+
+/**
+ * Forward a request to a peer relay with the peer's Bearer token. Used to
+ * chain a proxy request from this relay to the target machine's relay, which
+ * then performs its own local hop.
+ */
+function forwardToPeer(
+  target: { host: string; port: number; token: string },
+  peerPath: string,
+  method: string,
+  body: string,
+  contentType: string,
+): Promise<{ status: number; body: string; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      Authorization: `Bearer ${target.token}`,
+    };
+    if (body.length > 0) headers["Content-Length"] = String(Buffer.byteLength(body));
+    const downstream = http.request(
+      {
+        hostname: target.host,
+        port: target.port,
+        path: peerPath,
+        method,
+        timeout: 10_000,
+        headers,
+      },
+      (r) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => resolve({
+          status: r.statusCode || 502,
+          body: Buffer.concat(chunks).toString("utf-8"),
+          contentType: r.headers["content-type"] || "application/json",
+        }));
+      },
+    );
+    downstream.on("error", reject);
+    downstream.on("timeout", () => { downstream.destroy(); reject(new Error("peer relay timeout")); });
+    if (body.length > 0) downstream.write(body);
+    downstream.end();
+  });
+}
+
+/** Write a raw (possibly non-JSON) downstream body back to the caller. */
+function pipeRaw(res: http.ServerResponse, status: number, body: string, contentType: string): void {
+  res.writeHead(status, {
+    "Content-Type": contentType,
+    "Content-Length": Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
 function handleBlocksPush(req: http.IncomingMessage, res: http.ServerResponse) {
   if (!isLocalhost(req)) {
     jsonResponse(res, 403, { error: "forbidden: /blocks is localhost-only" });
@@ -538,6 +721,15 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
     handleBlocksPush(req, res);
   } else if (req.method === "GET" && pathname === "/blocks") {
     handleBlocksFetch(req, res);
+  } else if (req.method === "POST") {
+    // B2-4 dispatch proxy: /fleet/:machine/session/:id/message
+    const dispatchMatch = pathname.match(/^\/fleet\/([^/]+)\/session\/([^/]+)\/message$/);
+    if (dispatchMatch) {
+      if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
+      handleDispatch(req, res, decodeURIComponent(dispatchMatch[1]), decodeURIComponent(dispatchMatch[2]));
+    } else {
+      jsonResponse(res, 404, { error: "not found" });
+    }
   } else if (req.method === "GET" && pathname === "/status") {
     if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
     handleStatus(req, res);
