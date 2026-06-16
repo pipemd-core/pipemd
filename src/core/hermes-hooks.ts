@@ -35,18 +35,19 @@ function safeRead(p: string): string {
 
 /**
  * Hermes skill body. Kept inline (not a separate template file) because it is
- * the only Hermes-specific artifact. Phase 1 covers two concerns:
+ * the only Hermes-specific artifact. Covers three concerns:
  *   1. Reading context (WORKSPACE_CONTEXT.md FIFO via cat + pmd run fallback).
  *   2. Crew coordination (register, claim, heartbeat, leave).
+ *   3. Fleet awareness — see and drive the fleet through the relay (pull-based).
  */
 function skillBody(): string {
   return [
     "---",
     "name: pipemd-context",
     "description: PipeMD context for Hermes. Read WORKSPACE_CONTEXT.md for live project",
-    "  context, register as a crew coordinator, and claim files you are managing so",
-    "  coding agents (OpenCode/Claude) avoid edit conflicts.",
-    "version: 1.0.0",
+    "  context, register as a crew coordinator, claim files, and drive the fleet",
+    "  through the relay.",
+    "version: 2.0.0",
     "metadata:",
     "  pipemd-managed: true",
     "---",
@@ -87,6 +88,34 @@ function skillBody(): string {
     "  pmd crew heartbeat",
     "Leave when done:",
     "  pmd crew leave",
+    "",
+    "## Fleet — see and drive the relay fabric",
+    "",
+    "Your relay endpoint and bearer token are written to:",
+    "  ~/.hermes/skills/devops/pipemd-context/relay.json",
+    "Read that file first to resolve the concrete {relay} base URL and token.",
+    "All requests require: Authorization: Bearer <token> (from relay.json).",
+    "",
+    "DECISION RULE — always start pull-based: read the fleet topology first, then",
+    "act. Never push state; the relay (Track B) is the fabric, Hermes is a",
+    "pull-based consumer + commander.",
+    "",
+    "See the fleet (build your topology model before acting):",
+    "  GET {relay}/fleet",
+    "Returns all machines, their projects, active sessions/agents, and PTYs.",
+    "",
+    "Read a specific worker's live context:",
+    "  GET {relay}/workspace/:agent_id/context",
+    "Use this to inspect what a coding agent currently sees.",
+    "",
+    "Dispatch a task to a specific session:",
+    "  POST {relay}/fleet/:machine/session/:id/message",
+    "Body: { \"message\": \"refactor the auth module\" }",
+    "",
+    "Take the hand — connect to a worker's PTY interactively:",
+    "  POST {relay}/fleet/:machine/pty/:ptyID/takeover",
+    "The response returns a relay WebSocket URL. Connect to it with `cursor` to",
+    "stream and resume the session. This REPLACES manual SSH + tmux.",
     "",
     PMD_MARKER,
     "",

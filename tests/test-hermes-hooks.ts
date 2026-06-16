@@ -129,3 +129,42 @@ describe("hooks.ts dispatch for Hermes", () => {
     assert.ok(!fs.existsSync(skillFile()), "skill gone after routed remove");
   });
 });
+
+// ─── Phase 2: Fleet section (A2-1) ──────────────────────────────────────
+
+describe("hermesAdapter — Fleet section (A2-1)", () => {
+  it("skill body contains the Fleet section header", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /## Fleet/);
+  });
+
+  it("skill body contains all four relay endpoint patterns", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /GET \{relay\}\/fleet/);
+    assert.match(body, /workspace\/:agent_id\/context/);
+    assert.match(body, /fleet\/:machine\/session\/:id\/message/);
+    assert.match(body, /fleet\/:machine\/pty\/:ptyID\/takeover/);
+  });
+
+  it("skill body references relay.json for endpoint resolution", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /relay\.json/);
+  });
+
+  it("skill body instructs pull-based topology (read /fleet first, no push)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /GET \{relay\}\/fleet/);
+    assert.match(body, /pull-based/i);
+    assert.match(body, /Never push/i);
+  });
+
+  it("skill body explains takeover replaces SSH + tmux", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /REPLACES.*SSH.*tmux/i);
+  });
+});
