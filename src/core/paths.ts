@@ -5,6 +5,7 @@ export const PIPEMD_DIR = ".pipemd";
 const HOME_LINK_DIR = path.join(os.homedir(), ".pipemd", "link");
 
 export const LIVE_DIR = path.join(PIPEMD_DIR, "live");
+export const RENDERED_SNAPSHOT = path.join(LIVE_DIR, ".render.md");
 export const PID_FILE = path.join(PIPEMD_DIR, ".daemon.pid");
 export const STATUS_FILE = path.join(PIPEMD_DIR, ".status.json");
 export const CONFIG_PATH = path.join(PIPEMD_DIR, "config.yml");

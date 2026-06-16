@@ -29,21 +29,32 @@ const WITH_INJECTION = CONFIG.delivery === "active" || CONFIG.delivery === "expe
 
 const FIFO_TEMP_DIR = mkdtempSync(joinPath(tmpdir(), "pmd-fifo-"));
 const FIFO_TEMP = joinPath(FIFO_TEMP_DIR, "read.md");
+const RENDERED_SNAPSHOT = joinPath(process.cwd(), ".pipemd", "live", ".render.md");
 
 function isFifoFile(filePath) {
   if (!filePath) return false;
   try { return statSync(resolvePath(filePath)).isFIFO(); } catch { return false; }
 }
 
+function redirectArgs(args, target) {
+  if ("filePath" in args) args.filePath = target;
+  if ("path" in args) args.path = target;
+  if ("file_path" in args) args.file_path = target;
+}
+
 function resolveFifoRead(args) {
   const filePath = extractFilePath(args);
   if (!isFifoFile(filePath)) return;
   try {
+    const data = readFileSync(RENDERED_SNAPSHOT, "utf-8");
+    if (data) { writeFileSync(FIFO_TEMP, data, "utf-8"); redirectArgs(args, FIFO_TEMP); return; }
+  } catch {}
+  try {
     execFileSync(getPmdBin(), ["run", "-o", FIFO_TEMP], { encoding: "utf-8", timeout: 10000, stdio: "ignore" });
-    if ("filePath" in args) args.filePath = FIFO_TEMP;
-    if ("path" in args) args.path = FIFO_TEMP;
-    if ("file_path" in args) args.file_path = FIFO_TEMP;
+    if (existsSync(FIFO_TEMP)) { redirectArgs(args, FIFO_TEMP); return; }
   } catch (e) { logPluginError("resolveFifoRead", e); }
+  try { writeFileSync(FIFO_TEMP, "> ⚠️ PipeMD context unavailable. Run `pmd status`.\n", "utf-8"); } catch {}
+  redirectArgs(args, FIFO_TEMP);
 }
 
 function cleanupFifoTemp() {

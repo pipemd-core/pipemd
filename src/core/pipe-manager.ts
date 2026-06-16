@@ -7,7 +7,8 @@ import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-ba
 import { log, errMsg } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
-import { LIVE_DIR, STATUS_FILE } from "./paths.js";
+import { LIVE_DIR, STATUS_FILE, RENDERED_SNAPSHOT } from "./paths.js";
+import { atomicWrite } from "./fs-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -218,6 +219,8 @@ async function updateCache(templatePath: string, config: PipeConfig) {
     const rendered = await renderContentAsync(template, config);
     const base = loadBase(config);
     _cachedRenderedContent = composeContent(base, rendered);
+    try { atomicWrite(RENDERED_SNAPSHOT, _cachedRenderedContent); }
+    catch (err: unknown) { log.warn(`snapshot write failed: ${errMsg(err)}`); }
     log.info("Cache updated");
     updateStatus({
       lastRun: new Date().toISOString(),
