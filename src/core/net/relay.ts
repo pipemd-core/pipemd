@@ -33,6 +33,11 @@ function hostname(): string {
   return os.hostname();
 }
 
+function sanitizeHostname(raw: string): string {
+  const cleaned = raw.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 253);
+  return cleaned || "unknown";
+}
+
 const MAX_BODY_BYTES = 1024 * 1024;
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -199,6 +204,7 @@ function syncWithPeers() {
           if (res.statusCode !== 200) return;
           try {
             const remote = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as SyncMessage;
+            const remoteHost = sanitizeHostname(remote.hostname);
             const now = Date.now();
             for (const [group, sessions] of Object.entries(remote.groups)) {
               let origins = store.get(group);
@@ -206,7 +212,7 @@ function syncWithPeers() {
                 origins = new Map();
                 store.set(group, origins);
               }
-              origins.set(remote.hostname, { sessions, lastSeen: now });
+              origins.set(remoteHost, { sessions, lastSeen: now });
             }
             peerLastSync.set(peer.host, now);
           } catch {
@@ -258,6 +264,8 @@ function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
   readBody(req)
     .then((raw) => {
       const msg = JSON.parse(raw) as SyncMessage;
+      const safeHostname = sanitizeHostname(msg.hostname);
+      const requesterGroups = new Set(Object.keys(msg.groups));
       const now = Date.now();
 
       for (const [group, sessions] of Object.entries(msg.groups)) {
@@ -266,21 +274,22 @@ function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
           origins = new Map();
           store.set(group, origins);
         }
-        origins.set(msg.hostname, { sessions, lastSeen: now });
+        origins.set(safeHostname, { sessions, lastSeen: now });
       }
 
       const myGroups: Record<string, CrewSession[]> = {};
       for (const [group, origins] of store) {
+        if (!requesterGroups.has(group)) continue;
         const sessions: CrewSession[] = [];
         for (const [origin, entry] of origins) {
-          if (origin !== msg.hostname) {
+          if (origin !== safeHostname) {
             sessions.push(...entry.sessions);
           }
         }
         if (sessions.length > 0) myGroups[group] = sessions;
       }
 
-      peerLastSync.set(msg.hostname, now);
+      peerLastSync.set(safeHostname, now);
       jsonResponse(res, 200, { hostname: hostname(), groups: myGroups });
     })
     .catch(() => jsonResponse(res, 400, { error: "invalid body" }));

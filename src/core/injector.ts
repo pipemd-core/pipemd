@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 import { COMMAND_TIMEOUT_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
+import { buildSafeEnv } from "./json-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -75,7 +76,7 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
       try {
         const { bin, args, env: cmdEnv } = parseCommand(cmd);
         const timeout = config.commandTimeouts?.[name] ?? COMMAND_TIMEOUT_MS;
-        const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout, cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
+        const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout, cwd: process.cwd(), env: buildSafeEnv(cmdEnv) });
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
@@ -137,7 +138,7 @@ function runCommandSync(commandName: string, cmd: string, config?: PipeConfig): 
   try {
     const { bin, args, env: cmdEnv } = parseCommand(cmd);
     const timeout = config?.commandTimeouts?.[commandName] ?? COMMAND_TIMEOUT_MS;
-    const out = execFileSync(bin, args, { encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: { ...process.env, ...cmdEnv } });
+    const out = execFileSync(bin, args, { encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: buildSafeEnv(cmdEnv) });
     return out.trimEnd();
   } catch (err: unknown) {
     const execErr = err as { stderr?: string; message?: string } | null;

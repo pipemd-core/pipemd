@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCORE=0
 
-# Grade 0 check: does it compile?
+# Grade 0 check: does it compile and lint?
 if ! npx tsc --noEmit >/dev/null 2>&1; then
   echo "0"
   exit 0
@@ -19,10 +19,11 @@ if [ "$modified" -eq 0 ]; then
 fi
 SCORE=1
 
-# Grade 2 check: modified hono-base.ts with improved error handler
-if grep -q 'application/json\|"error".*true\|errorResponse' src/hono-base.ts 2>/dev/null; then
+# Grade 2 check: modified hono-base.ts with improved error handler (not comments)
+CODE=$(grep -v '^\s*//' src/hono-base.ts 2>/dev/null | grep -v '^\s*\*')
+if echo "$CODE" | grep -q 'application/json\|"error".*true\|errorResponse' 2>/dev/null; then
   # Must still handle HTTPException (existing behavior preserved)
-  if grep -q 'HTTPException\|getResponse' src/hono-base.ts 2>/dev/null; then
+  if echo "$CODE" | grep -q 'HTTPException\|getResponse' 2>/dev/null; then
     SCORE=2
   fi
 fi

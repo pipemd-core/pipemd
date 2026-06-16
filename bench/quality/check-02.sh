@@ -5,10 +5,16 @@ set -euo pipefail
 
 SCORE=0
 
-# Grade 0 check: does it compile?
+# Grade 0 check: does it compile and lint?
 if ! npx tsc --noEmit >/dev/null 2>&1; then
   echo "0"
   exit 0
+fi
+if ! npx eslint src/middleware/response-cache/index.ts >/dev/null 2>&1; then
+  if [ -f "src/middleware/response-cache/index.ts" ]; then
+    echo "0"
+    exit 0
+  fi
 fi
 
 # Grade 1 check: did the agent modify any files?
@@ -21,12 +27,13 @@ SCORE=1
 
 # Grade 2 check: is the response-cache middleware created with correct pattern?
 if [ -f "src/middleware/response-cache/index.ts" ]; then
+  CODE=$(grep -v '^\s*//' src/middleware/response-cache/index.ts 2>/dev/null | grep -v '^\s*\*')
   # Must export a function called 'responseCache'
-  if grep -q 'export.*responseCache' src/middleware/response-cache/index.ts 2>/dev/null; then
+  if echo "$CODE" | grep -q 'export.*responseCache' 2>/dev/null; then
     # Must call next() (middleware pattern)
-    if grep -q 'next()' src/middleware/response-cache/index.ts 2>/dev/null; then
+    if echo "$CODE" | grep -q 'next()' 2>/dev/null; then
       # Must use cache (Map or similar)
-      if grep -q 'Map\|cache' src/middleware/response-cache/index.ts 2>/dev/null; then
+      if echo "$CODE" | grep -q 'Map\|cache' 2>/dev/null; then
         SCORE=2
       fi
     fi

@@ -19,7 +19,10 @@ const CONFIG_PATH = joinPath(PLUGIN_DIR, "pmd-config.json");
 function loadConfig() {
   try {
     return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-  } catch {
+  } catch (e) {
+    if (existsSync(CONFIG_PATH)) {
+      appendFileSync(ERROR_LOG_PATH, JSON.stringify({ ts: Date.now(), handler: "loadConfig", error: String(e?.message || e) }) + "\n", "utf-8");
+    }
     return { delivery: "passive" };
   }
 }
@@ -28,7 +31,6 @@ const CONFIG = loadConfig();
 const WITH_INJECTION = CONFIG.delivery === "active" || CONFIG.delivery === "expert";
 
 const FIFO_TEMP_DIR = mkdtempSync(joinPath(tmpdir(), "pmd-fifo-"));
-const FIFO_TEMP = joinPath(FIFO_TEMP_DIR, "read.md");
 const RENDERED_SNAPSHOT = joinPath(process.cwd(), ".pipemd", "live", ".render.md");
 
 function isFifoFile(filePath) {
@@ -45,21 +47,17 @@ function redirectArgs(args, target) {
 function resolveFifoRead(args) {
   const filePath = extractFilePath(args);
   if (!isFifoFile(filePath)) return;
+  const tempFile = joinPath(FIFO_TEMP_DIR, `${crypto.randomUUID()}.md`);
   try {
     const data = readFileSync(RENDERED_SNAPSHOT, "utf-8");
-    if (data) { writeFileSync(FIFO_TEMP, data, "utf-8"); redirectArgs(args, FIFO_TEMP); return; }
+    if (data) { writeFileSync(tempFile, data, "utf-8"); redirectArgs(args, tempFile); return; }
   } catch {}
   try {
-    execFileSync(getPmdBin(), ["run", "-o", FIFO_TEMP], { encoding: "utf-8", timeout: 10000, stdio: "ignore" });
-    if (existsSync(FIFO_TEMP)) { redirectArgs(args, FIFO_TEMP); return; }
+    execFileSync(getPmdBin(), ["run", "-o", tempFile], { encoding: "utf-8", timeout: 10000, stdio: "ignore" });
+    if (existsSync(tempFile)) { redirectArgs(args, tempFile); return; }
   } catch (e) { logPluginError("resolveFifoRead", e); }
-  try { writeFileSync(FIFO_TEMP, "> ⚠️ PipeMD context unavailable. Run `pmd status`.\n", "utf-8"); } catch {}
-  redirectArgs(args, FIFO_TEMP);
-}
-
-function cleanupFifoTemp() {
-  try { unlinkSync(FIFO_TEMP); } catch {}
-  try { require("node:fs").rmdirSync(FIFO_TEMP_DIR); } catch {}
+  try { writeFileSync(tempFile, "> ⚠️ PipeMD context unavailable. Run `pmd status`.\n", "utf-8"); } catch {}
+  redirectArgs(args, tempFile);
 }
 
 function resolvePmd() {
@@ -164,11 +162,13 @@ function refreshAgents() {
   const now = Date.now();
   if (now - lastAgentRefresh < 30000) return;
   lastAgentRefresh = now;
-  try {
-    const out = execFileSync(getPmdBin(), ["crew", "status", "--json"], { encoding: "utf-8", timeout: 5000 });
-    const data = JSON.parse(out);
-    stats.passiveAgents = Array.isArray(data.passiveAgents) ? data.passiveAgents : [];
-  } catch {}
+  execFile(getPmdBin(), ["crew", "status", "--json"], { encoding: "utf-8", timeout: 5000 }, (err, stdout) => {
+    if (err) return;
+    try {
+      const data = JSON.parse(stdout);
+      stats.passiveAgents = Array.isArray(data.passiveAgents) ? data.passiveAgents : [];
+    } catch {}
+  });
 }
 
 function writeStats() {
@@ -201,7 +201,7 @@ function pmd(args) {
 
 function pmdSync(args) {
   try {
-    return execFileSync(getPmdBin(), args, { encoding: "utf-8", timeout: 10000 }).trim();
+    return execFileSync(getPmdBin(), args, { encoding: "utf-8", timeout: 3000 }).trim();
   } catch (e) {
     logPluginError("pmdSync", e);
     return "";
@@ -458,7 +458,6 @@ async function buildEditFeedback(filePath) {
 
 async function afterHandler(input, output) {
   try {
-    cleanupFifoTemp();
     const tool = (input && input.tool) || "";
     captureTodos(tool, output);
     const isEdit = isEditTool(tool);
@@ -552,7 +551,8 @@ async function eventHandler({ event }) {
 
 join();
 writeStats();
-setInterval(() => { try { heartbeat(); } catch {} }, 30_000);
+const heartbeatTimer = setInterval(() => { try { heartbeat(); } catch {} }, 30_000);
+heartbeatTimer.unref();
 
 export default {
   id: "pmd-crew",

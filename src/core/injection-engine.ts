@@ -12,11 +12,12 @@ import type {
   InjectionTrigger,
   InjectionConfig,
   InjectionPayload,
+  InjectionRule,
   ContextSource,
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession } from "./crew.js";
-import { formatTimeAgo } from "./json-utils.js";
+import { formatTimeAgo, buildSafeEnv } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
 import { getTasksForSession, formatTaskBlock } from "./tasks.js";
 
@@ -26,6 +27,7 @@ const VALIDATION_COOLDOWN_MS = 60_000
 const RATE_LIMIT_WINDOW_MS = 10_000
 const MAX_INJECTIONS_PER_WINDOW = 30
 const RESOLVER_TOTAL_BUDGET_MS = 5000
+const RESOLVER_PER_ITEM_MS = 4000
 const MAX_SESSION_TRACKS = 256
 const injectionTimestamps = new Map<string, number[]>()
 
@@ -161,26 +163,9 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
   return "";
 }
 
-async function resolveFileErrors(ctx: ResolverContext): Promise<string> {
-  return resolveValidation(ctx);
-}
-
 async function resolveGitContext(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
-
-  if (ctx.trigger === "before-edit") {
-    const cacheKey = `last-read:${ctx.sessionId || ""}:${file}`;
-    const cached = readCache(cacheKey);
-    if (!cached) return "";
-    try {
-      const stat = fs.statSync(file);
-      if (stat.mtimeMs > cached.timestamp) {
-        return `⚠️ ${path.basename(file)} was modified externally since you last read it`;
-      }
-    } catch { return ""; }
-    return "";
-  }
 
   const cacheKey = `git-context:${file}`;
   const cached = readCache(cacheKey);
@@ -239,6 +224,7 @@ async function resolveCustom(ctx: ResolverContext): Promise<string> {
     const { stdout } = await execFileAsync(cmd, args, {
       encoding: "utf-8",
       timeout: 5000,
+      env: buildSafeEnv(),
     });
     return stdout.trim();
   } catch (err: unknown) {
@@ -438,7 +424,7 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
 
   const lines: string[] = [];
 
-  const escapedBase = baseName.replace(/\./g, "\\.");
+  const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const sq = "'";
   const dq = '"';
   const importPattern = `from\\s+(${sq}[^${sq}]*${escapedBase}[^${sq}]*${sq}|${dq}[^${dq}]*${escapedBase}[^${dq}]*${dq})`;
@@ -537,7 +523,7 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
 
   if (lines.length === 0) return "";
   const result = lines.join("\n");
-  writeCache(cacheKey, result, DEFAULT_TTLS["git-delta"] ?? 10000);
+  writeCache(cacheKey, result, DEFAULT_TTLS["import-graph"] ?? 30000);
   return result;
 }
 
@@ -566,7 +552,10 @@ async function resolveExports(ctx: ResolverContext): Promise<string> {
     const exportLines: string[] = [];
     for (const fl of fileLines) {
       const trimmed = fl.trim();
-      if (/^export (default |)(function |const |class |type |interface |enum |async function )[A-Za-z_]/.test(trimmed)) {
+      const sigMatch = trimmed.match(
+        /^export (default |)(function |const |class |type |interface |enum |async function )[A-Za-z_]/
+      );
+      if (sigMatch) {
         const sig = trimmed
           .replace(/^export /, "")
           .replace(/;$/, "")
@@ -574,6 +563,23 @@ async function resolveExports(ctx: ResolverContext): Promise<string> {
           .trim();
         const display = sig.length > 80 ? sig.slice(0, 77) + "..." : sig;
         exportLines.push(display);
+        continue;
+      }
+      const namedMatch = trimmed.match(/^export\s+\{([^}]+)\}\s*(?:from\s+['"][^'"]+['"])?/);
+      if (namedMatch) {
+        const names = namedMatch[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()!.trim()).filter(Boolean);
+        exportLines.push(`{ ${names.join(", ")} }`);
+        continue;
+      }
+      const reExportMatch = trimmed.match(/^export\s+\*\s+from\s+['"]([^'"]+)['"]/);
+      if (reExportMatch) {
+        exportLines.push(`* from ${reExportMatch[1]}`);
+        continue;
+      }
+      const typeReExportMatch = trimmed.match(/^export\s+type\s+\{([^}]+)\}\s*(?:from\s+['"][^'"]+['"])?/);
+      if (typeReExportMatch) {
+        const names = typeReExportMatch[1].split(",").map((s) => s.trim()).filter(Boolean);
+        exportLines.push(`type { ${names.join(", ")} }`);
       }
     }
     if (exportLines.length > 0) {
@@ -600,7 +606,7 @@ async function resolveExports(ctx: ResolverContext): Promise<string> {
 
   if (lines.length === 0) return "";
   const result = lines.join("\n");
-  writeCache(cacheKey, result, DEFAULT_TTLS["git-delta"] ?? 10000);
+  writeCache(cacheKey, result, DEFAULT_TTLS["exports"] ?? 30000);
   return result;
 }
 
@@ -650,6 +656,12 @@ async function resolveNow(ctx: ResolverContext): Promise<string> {
 async function resolveFileContent(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
+  const resolved = path.resolve(file);
+  const cwd = process.cwd();
+  if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+    log.warn(`resolveFileContent blocked path outside project root: ${file}`);
+    return "";
+  }
   const maxLines = ctx.maxLines ?? 60;
   try {
     if (!fs.existsSync(file)) return "";
@@ -666,7 +678,7 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
   "crew-todos": resolveCrewTodos,
-  "file-errors": resolveFileErrors,
+  "file-errors": resolveValidation,
   "git-context": resolveGitContext,
   "git-delta": resolveGitDelta,
   "git-staged": resolveGitStaged,
@@ -746,15 +758,17 @@ export async function resolveInjections(
     ? new Set(sessionSources)
     : null;
 
-  const payloads: InjectionPayload[] = []
+  const applicableRules = rules.filter((rule) => {
+    if (rule.scope === "target-file" && !targetFile) return false;
+    if (sourceFilter && !sourceFilter.has(rule.source)) return false;
+    return true;
+  });
+
   const resolverStart = Date.now()
 
-  for (const rule of rules) {
-    if (Date.now() - resolverStart > RESOLVER_TOTAL_BUDGET_MS) {
-      break
-    }
-    if (rule.scope === "target-file" && !targetFile) continue;
-
+  const resolveWithTimeout = async (
+    rule: InjectionRule,
+  ): Promise<{ rule: InjectionRule; content: string | null }> => {
     const ctx: ResolverContext = {
       trigger,
       targetFile,
@@ -763,14 +777,34 @@ export async function resolveInjections(
       intervalMin: rule["interval-min"],
       maxLines: rule["max-lines"],
     };
-
     const resolver = RESOLVERS[rule.source];
-    if (!resolver) continue;
+    if (!resolver) return { rule, content: null };
 
-    if (sourceFilter && !sourceFilter.has(rule.source)) continue;
+    const timeout = Math.min(RESOLVER_PER_ITEM_MS, Math.max(500, RESOLVER_TOTAL_BUDGET_MS - (Date.now() - resolverStart)));
 
-    const content = await resolver(ctx);
+    try {
+      const content = await Promise.race([
+        resolver(ctx),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), timeout),
+        ),
+      ]);
+      return { rule, content };
+    } catch (err: unknown) {
+      log.debug(`resolver ${rule.source} failed: ${errMsg(err)}`);
+      if (verbose) {
+        process.stderr.write(`[pmd:inject] resolver ${rule.source} error: ${errMsg(err)}\n`);
+      }
+      return { rule, content: null };
+    }
+  };
 
+  const results = await Promise.allSettled(applicableRules.map((r) => resolveWithTimeout(r)));
+
+  const payloads: InjectionPayload[] = []
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const { rule, content } = result.value;
     if (!content) continue;
 
     if (verbose) {
@@ -834,30 +868,6 @@ export async function triggerAsyncValidation(filePath: string): Promise<void> {
       });
       if (eslintResult) errors.push(eslintResult);
     } catch (err: unknown) { log.debug(`eslint validation failed: ${errMsg(err)}`); }
-
-    try {
-      const tscResult = await new Promise<string>((resolve) => {
-        execFile("npx", ["tsc", "--noEmit"], {
-          timeout: 30000,
-        }, (err, stdout) => {
-          if (err) {
-            if (stdout && typeof stdout === "string") {
-              const out = stdout.trim();
-              const relevant = out.split("\n").filter((l) => l.includes(filePath));
-              resolve(relevant.length > 0 ? relevant.join("\n") : "");
-            } else {
-              resolve("");
-            }
-          } else {
-            resolve(typeof stdout === "string" ? stdout.trim() : "");
-          }
-        });
-      });
-      if (tscResult) {
-        const relevant = tscResult.split("\n").filter((l) => l.includes(filePath));
-        if (relevant.length > 0) errors.push(...relevant);
-      }
-    } catch (err: unknown) { log.debug(`tsc validation failed: ${errMsg(err)}`); }
 
     const content = errors.length > 0 ? errors.join("\n") : "No errors found";
     writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000);

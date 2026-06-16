@@ -128,6 +128,8 @@ function computeVerdict(sw, swo, withData) {
   const readsWo = swo?.r?.med || 0;
   const wallW = sw?.w?.med || 0;
   const wallWo = swo?.w?.med || 0;
+  const itW = sw?.it?.med || 0;
+  const itWo = swo?.it?.med || 0;
   const qW = sw?.q, qWo = swo?.q;
 
   const consumed = withData.some(d => (d.metrics.injections_delivered || 0) > 0);
@@ -139,7 +141,8 @@ function computeVerdict(sw, swo, withData) {
   const callsDelta = callsWo > 0 ? pct(callsW, callsWo) : 0;
   const readsDelta = readsWo > 0 ? pct(readsW, readsWo) : 0;
   const wallDelta = wallWo > 0 ? pct(wallW, wallWo) : 0;
-  const sig = `calls ${callsDelta.toFixed(0)}%, reads ${readsDelta.toFixed(0)}%, wall ${wallDelta.toFixed(0)}%`;
+  const tokDelta = itWo > 0 ? pct(itW, itWo) : 0;
+  const sig = `calls ${callsDelta.toFixed(0)}%, reads ${readsDelta.toFixed(0)}%, wall ${wallDelta.toFixed(0)}%, tokens ${tokDelta.toFixed(0)}%`;
 
   let verdict, detail;
   if (!consumed && withData.length > 0) {
@@ -153,7 +156,7 @@ function computeVerdict(sw, swo, withData) {
   } else {
     verdict = "INCONCLUSIVE"; detail = `No efficiency improvement (${sig})`;
   }
-  return { verdict, detail, consumed, callsDelta, readsDelta, wallDelta };
+  return { verdict, detail, consumed, callsDelta, readsDelta, wallDelta, tokDelta };
 }
 
 const metricsDef = [

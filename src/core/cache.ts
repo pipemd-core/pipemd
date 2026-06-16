@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  statSync,
   unlinkSync,
 } from "node:fs";
 import { resolve } from "node:path";
@@ -22,6 +23,16 @@ export interface CacheEntry {
 export const CACHE_DIR = ".pipemd/cache/sources";
 export const VALIDATION_DIR = ".pipemd/cache/validation";
 const CACHE_MANIFEST = ".pipemd/cache/manifest.json";
+const MEM_CACHE_TTL = 3_000;
+const memCache = new Map<string, { data: CacheEntry | null; expires: number; mtime: number }>();
+
+function evictMemCache(): void {
+  if (memCache.size <= 128) return;
+  const now = Date.now();
+  for (const [key, entry] of memCache) {
+    if (entry.expires <= now) memCache.delete(key);
+  }
+}
 
 export const DEFAULT_TTLS: Record<string, number> = {
   crew: 5000,
@@ -37,6 +48,8 @@ export const DEFAULT_TTLS: Record<string, number> = {
   "syntax-check": 10000,
   "edit-diff": 5000,
   "test-failures": 60000,
+  "import-graph": 30000,
+  "exports": 30000,
 };
 
 function keyToFilename(key: string): string {
@@ -65,16 +78,37 @@ export function ensureCacheDir(): void {
 }
 
 export function readCache(key: string): CacheEntry | null {
+  const memEntry = memCache.get(key);
+  if (memEntry && memEntry.expires > Date.now()) {
+    try {
+      const currentMtime = statSync(entryPath(key)).mtimeMs;
+      if (currentMtime !== memEntry.mtime) {
+        memCache.delete(key);
+      } else {
+        if (memEntry.data && Date.now() - memEntry.data.timestamp > memEntry.data.ttl) {
+          memCache.delete(key);
+          return null;
+        }
+        return memEntry.data;
+      }
+    } catch {
+      memCache.delete(key);
+      return null;
+    }
+  }
   const path = entryPath(key);
   if (!existsSync(path)) {
     return null;
   }
   try {
+    const stat = statSync(path);
     const raw = readFileSync(path, "utf-8");
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.timestamp > entry.ttl) {
       return null;
     }
+    memCache.set(key, { data: entry, expires: Date.now() + MEM_CACHE_TTL, mtime: stat.mtimeMs });
+    evictMemCache();
     return entry;
   } catch (err: unknown) { log.debug(`readCache parse failed: ${errMsg(err)}`); return null; }
 }
@@ -97,6 +131,10 @@ export function writeCache(
   };
   const path = entryPath(key);
   atomicWrite(path, JSON.stringify(entry));
+  try {
+    const stat = statSync(path);
+    memCache.set(key, { data: entry, expires: Date.now() + MEM_CACHE_TTL, mtime: stat.mtimeMs });
+  } catch {}
   return entry;
 }
 
@@ -105,6 +143,7 @@ export function isFresh(key: string): boolean {
 }
 
 export function invalidate(key: string): void {
+  memCache.delete(key);
   const p = entryPath(key);
   if (existsSync(p)) {
     unlinkSync(p);
@@ -113,6 +152,9 @@ export function invalidate(key: string): void {
 
 export function invalidateCachePattern(pattern: string): number {
   let count = 0;
+  for (const [key] of memCache) {
+    if (key.includes(pattern)) memCache.delete(key);
+  }
   const dirs = [CACHE_DIR, VALIDATION_DIR];
   for (const dir of dirs) {
     if (!existsSync(dir)) continue;

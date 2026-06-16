@@ -52,6 +52,8 @@ npx @pipemd-core/pipemd start
 
 > **Bash required.** Windows users: use WSL or Git Bash.
 
+> **⚠ Cloned repo?** `.pipemd/config.yml` defines shell commands that `pmd start` executes. Always audit it (and `.pipemd/scripts/`) before starting the daemon in a repo you didn't create. See [SECURITY.md](SECURITY.md#1-command-execution-via-config).
+
 ---
 
 ## What Your AI Sees
@@ -202,6 +204,7 @@ Every injected block costs LLM tokens (roughly 1 token per 4 bytes). A typical `
 | `pmd crew` | Multi-agent coordination: join, claim files, surface conflicts. See below. |
 | `pmd link` | *(Beta)* Cross-machine federation: connect daemons across machines and Docker. |
 | `pmd trace` | Live resolution tree — debug crew coordination, locks, injection timeline. |
+| `pmd validate` | Run eslint on a single file (`--file <path>`). Used by post-edit hooks. |
 | `pmd uninstall` | Clean removal. Restores original context file. |
 
 ---

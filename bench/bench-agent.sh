@@ -154,15 +154,24 @@ parse_run_metrics() {
         wall_end=$(echo "$line" | jq -r '.timestamp // empty' 2>/dev/null || echo "")
         local part_tokens=$(echo "$line" | jq -c '
           .part.tokens // {} |
-          {input: (.input // 0), output: (.output // 0)}
-        ' 2>/dev/null || echo '{"input":0,"output":0}')
+          {
+            input: (.input // 0),
+            output: (.output // 0),
+            cache_read: (.cache_read // .["cache.read"] // 0),
+            cache_write: (.cache_write // .["cache.write"] // 0)
+          }
+        ' 2>/dev/null || echo '{"input":0,"output":0,"cache_read":0,"cache_write":0}')
         if [ "$part_tokens" != "null" ] && [ "$part_tokens" != "" ]; then
           local inp=$(echo "$part_tokens" | jq -r '.input // 0')
           local out=$(echo "$part_tokens" | jq -r '.output // 0')
-          input_tokens=$((input_tokens + inp))
+          local cr=$(echo "$part_tokens" | jq -r '.cache_read // 0')
+          local cw=$(echo "$part_tokens" | jq -r '.cache_write // 0')
+          local turn_total=$((inp + cr + cw))
+          # Use last turn's total as input_tokens (peak context, avoids re-counting prefix)
+          input_tokens=$turn_total
           output_tokens=$((output_tokens + out))
-          if [ "$first_turn_input" -eq 0 ] && [ "$inp" -gt 0 ]; then
-            first_turn_input=$inp
+          if [ "$first_turn_input" -eq 0 ] && [ "$turn_total" -gt 0 ]; then
+            first_turn_input=$turn_total
           fi
         fi
         ;;
@@ -503,10 +512,12 @@ for s in "${SCEN[@]}"; do
       (cd "$worktree_base" && git init -q && git add -A && git commit -qm "baseline" 2>/dev/null || true)
       (cd "$worktree_base" && pnpm install --silent 2>/dev/null || true)
       if [ "$condition" = "without" ]; then
-        rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" 2>/dev/null || true
+        rm -rf "$worktree_base/.pipemd" "$worktree_base/AGENTS.md" "$worktree_base/AI_CONTEXT.md" "$worktree_base/.opencode" 2>/dev/null || true
       elif [ "$condition" = "passive" ]; then
         force_legacy_mode "$worktree_base"
         clean_fifos "$worktree_base"
+        mkdir -p "$worktree_base/.opencode/plugin"
+        echo '{"delivery":"passive"}' > "$worktree_base/.opencode/plugin/pmd-config.json"
         # Render AGENTS.md snapshot, then freeze
         (cd "$worktree_base" && pmd start) 2>/dev/null || true
         _pmd_wait=0

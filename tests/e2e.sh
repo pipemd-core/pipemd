@@ -189,8 +189,8 @@ if [ -n "$PIPE_FILE" ]; then
     echo -e "  ${GREEN}✓${NC} Named pipe produced output"
     PASS=$((PASS + 1))
   else
-    echo -e "  ${YELLOW}⊘${NC} Pipe read timed out or empty"
-    SKIP=$((SKIP + 1))
+    echo -e "  ${RED}✗${NC} Pipe read timed out or empty (daemon not serving)"
+    FAIL=$((FAIL + 1))
   fi
 else
   echo -e "  ${YELLOW}⊘${NC} No named pipe found (Legacy Mode or not available)"

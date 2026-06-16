@@ -56,7 +56,8 @@ export function generateSessionId(): string {
 }
 
 function ensureCrewDir(): void {
-  fs.mkdirSync(CREW_DIR, { recursive: true });
+  fs.mkdirSync(CREW_DIR, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(CREW_DIR, 0o700); } catch (err: unknown) { log.debug(`ensureCrewDir chmod failed: ${errMsg(err)}`); }
 }
 
 export function isPipemdProject(): boolean {
@@ -78,6 +79,7 @@ export function writeSessionAtomic(session: CrewSession): void {
   ensureCrewDir();
   const target = crewSessionPath(session.id);
   atomicWrite(target, JSON.stringify(session, null, 2) + "\n");
+  try { fs.chmodSync(target, 0o600); } catch (err: unknown) { log.debug(`writeSessionAtomic chmod failed: ${errMsg(err)}`); }
   sessionListCache.invalidate();
 }
 

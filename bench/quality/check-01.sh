@@ -5,8 +5,12 @@ set -euo pipefail
 
 SCORE=0
 
-# Grade 0: tsc must pass
+# Grade 0: tsc and eslint must pass
 if ! npx tsc --noEmit >/dev/null 2>&1; then
+  echo "0"
+  exit 0
+fi
+if ! npx eslint src/commands/doctor.ts >/dev/null 2>&1; then
   echo "0"
   exit 0
 fi
@@ -19,8 +23,8 @@ if [ "$modified" -eq 0 ]; then
 fi
 SCORE=1
 
-# Grade 2: must check for AGENTS.md existence
-if grep -qiE 'AGENTS\.md|agents\.md|context.*file.*exist|existsSync.*agents|fileExist.*AGENTS' src/commands/doctor.ts 2>/dev/null; then
+# Grade 2: must check for AGENTS.md existence in actual code (not comments)
+if grep -v '^\s*//' src/commands/doctor.ts 2>/dev/null | grep -v '^\s*\*' | grep -qiE 'AGENTS\.md|existsSync.*agents|contextFiles|fileExist.*AGENTS' 2>/dev/null; then
   SCORE=2
 fi
 

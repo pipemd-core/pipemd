@@ -1,25 +1,20 @@
-import { mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, statSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync, statSync, openSync, closeSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { computePayloadHash } from "./injection-types.js";
 import { atomicWrite } from "./fs-utils.js";
 import { log, errMsg } from "./logger.js";
+import { isPidAlive } from "./json-utils.js";
 import { TtlCache } from "./ttl-cache.js";
-
-interface InjectedRecord {
-  sessionId: string;
-  source: string;
-  hash: string;
-  timestamp: number;
-  content?: string;
-}
 
 type SessionStore = Record<string, { hash: string; timestamp: number }>;
 
 export const INJECTED_DIR = ".pipemd/cache/injected";
 
-const memCache = new Map<string, TtlCache<SessionStore>>();
 const MEM_CACHE_TTL = 2_000;
 const MEM_CACHE_MAX_ENTRIES = 128;
+const DEDUP_SOURCE_TTL_MS = 120_000;
+
+const memCache = new Map<string, TtlCache<SessionStore>>();
 
 export function clearMemCache(): void {
   memCache.clear();
@@ -72,6 +67,40 @@ function saveSession(sessionId: string, store: SessionStore): void {
 }
 
 export function recordInjection(sessionId: string, source: string, content: string): void {
+  const lockPath = sessionPath(sessionId) + ".lock";
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const fd = openSync(lockPath, "wx", 0o600);
+      try { writeSync(fd, String(process.pid)); } catch {}
+      closeSync(fd);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        try {
+          const lockPid = parseInt(readFileSync(lockPath, "utf-8").trim(), 10);
+          if (!isNaN(lockPid) && !isPidAlive(lockPid)) {
+            try { unlinkSync(lockPath); } catch {}
+            continue;
+          }
+        } catch {
+          try { unlinkSync(lockPath); } catch {}
+          continue;
+        }
+        const end = Date.now() + 5 + Math.floor(Math.random() * 15);
+        while (Date.now() < end) {}
+        continue;
+      }
+      break;
+    }
+
+    try {
+      const store = loadSession(sessionId);
+      store[source] = { hash: computePayloadHash(content), timestamp: Date.now() };
+      saveSession(sessionId, store);
+      return;
+    } finally {
+      try { unlinkSync(lockPath); } catch {}
+    }
+  }
   const store = loadSession(sessionId);
   store[source] = { hash: computePayloadHash(content), timestamp: Date.now() };
   saveSession(sessionId, store);
@@ -86,7 +115,11 @@ export function checkInjectionStatus(
   const entry = store[source];
   if (!entry) return "new";
   const hash = computePayloadHash(content);
-  return hash === entry.hash ? "unchanged" : "changed";
+  if (hash === entry.hash) {
+    if (Date.now() - entry.timestamp > DEDUP_SOURCE_TTL_MS) return "changed";
+    return "unchanged";
+  }
+  return "changed";
 }
 
 export function getLastInjectedHash(sessionId: string, source: string): string | null {

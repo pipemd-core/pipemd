@@ -84,7 +84,6 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
   rules: {
     "before-read": [
       { source: "crew-status", scope: "global", "max-lines": 3 },
-      { source: "crew-todos", scope: "global", "max-lines": 10 },
     ],
     "before-edit": [
       { source: "crew-locks", scope: "target-file" },

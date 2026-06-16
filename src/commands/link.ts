@@ -59,7 +59,8 @@ function readOrGenerateToken(): string {
   } catch (err: unknown) { log.debug(`read existing token failed: ${errMsg(err)}`); }
   const token = crypto.randomBytes(16).toString("hex");
   ensureLinkDir();
-  fs.writeFileSync(TOKEN_FILE, token, "utf-8");
+  fs.writeFileSync(TOKEN_FILE, token, { encoding: "utf-8", mode: 0o600 });
+  try { fs.chmodSync(TOKEN_FILE, 0o600); } catch (err: unknown) { log.debug(`chmod token failed: ${errMsg(err)}`); }
   return token;
 }
 
@@ -75,7 +76,8 @@ function readPeers(): { host: string; token: string }[] {
 
 function writePeers(peers: { host: string; token: string }[]) {
   ensureLinkDir();
-  fs.writeFileSync(PEERS_FILE, JSON.stringify(peers, null, 2), "utf-8");
+  fs.writeFileSync(PEERS_FILE, JSON.stringify(peers, null, 2), { encoding: "utf-8", mode: 0o600 });
+  try { fs.chmodSync(PEERS_FILE, 0o600); } catch (err: unknown) { log.debug(`chmod peers failed: ${errMsg(err)}`); }
 }
 
 function startRelayProcess(): number {

@@ -12,6 +12,7 @@ PipeMD executes shell commands, manages named pipes, and communicates over HTTP.
 | `AGENTS.md` (named pipe) | **No** | AI agents write to this pipe. Content is sanitized before write-back. |
 | `.pipemd/base.md` | **Partial** | AI edits persist here. Content is user-editable by design. |
 | `.pipemd/template.md` | **Partial** | AI edits outside `<!-- pmd: -->` blocks persist here via write-back. |
+| Context block data (`/blocks` endpoint) | **No** | Data from relay blocks enters agent context. Treat as untrusted input. |
 | Link relay HTTP endpoints | **No** | Network-facing. See Relay Security below. |
 | Environment variables | **Partial** | `PMD_RELAY`, `PMD_GROUP`, `PMD_SESSION` are trusted. `PMD_DEBUG` is safe. |
 
@@ -80,11 +81,26 @@ This prevents injection commands from reading files outside the project.
 Crew sessions are stored as JSON files in `.pipemd/crew/` with no authentication. Any local process can read, write, or delete session files.
 
 **Mitigations:**
-- The `.pipemd/` directory should not be world-readable (`chmod 0o700`).
+- `.pipemd/crew/` directory is created with `0o700` permissions (owner-only).
+- Session files are written with `0o600` permissions (owner read/write only).
 - Session IDs have 48 bits of entropy (sufficient for local filesystem).
 - Stale sessions are reaped after 90 seconds.
 
-### 7. Symlink Traversal
+### 7. Prompt Injection via Context Blocks
+
+**Severity: Medium**
+
+Context block data from the `/blocks` relay endpoint and `/sync` peer exchange enters the agent's LLM context. A malicious peer or localhost process could push crafted block data containing instructions that the agent may follow.
+
+**Mitigations:**
+- Block data is wrapped in fenced code blocks within `<!-- pmd: -->` markers, clearly separating it from trusted base instructions.
+- The `/blocks` endpoint is localhost-only.
+- `/sync` responses are filtered to only groups the requester is a member of (SEC-005).
+- Hostnames in sync messages are sanitized to alphanumeric + hyphens + dots (SEC-004).
+
+**Recommendation:** Treat all block data as untrusted input. Do not act on instructions embedded in context blocks from unknown peers.
+
+### 8. Symlink Traversal
 
 **Severity: Mitigated**
 
@@ -135,3 +151,4 @@ We will acknowledge reports within 48 hours and aim to ship a fix within 7 days.
 |------|--------|
 | 2026-05-24 | Initial security model document |
 | 2026-05-24 | Updated: token/PID/port file permissions now enforced (0o600) |
+| 2026-06-16 | Added: prompt injection trust boundary, crew dir 0o700, symlink TOCTOU hardening, hostname sanitization, group-scoped sync |

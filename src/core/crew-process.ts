@@ -97,7 +97,7 @@ export function resolveAgentIdentity(
 
   if (isWindows() && procMap.size === 0) {
     const envSession = process.env.PMD_SESSION;
-    if (envSession) {
+    if (envSession && /^cr_[0-9a-f]+$/.test(envSession)) {
       try {
         const raw = fs.readFileSync(`.pipemd/crew/${envSession}.json`, "utf-8");
         const s = JSON.parse(raw);

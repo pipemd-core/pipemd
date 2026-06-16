@@ -38,3 +38,22 @@ export function formatTimeAgo(isoString: string): string {
   const days = Math.floor(hrs / 24);
   return `${days}d`;
 }
+
+const SAFE_ENV_KEYS = new Set([
+  "PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TZ",
+  "LC_ALL", "LC_CTYPE", "LC_NUMERIC", "LC_TIME", "LC_COLLATE", "LC_MONETARY", "LC_MESSAGES",
+  "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+  "PMD_BIN", "PMD_RELAY", "PMD_GROUP", "PMD_SESSION", "PMD_ASTGREP", "PMD_CREW_ROLE", "PMD_CREW_COORDINATOR",
+]);
+
+export function buildSafeEnv(extra?: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    if (SAFE_ENV_KEYS.has(key)) {
+      env[key] = value;
+    }
+  }
+  if (extra) Object.assign(env, extra);
+  return env;
+}

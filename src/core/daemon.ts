@@ -203,8 +203,7 @@ export function runDaemon() {
 
   process.on("unhandledRejection", (reason) => {
     const msg = errMsg(reason);
-    log.error(`Unhandled rejection: ${msg}`);
-    shutdown(allPipePaths, 1);
+    log.error(`Unhandled rejection (non-fatal): ${msg}`);
   });
 
   log.info("Daemon running.");

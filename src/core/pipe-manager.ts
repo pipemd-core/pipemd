@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { renderContentAsync, parseCommand } from "./injector.js";
@@ -9,6 +10,7 @@ import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { LIVE_DIR, STATUS_FILE, RENDERED_SNAPSHOT } from "./paths.js";
 import { atomicWrite } from "./fs-utils.js";
+import { buildSafeEnv } from "./json-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +18,8 @@ const ENXIO_MAX_RETRIES = 100;
 const ENXIO_RETRY_WINDOW_MS = 60000;
 
 const WRITE_BUFFER_DEBOUNCE_MS = 1000;
+const WRITE_BUFFER_MAX_BYTES = 512 * 1024;
+const RENDER_REQUEUE_DELAY_MS = 500;
 
 const activeTimeouts: NodeJS.Timeout[] = [];
 const activeIntervals: NodeJS.Timer[] = [];
@@ -70,14 +74,38 @@ export function resolvePipePath(pipeFile: string, pipe: { render?: string; comma
 }
 
 export function createPipe(pipePath: string): boolean {
-  try { fs.unlinkSync(pipePath); } catch (err: unknown) { log.debug(`unlink pipe before mkfifo: ${errMsg(err)}`); }
-
   try {
     const dir = path.dirname(pipePath);
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
-    execFileSync("mkfifo", [pipePath], { encoding: "utf-8" });
+    try { fs.chmodSync(dir, 0o700); } catch (err: unknown) { log.debug(`createPipe dir chmod: ${errMsg(err)}`); }
+
+    const tempPipe = pipePath + `.tmp-${crypto.randomBytes(8).toString("hex")}`;
+    try { fs.unlinkSync(tempPipe); } catch (err: unknown) { log.debug(`unlink temp pipe: ${errMsg(err)}`); }
+    execFileSync("mkfifo", [tempPipe, "-m", "0600"], { encoding: "utf-8" });
+
+    const tempStat = fs.statSync(tempPipe);
+    if (!tempStat.isFIFO()) {
+      log.warn(`createPipe: temp pipe ${tempPipe} is not a FIFO — aborting.`);
+      try { fs.unlinkSync(tempPipe); } catch {}
+      return false;
+    }
+
+    try { fs.renameSync(tempPipe, pipePath); }
+    catch (err: unknown) {
+      log.debug(`createPipe rename failed, falling back to unlink+mkfifo: ${errMsg(err)}`);
+      try { fs.unlinkSync(tempPipe); } catch {}
+      try { fs.unlinkSync(pipePath); } catch (err: unknown) { log.debug(`unlink pipe before mkfifo: ${errMsg(err)}`); }
+      execFileSync("mkfifo", [pipePath, "-m", "0600"], { encoding: "utf-8" });
+    }
+
+    const finalStat = fs.statSync(pipePath);
+    if (!finalStat.isFIFO()) {
+      log.warn(`createPipe: ${pipePath} is not a FIFO after creation — removing.`);
+      try { fs.unlinkSync(pipePath); } catch {}
+      return false;
+    }
     fs.chmodSync(pipePath, 0o600);
     log.info(`Created pipe: ${pipePath}`);
     return true;
@@ -183,7 +211,7 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
         encoding: "utf-8",
         timeout,
         cwd: process.cwd(),
-        env: { ...process.env, ...cmdEnv },
+        env: buildSafeEnv(cmdEnv),
       }).then(({ stdout }) => {
         const md = `\`\`\`\n${stdout.trimEnd()}\n\`\`\``;
         writeSafe(writeFd, md);
@@ -205,14 +233,19 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
 
 let _cachedRenderedContent: string = "";
 let _isRendering = false;
+let _renderPending = false;
 
 export function getCachedRenderedContent(): string { return _cachedRenderedContent; }
 export function setIsRendering(value: boolean): void { _isRendering = value; }
 export function getIsRendering(): boolean { return _isRendering; }
 
 async function updateCache(templatePath: string, config: PipeConfig) {
-  if (_isRendering) return;
+  if (_isRendering) {
+    _renderPending = true;
+    return;
+  }
   _isRendering = true;
+  _renderPending = false;
   try {
     const start = Date.now();
     const template = fs.readFileSync(templatePath, "utf-8");
@@ -233,6 +266,9 @@ async function updateCache(templatePath: string, config: PipeConfig) {
     updateStatus({ lastRun: new Date().toISOString(), durationMs: 0, error: msg });
   } finally {
     _isRendering = false;
+    if (_renderPending) {
+      trackedSetTimeout(() => updateCache(templatePath, config), RENDER_REQUEUE_DELAY_MS);
+    }
   }
 }
 
@@ -253,6 +289,12 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
 
     readStream.on("data", (chunk: Buffer | string) => {
       incomingBuffer += chunk;
+      if (incomingBuffer.length > WRITE_BUFFER_MAX_BYTES) {
+        log.warn(`Write-back buffer exceeded ${WRITE_BUFFER_MAX_BYTES} bytes — discarding (possible stuck writer)`);
+        incomingBuffer = "";
+        if (incomingTimer) { trackedClearTimeout(incomingTimer); incomingTimer = null; }
+        return;
+      }
       if (incomingTimer) trackedClearTimeout(incomingTimer);
       incomingTimer = trackedSetTimeout(() => {
         const data = incomingBuffer;
