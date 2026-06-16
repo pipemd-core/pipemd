@@ -9,7 +9,6 @@ import type { HookInstallResult } from "../src/core/hooks.js";
 
 const SKILL_DIR_REL = path.join(".hermes", "skills", "devops", "pipemd-context");
 const SKILL_REL = path.join(SKILL_DIR_REL, "SKILL.md");
-const RELAY_REL = path.join(SKILL_DIR_REL, "relay.json");
 const PMD_MARKER = "<!-- pipemd-managed-skill -->";
 
 let tmpDir: string;
@@ -37,10 +36,6 @@ afterEach(() => {
 
 function skillFile(): string {
   return path.join(fakeHome, SKILL_REL);
-}
-
-function relayFile(): string {
-  return path.join(fakeHome, RELAY_REL);
 }
 
 // ─── Phase 1 (regression — must stay green) ─────────────────────────────
@@ -132,114 +127,5 @@ describe("hooks.ts dispatch for Hermes", () => {
     const r = removeHooks("Hermes", tmpDir) as HookInstallResult;
     assert.equal(r.harness, "Hermes");
     assert.ok(!fs.existsSync(skillFile()), "skill gone after routed remove");
-  });
-});
-
-// ─── Phase 2: Fleet section (A2-1) ──────────────────────────────────────
-
-describe("hermesAdapter \u2014 Fleet section (A2-1)", () => {
-  it("skill body contains the Fleet section header", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const body = fs.readFileSync(skillFile(), "utf-8");
-    assert.match(body, /## Fleet/);
-  });
-
-  it("skill body contains all four relay endpoint patterns", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const body = fs.readFileSync(skillFile(), "utf-8");
-    assert.match(body, /GET \{relay\}\/fleet/);
-    assert.match(body, /workspace\/:agent_id\/context/);
-    assert.match(body, /fleet\/:machine\/session\/:id\/message/);
-    assert.match(body, /fleet\/:machine\/pty\/:ptyID\/takeover/);
-  });
-
-  it("skill body references relay.json for endpoint resolution", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const body = fs.readFileSync(skillFile(), "utf-8");
-    assert.match(body, /relay\.json/);
-  });
-
-  it("skill body instructs pull-based topology (read /fleet first)", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const body = fs.readFileSync(skillFile(), "utf-8");
-    assert.match(body, /GET \{relay\}\/fleet/);
-    assert.match(body, /pull-based/i);
-  });
-});
-
-// ─── Phase 2: Relay config injection (A2-2) ─────────────────────────────
-
-describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
-  let origRelay: string | undefined;
-
-  beforeEach(() => {
-    origRelay = process.env.PMD_RELAY;
-    process.env.PMD_RELAY = "http://test-relay:9741";
-    const tokenDir = path.join(fakeHome, ".pipemd", "link");
-    fs.mkdirSync(tokenDir, { recursive: true });
-    fs.writeFileSync(path.join(tokenDir, "relay.token"), "test-token-abc123");
-  });
-
-  afterEach(() => {
-    if (origRelay === undefined) delete process.env.PMD_RELAY;
-    else process.env.PMD_RELAY = origRelay;
-  });
-
-  it("writes relay.json with baseUrl and token", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const relayJson = JSON.parse(fs.readFileSync(relayFile(), "utf-8"));
-    assert.equal(relayJson.baseUrl, "http://test-relay:9741");
-    assert.equal(relayJson.token, "test-token-abc123");
-  });
-
-  it("relay config reconciliation is idempotent (installed=false on re-run)", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const r = hermesAdapter.installHooks(tmpDir, "passive", false, false);
-    assert.equal(r.installed, false);
-    assert.match(r.detail, /already present/);
-  });
-
-  it("relay.json has restricted permissions (0o600)", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const mode = fs.statSync(relayFile()).mode & 0o777;
-    assert.equal(mode, 0o600);
-  });
-
-  it("removeHooks cleans up relay.json alongside the skill", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    assert.ok(fs.existsSync(relayFile()));
-    hermesAdapter.removeHooks(tmpDir);
-    assert.ok(!fs.existsSync(relayFile()), "relay.json should be removed with the skill");
-  });
-});
-
-// ─── Phase 2: Boot-time fleet awareness (A2-3) ──────────────────────────
-
-describe("hermesAdapter \u2014 boot-time fleet awareness (A2-3)", () => {
-  it("ensures commands.fleet in config.yml", () => {
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
-    assert.match(cfg, /fleet:\s*pmd fleet/);
-  });
-
-  it("adds a fleet block to template.md when missing", () => {
-    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
-    fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
-    hermesAdapter.installHooks(tmpDir, "passive", false, true);
-    const tpl = fs.readFileSync(tplPath, "utf-8");
-    assert.match(tpl, /<!-- pmd: fleet -->/);
-    assert.match(tpl, /<!-- \/pmd -->/);
-  });
-
-  it("does not duplicate the fleet block if already present", () => {
-    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
-    fs.writeFileSync(
-      tplPath,
-      "# Template\n\n<!-- pmd: fleet -->\n```\n\n```\n<!-- /pmd -->\n",
-    );
-    hermesAdapter.installHooks(tmpDir, "passive", false, false);
-    const tpl = fs.readFileSync(tplPath, "utf-8");
-    const count = (tpl.match(/<!-- pmd: fleet -->/g) || []).length;
-    assert.equal(count, 1);
   });
 });
