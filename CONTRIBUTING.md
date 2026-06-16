@@ -1,5 +1,7 @@
 # Contributing to PipeMD
 
+For branching, lanes, and promotion rules: see `docs/discipline.md`.
+
 PipeMD is strict TypeScript, **ESM-only** (imports use `.js` extensions, `NodeNext` resolution), built with `tsup`, and targets Node.js 18+.
 
 ## Build & Test

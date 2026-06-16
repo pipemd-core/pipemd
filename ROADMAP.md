@@ -302,7 +302,7 @@ Multi-machine relay. Context sharing, not orchestration.
 | Team mode / RBAC | Cut | Single-user DX must be flawless first |
 | Custom DSL or sandboxing | Cut | Blocks are bash scripts. No new runtime. |
 | Editor integrations | Cut | Different product surface. PipeMD injects on tool calls, not keystrokes. |
-| Agent fleet orchestration | **Cut** | CAO/Weave territory. PipeMD provides context, not task assignment. |
+| Agent fleet orchestration | **Cut** from `main`. Incubated on `experimental` per the Discipline in `docs/discipline.md`. | CAO/Weave territory on the product track; the fleet fabric (federation, dispatch, PTY) is incubated separately. |
 
 ## Design Principles
 

@@ -1,5 +1,6 @@
 version: "1.0"
 delivery: active
+base: .pipemd/base.md
 commands:
   arch: PMD_TOKEN_PROFILE=high PMD_ECOSYSTEM=Node-TypeScript bash
     .pipemd/scripts/architecture/arch.sh
