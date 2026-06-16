@@ -9,6 +9,7 @@ import type { HookInstallResult } from "../src/core/hooks.js";
 
 const SKILL_DIR_REL = path.join(".hermes", "skills", "devops", "pipemd-context");
 const SKILL_REL = path.join(SKILL_DIR_REL, "SKILL.md");
+const RELAY_REL = path.join(SKILL_DIR_REL, "relay.json");
 const PMD_MARKER = "<!-- pipemd-managed-skill -->";
 
 let tmpDir: string;
@@ -36,6 +37,10 @@ afterEach(() => {
 
 function skillFile(): string {
   return path.join(fakeHome, SKILL_REL);
+}
+
+function relayFile(): string {
+  return path.join(fakeHome, RELAY_REL);
 }
 
 // ─── Phase 1 (regression — must stay green) ─────────────────────────────
@@ -166,5 +171,57 @@ describe("hermesAdapter — Fleet section (A2-1)", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const body = fs.readFileSync(skillFile(), "utf-8");
     assert.match(body, /REPLACES.*SSH.*tmux/i);
+  });
+});
+
+// ─── Phase 2: Relay config injection (A2-2) ─────────────────────────────
+
+describe("hermesAdapter — relay config injection (A2-2)", () => {
+  let origRelay: string | undefined;
+
+  beforeEach(() => {
+    origRelay = process.env.PMD_RELAY;
+    process.env.PMD_RELAY = "http://test-relay:9741";
+    const tokenDir = path.join(fakeHome, ".pipemd", "link");
+    fs.mkdirSync(tokenDir, { recursive: true });
+    fs.writeFileSync(path.join(tokenDir, "relay.token"), "test-token-abc123");
+  });
+
+  afterEach(() => {
+    if (origRelay === undefined) delete process.env.PMD_RELAY;
+    else process.env.PMD_RELAY = origRelay;
+  });
+
+  it("writes relay.json with baseUrl and token resolved from secure config", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const relayJson = JSON.parse(fs.readFileSync(relayFile(), "utf-8"));
+    assert.equal(relayJson.baseUrl, "http://test-relay:9741");
+    assert.equal(relayJson.token, "test-token-abc123");
+  });
+
+  it("relay config reconciliation is idempotent (installed=false on re-run)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    assert.equal(r.installed, false);
+    assert.match(r.detail, /already present/);
+  });
+
+  it("relay.json has restricted permissions (0o600)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const mode = fs.statSync(relayFile()).mode & 0o777;
+    assert.equal(mode, 0o600);
+  });
+
+  it("skips relay.json when no relay URL is configured (graceful)", () => {
+    delete process.env.PMD_RELAY;
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.ok(!fs.existsSync(relayFile()), "relay.json must not be written without a relay URL");
+  });
+
+  it("removeHooks cleans up relay.json alongside the skill", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.ok(fs.existsSync(relayFile()));
+    hermesAdapter.removeHooks(tmpDir);
+    assert.ok(!fs.existsSync(relayFile()), "relay.json should be removed with the skill");
   });
 });
