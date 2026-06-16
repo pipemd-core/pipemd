@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,183 +7,239 @@ import { hermesAdapter } from "../src/core/hermes-hooks.js";
 import { installHooks, removeHooks } from "../src/core/hooks.js";
 import type { HookInstallResult } from "../src/core/hooks.js";
 
-const TARGET_FILE = "WORKSPACE_CONTEXT.md";
-const MARKER_FILE = path.join(".hermes", "pipemd-context.json");
+const SKILL_DIR_REL = path.join(".hermes", "skills", "devops", "pipemd-context");
+const SKILL_REL = path.join(SKILL_DIR_REL, "SKILL.md");
+const RELAY_REL = path.join(SKILL_DIR_REL, "relay.json");
+const PMD_MARKER = "<!-- pipemd-managed-skill -->";
 
-function freshDir(prefix = "pmd-hermes-"): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+let tmpDir: string;
+let fakeHome: string;
+let origCwd: string;
+let origHome: string;
+
+beforeEach(() => {
+  origCwd = process.cwd();
+  origHome = process.env.HOME!;
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pmd-hermes-test-"));
+  fs.mkdirSync(path.join(tmpDir, ".pipemd"), { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, ".pipemd", "config.yml"), 'version: "1.0"\n');
+  fakeHome = path.join(tmpDir, "fake-home");
+  fs.mkdirSync(fakeHome, { recursive: true });
+  process.chdir(tmpDir);
+  process.env.HOME = fakeHome;
+});
+
+afterEach(() => {
+  process.env.HOME = origHome;
+  process.chdir(origCwd);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+function skillFile(): string {
+  return path.join(fakeHome, SKILL_REL);
 }
 
-function isFifo(p: string): boolean {
-  try {
-    return fs.statSync(p).isFIFO();
-  } catch {
-    return false;
-  }
+function relayFile(): string {
+  return path.join(fakeHome, RELAY_REL);
 }
 
-describe("Hermes adapter — installHooks", () => {
-  it("creates WORKSPACE_CONTEXT.md as a named pipe (FIFO)", () => {
-    const dir = freshDir();
-    try {
-      const result = hermesAdapter.installHooks(dir, "passive", false, false);
-      const pipePath = path.join(dir, TARGET_FILE);
-      assert.ok(fs.existsSync(pipePath), "WORKSPACE_CONTEXT.md should exist");
-      assert.ok(isFifo(pipePath), "WORKSPACE_CONTEXT.md should be a named pipe");
-      assert.equal(result.harness, "Hermes");
-      assert.equal(result.mechanism, "pipe");
-      assert.equal(result.installed, true);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+// ─── Phase 1 (regression — must stay green) ─────────────────────────────
+
+describe("hermesAdapter \u2014 installHooks", () => {
+  it("writes the pipemd-context skill under HOME/.hermes/skills with the managed marker", () => {
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.equal(r.harness, "Hermes");
+    assert.equal(r.mechanism, "skill+pipe");
+    assert.equal(r.installed, true);
+    const skill = skillFile();
+    assert.ok(fs.existsSync(skill), "skill file should exist");
+    assert.ok(fs.readFileSync(skill, "utf-8").includes(PMD_MARKER), "skill must carry the managed marker");
   });
 
-  it("writes a pipemd-context.json marker under .hermes/", () => {
-    const dir = freshDir();
-    try {
-      hermesAdapter.installHooks(dir, "passive", false, false);
-      const markerPath = path.join(dir, MARKER_FILE);
-      assert.ok(fs.existsSync(markerPath), "marker file should exist");
-      const marker = JSON.parse(fs.readFileSync(markerPath, "utf-8"));
-      assert.equal(marker.target, TARGET_FILE);
-      assert.equal(marker.mechanism, "pipe");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("is idempotent \u2014 re-install (force=false) reports installed=false and 'already installed'", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    assert.equal(r.installed, false);
+    assert.match(r.detail, /already installed/);
   });
 
-  it("is idempotent — re-installing when the pipe already exists does not recreate it", () => {
-    const dir = freshDir();
-    try {
-      hermesAdapter.installHooks(dir, "passive", false, false);
-      const pipePath = path.join(dir, TARGET_FILE);
-      const before = fs.statSync(pipePath);
-      const result = hermesAdapter.installHooks(dir, "passive", false, false);
-      assert.equal(isFifo(pipePath), true);
-      assert.equal(result.harness, "Hermes");
-      assert.equal(result.mechanism, "pipe");
-      // inode stable (fifo not recreated)
-      const after = fs.statSync(pipePath);
-      assert.equal(before.ino, after.ino);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("dryRun does not write files but reports 'needs update'", () => {
+    const r = hermesAdapter.installHooks(tmpDir, "passive", true, true);
+    assert.equal(r.installed, false);
+    assert.match(r.detail, /needs update/);
+    assert.ok(!fs.existsSync(skillFile()), "dryRun must not write the skill");
   });
 
-  it("backs up an existing regular WORKSPACE_CONTEXT.md before creating the pipe", () => {
-    const dir = freshDir("pmd-hermes-bak-");
-    try {
-      const target = path.join(dir, TARGET_FILE);
-      fs.writeFileSync(target, "# my hermes notes\n", "utf-8");
-      const result = hermesAdapter.installHooks(dir, "passive", false, false);
-      assert.ok(isFifo(target), "should be a pipe after install");
-      assert.equal(result.installed, true);
-      const bak = target + ".pipemd.bak";
-      assert.ok(fs.existsSync(bak), "backup should exist");
-      assert.equal(fs.readFileSync(bak, "utf-8"), "# my hermes notes\n");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("ensures WORKSPACE_CONTEXT.md pipe entry in config.yml with mode: pipe", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.match(cfg, /WORKSPACE_CONTEXT\.md/);
+    assert.match(cfg, /pipe/);
+  });
+
+  it("does not advertise an injectionMode (Hermes has no active injection)", () => {
+    const r = hermesAdapter.installHooks(tmpDir, "active", false, true);
+    assert.equal(r.injectionMode, undefined);
+  });
+
+  it("force rewrites the skill even when content is identical", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.equal(r.installed, true);
   });
 });
 
-describe("Hermes adapter — removeHooks", () => {
-  it("removes the WORKSPACE_CONTEXT.md named pipe", () => {
-    const dir = freshDir("pmd-hermes-rm-");
-    try {
-      hermesAdapter.installHooks(dir, "passive", false, false);
-      const pipePath = path.join(dir, TARGET_FILE);
-      assert.ok(isFifo(pipePath));
-      const result = hermesAdapter.removeHooks(dir);
-      assert.equal(result.harness, "Hermes");
-      assert.ok(result.installed, "should report something removed");
-      assert.ok(!fs.existsSync(pipePath), "pipe should be gone after remove");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+describe("hermesAdapter \u2014 removeHooks", () => {
+  it("deletes only pipemd-managed skills", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const r = hermesAdapter.removeHooks(tmpDir);
+    assert.equal(r.harness, "Hermes");
+    assert.equal(r.installed, true);
+    assert.ok(!fs.existsSync(skillFile()), "managed skill should be gone");
   });
 
-  it("removes the pipemd-context.json marker", () => {
-    const dir = freshDir("pmd-hermes-mark-");
-    try {
-      hermesAdapter.installHooks(dir, "passive", false, false);
-      const markerPath = path.join(dir, MARKER_FILE);
-      assert.ok(fs.existsSync(markerPath));
-      hermesAdapter.removeHooks(dir);
-      assert.ok(!fs.existsSync(markerPath), "marker should be gone");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("is a no-op when no managed skill is present", () => {
+    const r = hermesAdapter.removeHooks(tmpDir);
+    assert.equal(r.installed, false);
+    assert.match(r.detail, /nothing to remove/);
   });
 
-  it("restores a backed-up WORKSPACE_CONTEXT.md on uninstall", () => {
-    const dir = freshDir("pmd-hermes-restore-");
-    try {
-      const target = path.join(dir, TARGET_FILE);
-      fs.writeFileSync(target, "# original notes\n", "utf-8");
-      hermesAdapter.installHooks(dir, "passive", false, false);
-      assert.ok(isFifo(target));
-      hermesAdapter.removeHooks(dir);
-      assert.ok(fs.existsSync(target), "file restored after uninstall");
-      assert.equal(isFifo(target), false, "restored file is a regular file, not a pipe");
-      assert.equal(fs.readFileSync(target, "utf-8"), "# original notes\n");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("does not delete a regular (non-pipe) WORKSPACE_CONTEXT.md", () => {
-    const dir = freshDir("pmd-hermes-keep-");
-    try {
-      const target = path.join(dir, TARGET_FILE);
-      fs.writeFileSync(target, "# hand-written\n", "utf-8");
-      const result: HookInstallResult = hermesAdapter.removeHooks(dir);
-      assert.ok(fs.existsSync(target), "regular file must not be touched by remove");
-      assert.equal(fs.readFileSync(target, "utf-8"), "# hand-written\n");
-      assert.equal(result.installed, false);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("reports nothing to remove on a clean directory", () => {
-    const dir = freshDir("pmd-hermes-clean-");
-    try {
-      const result = hermesAdapter.removeHooks(dir);
-      assert.equal(result.installed, false);
-      assert.match(result.detail, /nothing to remove/i);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("leaves a user-authored skill of the same name untouched", () => {
+    const skillDir = path.dirname(skillFile());
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      skillFile(),
+      "---\nname: pipemd-context\n---\nuser content, no marker\n",
+    );
+    const r = hermesAdapter.removeHooks(tmpDir);
+    assert.equal(r.installed, false);
+    assert.ok(fs.existsSync(skillFile()), "user skill must survive");
   });
 });
 
-describe("Hermes adapter — hooks.ts routing", () => {
-  it("installHooks('Hermes') routes to the adapter (pipe), not the instruction-only fallback", () => {
-    const dir = freshDir("pmd-hermes-route-");
-    try {
-      const result = installHooks("Hermes", dir, "passive", false, false);
-      assert.equal(result.harness, "Hermes");
-      assert.equal(result.mechanism, "pipe", "Hermes must no longer be instruction-only");
-      assert.equal(result.installed, true);
-      assert.ok(isFifo(path.join(dir, TARGET_FILE)), "pipe should be created via the router");
-      assert.notEqual(result.mechanism, "instruction");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+describe("hooks.ts dispatch for Hermes", () => {
+  it("installHooks('Hermes') dispatches to the adapter (skill+pipe), not instruction-only", () => {
+    const r = installHooks("Hermes", tmpDir, "passive", false, true) as HookInstallResult;
+    assert.equal(r.harness, "Hermes");
+    assert.notEqual(r.mechanism, "instruction");
+    assert.equal(r.mechanism, "skill+pipe");
+    assert.ok(fs.existsSync(skillFile()), "skill should be deployed via the router");
   });
 
-  it("removeHooks('Hermes') routes to the adapter", () => {
-    const dir = freshDir("pmd-hermes-route-rm-");
-    try {
-      installHooks("Hermes", dir, "passive", false, false);
-      assert.ok(isFifo(path.join(dir, TARGET_FILE)));
-      const result = removeHooks("Hermes", dir);
-      assert.equal(result.harness, "Hermes");
-      assert.ok(result.installed, "router should delegate removal to the adapter");
-      assert.ok(!fs.existsSync(path.join(dir, TARGET_FILE)), "pipe gone after routed remove");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it("removeHooks('Hermes') dispatches to the adapter", () => {
+    installHooks("Hermes", tmpDir, "passive", false, true);
+    assert.ok(fs.existsSync(skillFile()));
+    const r = removeHooks("Hermes", tmpDir) as HookInstallResult;
+    assert.equal(r.harness, "Hermes");
+    assert.ok(!fs.existsSync(skillFile()), "skill gone after routed remove");
+  });
+});
+
+// ─── Phase 2: Fleet section (A2-1) ──────────────────────────────────────
+
+describe("hermesAdapter \u2014 Fleet section (A2-1)", () => {
+  it("skill body contains the Fleet section header", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /## Fleet/);
+  });
+
+  it("skill body contains all four relay endpoint patterns", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /GET \{relay\}\/fleet/);
+    assert.match(body, /workspace\/:agent_id\/context/);
+    assert.match(body, /fleet\/:machine\/session\/:id\/message/);
+    assert.match(body, /fleet\/:machine\/pty\/:ptyID\/takeover/);
+  });
+
+  it("skill body references relay.json for endpoint resolution", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /relay\.json/);
+  });
+
+  it("skill body instructs pull-based topology (read /fleet first)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /GET \{relay\}\/fleet/);
+    assert.match(body, /pull-based/i);
+  });
+});
+
+// ─── Phase 2: Relay config injection (A2-2) ─────────────────────────────
+
+describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
+  let origRelay: string | undefined;
+
+  beforeEach(() => {
+    origRelay = process.env.PMD_RELAY;
+    process.env.PMD_RELAY = "http://test-relay:9741";
+    const tokenDir = path.join(fakeHome, ".pipemd", "link");
+    fs.mkdirSync(tokenDir, { recursive: true });
+    fs.writeFileSync(path.join(tokenDir, "relay.token"), "test-token-abc123");
+  });
+
+  afterEach(() => {
+    if (origRelay === undefined) delete process.env.PMD_RELAY;
+    else process.env.PMD_RELAY = origRelay;
+  });
+
+  it("writes relay.json with baseUrl and token", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const relayJson = JSON.parse(fs.readFileSync(relayFile(), "utf-8"));
+    assert.equal(relayJson.baseUrl, "http://test-relay:9741");
+    assert.equal(relayJson.token, "test-token-abc123");
+  });
+
+  it("relay config reconciliation is idempotent (installed=false on re-run)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    assert.equal(r.installed, false);
+    assert.match(r.detail, /already present/);
+  });
+
+  it("relay.json has restricted permissions (0o600)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const mode = fs.statSync(relayFile()).mode & 0o777;
+    assert.equal(mode, 0o600);
+  });
+
+  it("removeHooks cleans up relay.json alongside the skill", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.ok(fs.existsSync(relayFile()));
+    hermesAdapter.removeHooks(tmpDir);
+    assert.ok(!fs.existsSync(relayFile()), "relay.json should be removed with the skill");
+  });
+});
+
+// ─── Phase 2: Boot-time fleet awareness (A2-3) ──────────────────────────
+
+describe("hermesAdapter \u2014 boot-time fleet awareness (A2-3)", () => {
+  it("ensures commands.fleet in config.yml", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.match(cfg, /fleet:\s*pmd fleet/);
+  });
+
+  it("adds a fleet block to template.md when missing", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.match(tpl, /<!-- pmd: fleet -->/);
+    assert.match(tpl, /<!-- \/pmd -->/);
+  });
+
+  it("does not duplicate the fleet block if already present", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(
+      tplPath,
+      "# Template\n\n<!-- pmd: fleet -->\n```\n\n```\n<!-- /pmd -->\n",
+    );
+    hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    const tpl = fs.readFileSync(tplPath, "utf-8");
+    const count = (tpl.match(/<!-- pmd: fleet -->/g) || []).length;
+    assert.equal(count, 1);
   });
 });

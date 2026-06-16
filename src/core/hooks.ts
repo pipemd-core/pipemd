@@ -26,14 +26,6 @@ const adapters: Map<string, HarnessAdapter> = new Map([
   ["Hermes", hermesAdapter],
 ]);
 
-function registerAdapter(adapter: HarnessAdapter): void {
-  adapters.set(adapter.name, adapter);
-}
-
-function getAdapter(name: string): HarnessAdapter | undefined {
-  return adapters.get(name);
-}
-
 const INSTRUCTION_ONLY = ["Cursor", "Aider", "OpenClaw", "OS Agent"];
 
 export function installHooks(

@@ -248,7 +248,7 @@ function detectHermes(cwd: string, has: (f: string) => boolean): HarnessDetectio
     targetFile: HARNESS_TARGETS["Hermes"],
     detected: signals.length > 0,
     signals,
-    needsLegacyMode: true,
+    needsLegacyMode: false,
   };
 }
 
