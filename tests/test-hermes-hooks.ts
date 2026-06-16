@@ -225,3 +225,62 @@ describe("hermesAdapter — relay config injection (A2-2)", () => {
     assert.ok(!fs.existsSync(relayFile()), "relay.json should be removed with the skill");
   });
 });
+
+// ─── Phase 2: Boot-time fleet awareness (A2-3) ──────────────────────────
+
+describe("hermesAdapter — boot-time fleet awareness (A2-3)", () => {
+  it("ensures commands.fleet in config.yml", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.match(cfg, /fleet:\s*pmd fleet/);
+  });
+
+  it("adds a marker-tagged fleet block to template.md when missing", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.match(tpl, /<!-- pmd: fleet -->/);
+    assert.match(tpl, /<!-- \/pmd -->/);
+    assert.match(tpl, /<!-- pipemd-fleet-section -->/, "fleet section must be marker-tagged (N5)");
+    assert.match(tpl, /<!-- \/pipemd-fleet-section -->/);
+  });
+
+  it("does not duplicate the fleet block if already present", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(
+      tplPath,
+      "# Template\n\n<!-- pmd: fleet -->\n```\n\n```\n<!-- /pmd -->\n",
+    );
+    hermesAdapter.installHooks(tmpDir, "passive", false, false);
+    const tpl = fs.readFileSync(tplPath, "utf-8");
+    const count = (tpl.match(/<!-- pmd: fleet -->/g) || []).length;
+    assert.equal(count, 1);
+  });
+
+  it("reports 'template: not found' when template.md is absent (N4 diagnostic)", () => {
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.match(r.detail, /template: not found/);
+  });
+
+  it("removeHooks strips commands.fleet from config.yml (install/remove symmetry, N2)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    let cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.match(cfg, /fleet:/);
+    hermesAdapter.removeHooks(tmpDir);
+    cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.doesNotMatch(cfg, /fleet:\s*pmd fleet/, "commands.fleet should be stripped on remove");
+  });
+
+  it("removeHooks strips the fleet block from template.md (N2)", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    let tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.match(tpl, /pipemd-fleet-section/);
+    hermesAdapter.removeHooks(tmpDir);
+    tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.doesNotMatch(tpl, /pipemd-fleet-section/, "fleet section should be stripped on remove");
+    assert.doesNotMatch(tpl, /<!-- pmd: fleet -->/, "fleet block should be stripped on remove");
+  });
+});

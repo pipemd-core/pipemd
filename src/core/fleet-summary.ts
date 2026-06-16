@@ -3,12 +3,13 @@ import https from "node:https";
 import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { parse as parseYaml } from "yaml";
-import { CONFIG_PATH } from "./paths.js";
+import { LIVE_DIR } from "./paths.js";
+import { readRelayInfo } from "./hermes-hooks.js";
 import { log, errMsg } from "./logger.js";
 
 const FLEET_TIMEOUT_MS = 3_000;
+const CACHE_TTL_MS = 10_000;
+const CACHE_FILE = path.join(LIVE_DIR, ".fleet-cache.json");
 
 interface FleetMachine {
   hostname?: string;
@@ -17,34 +18,6 @@ interface FleetMachine {
   projects?: unknown[];
   sessions?: unknown[];
   ptys?: unknown[];
-}
-
-function readRelayUrl(): string | null {
-  const envRelay = process.env.PMD_RELAY;
-  if (envRelay) return envRelay;
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const config = parseYaml(fs.readFileSync(CONFIG_PATH, "utf-8")) as
-        | { link?: { relay?: string } }
-        | null;
-      if (config?.link?.relay) return config.link.relay;
-    }
-  } catch (err: unknown) {
-    log.debug(`fleet: read relay url: ${errMsg(err)}`);
-  }
-  return null;
-}
-
-function readRelayToken(): string {
-  try {
-    const tokenFile = path.join(os.homedir(), ".pipemd", "link", "relay.token");
-    if (fs.existsSync(tokenFile)) {
-      return fs.readFileSync(tokenFile, "utf-8").trim();
-    }
-  } catch (err: unknown) {
-    log.debug(`fleet: read token: ${errMsg(err)}`);
-  }
-  return "";
 }
 
 function fetchFleet(relayUrl: string, token: string): Promise<string> {
@@ -124,22 +97,44 @@ function formatFleet(data: unknown): string {
   return lines.join("\n");
 }
 
+function readCache(): string | null {
+  try {
+    const raw = fs.readFileSync(CACHE_FILE, "utf-8");
+    const cache = JSON.parse(raw) as { ts: number; summary: string };
+    if (Date.now() - cache.ts < CACHE_TTL_MS) return cache.summary;
+  } catch (err: unknown) {
+    log.debug(`fleet: cache read: ${errMsg(err)}`);
+  }
+  return null;
+}
+
+function writeCache(summary: string): void {
+  try {
+    fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+    fs.writeFileSync(CACHE_FILE, JSON.stringify({ ts: Date.now(), summary }), "utf-8");
+  } catch (err: unknown) {
+    log.debug(`fleet: cache write: ${errMsg(err)}`);
+  }
+}
+
 /**
  * Pull-based fleet summary for the daemon's render pipeline.
- * Fetches `GET {relay}/fleet` (Bearer token from ~/.pipemd/link/relay.token)
- * and returns a compact topology string. Returns an empty string on any
- * failure (no relay configured, unreachable, parse error) so the rendering
- * block is silently omitted — never blocks the render.
+ * Fetches `GET {relay}/fleet` (Bearer token via readRelayInfo) and returns a
+ * compact topology string. Results are cached on disk for CACHE_TTL_MS so the
+ * daemon's per-second render cadence does not hammer the relay (self-review N3).
+ * Returns an empty string on any failure (no relay configured, unreachable,
+ * parse error) so the rendering block is silently omitted — never blocks render.
  */
 export async function renderFleetSummary(): Promise<string> {
-  const relayUrl = readRelayUrl();
-  if (!relayUrl) return "";
+  const cached = readCache();
+  if (cached !== null) return cached;
 
-  const token = readRelayToken();
+  const info = readRelayInfo(process.cwd());
+  if (!info) return "";
 
   let body: string;
   try {
-    body = await fetchFleet(relayUrl, token);
+    body = await fetchFleet(info.baseUrl, info.token);
   } catch (err: unknown) {
     log.debug(`fleet: fetch failed: ${errMsg(err)}`);
     return "";
@@ -153,5 +148,7 @@ export async function renderFleetSummary(): Promise<string> {
     return "";
   }
 
-  return formatFleet(data);
+  const summary = formatFleet(data);
+  writeCache(summary);
+  return summary;
 }

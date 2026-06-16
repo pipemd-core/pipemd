@@ -12,8 +12,12 @@ const SKILL_CATEGORY = "devops";
 const TARGET_FILE = "WORKSPACE_CONTEXT.md";
 const TEMPLATE_RENDER = ".pipemd/template.md";
 const CONFIG_REL = path.join(".pipemd", "config.yml");
+const TEMPLATE_REL = path.join(".pipemd", "template.md");
 const RELAY_CONFIG_NAME = "relay.json";
 const RELAY_TOKEN_REL = path.join(".pipemd", "link", "relay.token");
+const FLEET_BLOCK_TAG = "<!-- pmd: fleet -->";
+const FLEET_SECTION_OPEN = "<!-- pipemd-fleet-section -->";
+const FLEET_SECTION_CLOSE = "<!-- /pipemd-fleet-section -->";
 
 /** Marker written into the skill body so removeHooks can detect our install. */
 const PMD_MARKER = "<!-- pipemd-managed-skill -->";
@@ -256,6 +260,17 @@ function reconcileConfig(cwd: string, dryRun: boolean): boolean {
   }
   config.pipes = pipes;
 
+  // Fleet command for boot-time fleet awareness (A2-3). The daemon's render
+  // pipeline resolves the template's <!-- pmd: fleet --> block by running this
+  // command, which calls renderFleetSummary() (pull-based HTTP to the relay).
+  if (!config.commands || typeof config.commands !== "object") {
+    config.commands = {};
+  }
+  if (config.commands.fleet !== "pmd fleet") {
+    config.commands.fleet = "pmd fleet";
+    changed = true;
+  }
+
   if (changed && !dryRun) {
     try {
       fs.writeFileSync(cfgPath, stringifyYaml(config), "utf-8");
@@ -264,6 +279,108 @@ function reconcileConfig(cwd: string, dryRun: boolean): boolean {
     }
   }
   return changed;
+}
+
+/**
+ * Idempotently ensure `.pipemd/template.md` has a PipeMD-owned `<!-- pmd: fleet -->`
+ * block so the daemon's render includes boot-time fleet topology (A2-3). The
+ * scaffold owns the template; this appends a marker-tagged section only if the
+ * fleet tag is missing. Returns a tri-state for accurate diagnostics (N4/N5).
+ */
+function reconcileTemplate(
+  cwd: string,
+  dryRun: boolean,
+): "added" | "present" | "absent" {
+  const tplPath = path.join(cwd, TEMPLATE_REL);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(tplPath, "utf-8");
+  } catch {
+    return "absent";
+  }
+
+  if (raw.includes(FLEET_BLOCK_TAG)) return "present";
+
+  const fleetSection = [
+    "",
+    FLEET_SECTION_OPEN,
+    "---",
+    "",
+    "## Fleet",
+    "",
+    FLEET_BLOCK_TAG,
+    "```",
+    "",
+    "```",
+    "<!-- /pmd -->",
+    "",
+    FLEET_SECTION_CLOSE,
+    "",
+  ].join("\n");
+
+  if (!dryRun) {
+    try {
+      fs.writeFileSync(tplPath, raw.replace(/\s*$/, "") + "\n" + fleetSection, "utf-8");
+    } catch (err: unknown) {
+      log.debug(`reconcileTemplate write: ${errMsg(err)}`);
+    }
+  }
+  return "added";
+}
+
+/**
+ * Best-effort strip the PipeMD-owned fleet section from template.md (N2/N5).
+ * Removes only the span between FLEET_SECTION_OPEN and FLEET_SECTION_CLOSE.
+ */
+function stripFleetFromTemplate(cwd: string): void {
+  const tplPath = path.join(cwd, TEMPLATE_REL);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(tplPath, "utf-8");
+  } catch {
+    return;
+  }
+  if (!raw.includes(FLEET_SECTION_OPEN)) return;
+  const re = new RegExp(
+    `${escapeRegExp(FLEET_SECTION_OPEN)}[\\s\\S]*?${escapeRegExp(FLEET_SECTION_CLOSE)}\\n?`,
+    "g",
+  );
+  try {
+    fs.writeFileSync(tplPath, raw.replace(re, "").replace(/\n{3,}/g, "\n\n"), "utf-8");
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromTemplate: ${errMsg(err)}`);
+  }
+}
+
+/**
+ * Best-effort remove the `commands.fleet` entry from config.yml (N2).
+ */
+function stripFleetFromConfig(cwd: string): void {
+  const cfgPath = path.join(cwd, CONFIG_REL);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(cfgPath, "utf-8");
+  } catch {
+    return;
+  }
+  let config: PipeConfig;
+  try {
+    config = parseYaml(raw) as PipeConfig;
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromConfig parse: ${errMsg(err)}`);
+    return;
+  }
+  if (!config?.commands?.fleet) return;
+  delete config.commands.fleet;
+  try {
+    fs.writeFileSync(cfgPath, stringifyYaml(config), "utf-8");
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromConfig write: ${errMsg(err)}`);
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function installHermesHooks(
@@ -311,6 +428,17 @@ function installHermesHooks(
   if (relayResult.changed) changed = true;
   results.push(relayResult.detail);
 
+  // (4) Ensure the fleet block is in template.md (A2-3 boot-time awareness).
+  const tplState = reconcileTemplate(cwd, dryRun);
+  if (tplState === "added") {
+    changed = true;
+    results.push("template: fleet block ensured");
+  } else if (tplState === "present") {
+    results.push("template: fleet block already present");
+  } else {
+    results.push("template: not found (skipped)");
+  }
+
   const prefix = dryRun && changed ? "needs update: " : "";
   return {
     harness: "Hermes",
@@ -320,7 +448,7 @@ function installHermesHooks(
   };
 }
 
-function removeHermesHooks(_cwd: string): HookInstallResult {
+function removeHermesHooks(cwd: string): HookInstallResult {
   const sPath = skillPath();
   let removed = false;
   let detail = "nothing to remove";
@@ -345,6 +473,14 @@ function removeHermesHooks(_cwd: string): HookInstallResult {
     }
   } catch (err: unknown) {
     log.debug(`removeHermesHooks read: ${errMsg(err)}`);
+  }
+
+  // Install/remove symmetry (N2): strip project-local fleet artifacts that
+  // installHermesHooks wrote, so the daemon stops spawning `pmd fleet` after
+  // the harness is removed. Best-effort — never fails the remove.
+  if (removed) {
+    stripFleetFromConfig(cwd);
+    stripFleetFromTemplate(cwd);
   }
 
   return {
