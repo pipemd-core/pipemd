@@ -2,6 +2,7 @@ import type { DeliveryMode } from "./injection-types.js";
 import { claudeAdapter } from "./claude-hooks.js";
 import { geminiAdapter } from "./gemini-hooks.js";
 import { opencodeAdapter } from "./opencode-hooks.js";
+import { hermesAdapter } from "./hermes-hooks.js";
 import { errMsg } from "./logger.js";
 
 export interface HookInstallResult {
@@ -22,6 +23,7 @@ const adapters: Map<string, HarnessAdapter> = new Map([
   ["Claude Code", claudeAdapter],
   ["OpenCode", opencodeAdapter],
   ["Gemini", geminiAdapter],
+  ["Hermes", hermesAdapter],
 ]);
 
 function registerAdapter(adapter: HarnessAdapter): void {
@@ -32,7 +34,7 @@ function getAdapter(name: string): HarnessAdapter | undefined {
   return adapters.get(name);
 }
 
-const INSTRUCTION_ONLY = ["Cursor", "Aider", "OpenClaw", "Hermes", "OS Agent"];
+const INSTRUCTION_ONLY = ["Cursor", "Aider", "OpenClaw", "OS Agent"];
 
 export function installHooks(
   harness: string,

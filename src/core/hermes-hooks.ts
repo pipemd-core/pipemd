@@ -78,7 +78,6 @@ function installHermesHooks(
 ): HookInstallResult {
   const pipePath = path.join(cwd, TARGET_FILE);
   const results: string[] = [];
-  let installed = false;
 
   if (dryRun) {
     return {
@@ -110,10 +109,7 @@ function installHermesHooks(
         detail: "mkfifo unavailable — no edit-event API, uses injected Coordination Protocol",
       };
     }
-    if (createPipe(pipePath)) {
-      installed = true;
-      results.push("pipe: created WORKSPACE_CONTEXT.md");
-    } else {
+    if (!createPipe(pipePath)) {
       return {
         harness: "Hermes",
         installed: false,
@@ -121,8 +117,8 @@ function installHermesHooks(
         detail: "could not create WORKSPACE_CONTEXT.md pipe",
       };
     }
+    results.push("pipe: created WORKSPACE_CONTEXT.md");
   } else {
-    installed = true;
     results.push("pipe: already installed");
   }
 
@@ -132,7 +128,7 @@ function installHermesHooks(
 
   return {
     harness: "Hermes",
-    installed,
+    installed: isFifo(pipePath),
     mechanism: "pipe",
     detail: results.join(" \u00b7 "),
     injectionMode: delivery === "active" || delivery === "expert" ? delivery : undefined,

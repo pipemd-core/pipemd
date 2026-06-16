@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { hermesAdapter } from "../src/core/hermes-hooks.js";
+import { installHooks, removeHooks } from "../src/core/hooks.js";
 import type { HookInstallResult } from "../src/core/hooks.js";
 
 const TARGET_FILE = "WORKSPACE_CONTEXT.md";
@@ -151,6 +152,36 @@ describe("Hermes adapter — removeHooks", () => {
       const result = hermesAdapter.removeHooks(dir);
       assert.equal(result.installed, false);
       assert.match(result.detail, /nothing to remove/i);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Hermes adapter — hooks.ts routing", () => {
+  it("installHooks('Hermes') routes to the adapter (pipe), not the instruction-only fallback", () => {
+    const dir = freshDir("pmd-hermes-route-");
+    try {
+      const result = installHooks("Hermes", dir, "passive", false, false);
+      assert.equal(result.harness, "Hermes");
+      assert.equal(result.mechanism, "pipe", "Hermes must no longer be instruction-only");
+      assert.equal(result.installed, true);
+      assert.ok(isFifo(path.join(dir, TARGET_FILE)), "pipe should be created via the router");
+      assert.notEqual(result.mechanism, "instruction");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removeHooks('Hermes') routes to the adapter", () => {
+    const dir = freshDir("pmd-hermes-route-rm-");
+    try {
+      installHooks("Hermes", dir, "passive", false, false);
+      assert.ok(isFifo(path.join(dir, TARGET_FILE)));
+      const result = removeHooks("Hermes", dir);
+      assert.equal(result.harness, "Hermes");
+      assert.ok(result.installed, "router should delegate removal to the adapter");
+      assert.ok(!fs.existsSync(path.join(dir, TARGET_FILE)), "pipe gone after routed remove");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
