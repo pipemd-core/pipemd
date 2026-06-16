@@ -64,6 +64,7 @@
  */
 import crypto from "node:crypto";
 import http from "node:http";
+import net from "node:net";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
@@ -83,6 +84,7 @@ import {
 } from "./protocol.js";
 import { fleetRuntime } from "./fleet-runtime.js";
 import type { FleetResponse } from "./fleet-schema.js";
+import { dialOutbound, upgradeInbound, pipe } from "./ws-pipe.js";
 
 type OriginMap = Map<string, { sessions: CrewSession[]; lastSeen: number }>;
 const store = new Map<string, OriginMap>();
@@ -97,6 +99,20 @@ type BlockKey = `${string}:${string}:${string}`;
 const blockStore = new Map<BlockKey, BlockEntry>();
 const BLOCK_STORE_TTL_MS = 30 * 60 * 1000;
 const BLOCK_STORE_MAX = 1000;
+
+/**
+ * B2-5 PTY takeover: short-lived, single-use relay tickets that stand in for
+ * opencode's 60s connect-token. The opencode ticket NEVER leaves the box —
+ * only this opaque relay token is returned to the caller. Consumed on first
+ * WS connect; expired entries are swept on the existing expiry tick.
+ */
+interface RelayTicket {
+  ptyID: string;
+  opencodeTicket: string;
+  expiresAt: number;
+}
+const relayTickets = new Map<string, RelayTicket>();
+const RELAY_TICKET_DEFAULT_TTL_MS = 60_000;
 
 function hostname(): string {
   return os.hostname();
@@ -628,6 +644,194 @@ function pipeRaw(res: http.ServerResponse, status: number, body: string, content
   res.end(body);
 }
 
+/** Mint a single-use relay ticket that stands in for an opencode ticket. */
+function mintRelayTicket(ptyID: string, opencodeTicket: string, expiresInSec: number): string {
+  const token = crypto.randomBytes(16).toString("hex");
+  relayTickets.set(token, {
+    ptyID,
+    opencodeTicket,
+    expiresAt: Date.now() + Math.max(1, expiresInSec) * 1000,
+  });
+  return token;
+}
+
+/** Consume (delete) a relay ticket. Returns null if missing/expired. */
+function consumeRelayTicket(token: string): RelayTicket | null {
+  const entry = relayTickets.get(token);
+  if (!entry) return null;
+  relayTickets.delete(token); // single-use
+  if (Date.now() > entry.expiresAt) return null;
+  return entry;
+}
+
+/** Drop expired relay tickets. Called from the expiry tick. */
+function expireRelayTickets(): void {
+  const now = Date.now();
+  for (const [token, entry] of relayTickets) {
+    if (now > entry.expiresAt) relayTickets.delete(token);
+  }
+}
+
+/**
+ * POST /fleet/:machine/pty/:ptyID/takeover (B2-5).
+ * Self: mints an opencode connect-token (x-opencode-ticket: 1 + Basic) and
+ * returns a relay WS URL carrying an opaque relay ticket; the opencode ticket
+ * never leaves the box. Peer: forwards to the peer relay, rewriting the
+ * returned wsUrl so the caller reconnects through THIS relay.
+ */
+function handleTakeover(req: http.IncomingMessage, res: http.ServerResponse, machine: string, ptyID: string) {
+  readBody(req)
+    .then((raw) => {
+      // Body is optional for takeover; opencode's connect-token takes none,
+      // but we accept/forward a cursor for replay semantics.
+      const target = resolveTarget(machine);
+      if (!target) {
+        jsonResponse(res, 404, { error: `unknown machine: ${machine}` });
+        return;
+      }
+      if (target.kind === "self") {
+        forwardToOpencode(
+          `/api/pty/${encodeURIComponent(ptyID)}/connect-token`,
+          "POST",
+          raw,
+          req.headers["content-type"] || "application/json",
+          { "x-opencode-ticket": "1" },
+        ).then((r) => {
+          if (r.status !== 200) {
+            pipeRaw(res, r.status, r.body, r.contentType);
+            return;
+          }
+          let parsed: { ticket?: string; expires_in?: number };
+          try { parsed = JSON.parse(r.body); } catch {
+            jsonResponse(res, 502, { error: "opencode connect-token returned non-JSON" });
+            return;
+          }
+          if (!parsed.ticket) {
+            jsonResponse(res, 502, { error: "opencode connect-token missing ticket" });
+            return;
+          }
+          const expiresInSec = typeof parsed.expires_in === "number" ? parsed.expires_in : 60;
+          const relayToken = mintRelayTicket(ptyID, parsed.ticket, expiresInSec);
+          jsonResponse(res, 200, {
+            wsUrl: `/fleet/${encodeURIComponent(machine)}/pty/${encodeURIComponent(ptyID)}/connect?relayTicket=${relayToken}`,
+            expires_in: expiresInSec,
+            relayTicket: relayToken,
+          });
+        }).catch((err) => {
+          log.warn(`takeover: opencode connect-token failed: ${errMsg(err)}`);
+          jsonResponse(res, 502, { error: "opencode unreachable" });
+        });
+      } else {
+        // Peer: forward to peer relay's self-takeover, then rewrite the wsUrl
+        // so the caller's connect upgrade routes back through THIS relay.
+        const peerPath = `/fleet/self/pty/${encodeURIComponent(ptyID)}/takeover`;
+        forwardToPeer(target, peerPath, "POST", raw, req.headers["content-type"] || "application/json")
+          .then((r) => {
+            if (r.status !== 200) { pipeRaw(res, r.status, r.body, r.contentType); return; }
+            try {
+              const parsed = JSON.parse(r.body) as { wsUrl?: string; expires_in?: number; relayTicket?: string };
+              // Rewrite the peer's /fleet/self/... wsUrl to /fleet/<machine>/...
+              // so the caller's WS upgrade is routed through this relay.
+              const rewritten = parsed.relayTicket
+                ? `/fleet/${encodeURIComponent(machine)}/pty/${encodeURIComponent(ptyID)}/connect?relayTicket=${parsed.relayTicket}`
+                : parsed.wsUrl;
+              jsonResponse(res, 200, { wsUrl: rewritten, expires_in: parsed.expires_in ?? 60, relayTicket: parsed.relayTicket });
+            } catch {
+              pipeRaw(res, 502, JSON.stringify({ error: "peer takeover non-JSON" }), "application/json");
+            }
+          })
+          .catch((err) => {
+            log.warn(`takeover: peer hop failed: ${errMsg(err)}`);
+            jsonResponse(res, 502, { error: "peer relay unreachable" });
+          });
+      }
+    })
+    .catch(() => jsonResponse(res, 400, { error: "invalid body" }));
+}
+
+/**
+ * WebSocket upgrade handler for GET /fleet/:machine/pty/:ptyID/connect (B2-5).
+ * Bearer-authed at the relay edge. Self: consumes the relay ticket, dials the
+ * co-located opencode WS (opencode ticket injected on the localhost leg only),
+ * and pipes PtyProtocol frames bidirectionally with cursor passthrough. Peer:
+ * forwards the upgrade to the peer relay (which mints+proxies locally).
+ */
+function handleWsUpgrade(req: http.IncomingMessage, socket: net.Socket, head: Buffer): void {
+  const url = new URL(req.url || "/", "http://localhost");
+  const pathname = url.pathname;
+
+  const m = pathname.match(/^\/fleet\/([^/]+)\/pty\/([^/]+)\/connect$/);
+  if (!m) {
+    socket.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  const machine = decodeURIComponent(m[1]);
+  const ptyID = decodeURIComponent(m[2]);
+  const relayTicket = url.searchParams.get("relayTicket") || "";
+  const cursor = url.searchParams.get("cursor");
+
+  // Edge Bearer auth.
+  const auth = req.headers.authorization;
+  const localToken = readToken();
+  if (!localToken || !auth || !timingSafeEqual(auth, `Bearer ${localToken}`)) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  const target = resolveTarget(machine);
+  if (!target) {
+    socket.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  if (target.kind === "self") {
+    // Consume the relay ticket → recover the opencode ticket (single-use).
+    const ticket = consumeRelayTicket(relayTicket);
+    if (!ticket) {
+      socket.write("HTTP/1.1 410 Gone\r\nContent-Type: application/json\r\nContent-Length: 36\r\n\r\n{\"error\":\"ticket missing or expired\"}");
+      socket.destroy();
+      return;
+    }
+    const downstreamQuery = new URLSearchParams({ ticket: ticket.opencodeTicket });
+    if (cursor) downstreamQuery.set("cursor", cursor);
+    const downstreamUrl = `${opencodeBaseUrl().replace(/^http/, "ws")}/api/pty/${encodeURIComponent(ptyID)}/connect?${downstreamQuery.toString()}`;
+
+    dialOutbound(downstreamUrl, {})
+      .then((opencodePeer) => {
+        const callerPeer = upgradeInbound(req, socket, head);
+        if (!callerPeer) return;
+        pipe(callerPeer, opencodePeer);
+        log.info(`pty takeover: piped PTY ${ptyID} (cursor=${cursor ?? "none"})`);
+      })
+      .catch((err) => {
+        log.warn(`pty takeover: downstream dial failed: ${errMsg(err)}`);
+        socket.write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+      });
+  } else {
+    // Peer: forward the upgrade to the peer relay's connect endpoint.
+    const peerQuery = new URLSearchParams();
+    if (relayTicket) peerQuery.set("relayTicket", relayTicket);
+    if (cursor) peerQuery.set("cursor", cursor);
+    const peerUrl = `ws://${target.host}:${target.port}/fleet/${encodeURIComponent(machine)}/pty/${encodeURIComponent(ptyID)}/connect?${peerQuery.toString()}`;
+    dialOutbound(peerUrl, { Authorization: `Bearer ${target.token}` })
+      .then((peerRelayPeer) => {
+        const callerPeer = upgradeInbound(req, socket, head);
+        if (!callerPeer) return;
+        pipe(callerPeer, peerRelayPeer);
+        log.info(`pty takeover: forwarded PTY ${ptyID} to peer ${target.host}`);
+      })
+      .catch((err) => {
+        log.warn(`pty takeover: peer dial failed: ${errMsg(err)}`);
+        socket.write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+      });
+  }
+}
+
 function handleBlocksPush(req: http.IncomingMessage, res: http.ServerResponse) {
   if (!isLocalhost(req)) {
     jsonResponse(res, 403, { error: "forbidden: /blocks is localhost-only" });
@@ -728,7 +932,14 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
       if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
       handleDispatch(req, res, decodeURIComponent(dispatchMatch[1]), decodeURIComponent(dispatchMatch[2]));
     } else {
-      jsonResponse(res, 404, { error: "not found" });
+      // B2-5 PTY takeover: /fleet/:machine/pty/:ptyID/takeover
+      const takeoverMatch = pathname.match(/^\/fleet\/([^/]+)\/pty\/([^/]+)\/takeover$/);
+      if (takeoverMatch) {
+        if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
+        handleTakeover(req, res, decodeURIComponent(takeoverMatch[1]), decodeURIComponent(takeoverMatch[2]));
+      } else {
+        jsonResponse(res, 404, { error: "not found" });
+      }
     }
   } else if (req.method === "GET" && pathname === "/status") {
     if (!authMiddleware(req)) { jsonResponse(res, 401, { error: "unauthorized" }); return; }
@@ -763,6 +974,8 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
 export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
   return new Promise((resolve, reject) => {
     server = http.createServer(requestHandler);
+    // B2-5: route WebSocket upgrades (PTY takeover connect) through the relay.
+    server.on("upgrade", handleWsUpgrade);
 
     server.on("error", (err: NodeJS.ErrnoException) => {
       server = null;
@@ -776,7 +989,7 @@ export function startRelay(port: number = DEFAULT_PORT): Promise<number> {
       log.info(`Relay listening on port ${actualPort}`);
 
       syncTimer = setInterval(syncWithPeers, POLL_INTERVAL_MS);
-      expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); fleetRuntime.expirePeers(); }, POLL_INTERVAL_MS * 3);
+      expiryTimer = setInterval(() => { expireStaleGroups(); expireBlockStore(); fleetRuntime.expirePeers(); expireRelayTickets(); }, POLL_INTERVAL_MS * 3);
 
       relayStartTime = Date.now();
       // B2-1: begin observing the local opencode event stream. Best-effort —
@@ -805,8 +1018,9 @@ export function stopRelay() {
   blockStore.clear();
   store.clear();
   peerLastSync.clear();
-  // B2-1/B2-3: tear down the opencode subscriber and clear all fleet state.
+  // B2-1/B2-3/B2-5: tear down the opencode subscriber and clear all fleet + ticket state.
   fleetRuntime.reset();
+  relayTickets.clear();
   log.info("Relay stopped");
 }
 
