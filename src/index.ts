@@ -15,7 +15,6 @@ import { validateCommand } from "./commands/validate.js";
 import { statuslineCommand } from "./commands/statusline.js";
 import { traceCommand } from "./commands/trace.js";
 import { linkCommand } from "./commands/link.js";
-import { fleetCommand } from "./commands/fleet.js";
 import { runDaemon, resolveExternalTools } from "./core/daemon.js";
 import { runRelay } from "./core/net/relay.js";
 import { UserError } from "./core/errors.js";
@@ -66,10 +65,6 @@ const GROUPS: { title: string; commands: { name: string; desc: string }[] }[] =
         {
           name: "link",
           desc: "[Beta] Connect daemons across machines and Docker containers",
-        },
-        {
-          name: "fleet",
-          desc: "Show fleet topology from the relay (pull-based)",
         },
       ],
     },
@@ -132,7 +127,6 @@ program.addCommand(uninstallCommand);
 program.addCommand(crewCommand);
 program.addCommand(traceCommand);
 program.addCommand(linkCommand);
-program.addCommand(fleetCommand);
 program.addCommand(injectCommand, { hidden: true });
 
 program.addCommand(validateCommand, { hidden: true });
