@@ -43,7 +43,7 @@ function safeRead(p: string): string {
 /**
  * Hermes skill body. Kept inline (not a separate template file) because it is
  * the only Hermes-specific artifact. Covers three concerns:
- *   1. Reading context (.pipemd/.render.md snapshot — a regular file, always safe).
+ *   1. Reading context (.pipemd/live/.render.md snapshot — a regular file, always safe).
  *   2. Crew coordination (register, claim, heartbeat, leave).
  *   3. Fleet awareness — see and drive the fleet through the relay (pull-based).
  */
@@ -51,7 +51,7 @@ function skillBody(): string {
   return [
     "---",
     "name: pipemd-context",
-    "description: PipeMD context for Hermes. Read .pipemd/.render.md for live project",
+    "description: PipeMD context for Hermes. Read .pipemd/live/.render.md for live project",
     "  context, register as a crew coordinator, claim files, and drive the fleet",
     "  through the relay.",
     "version: 2.0.0",
@@ -68,11 +68,11 @@ function skillBody(): string {
     "## Reading the context",
     "",
     "Prefer the daemon's snapshot file — it is a regular file, always safe to read:",
-    "  cat .pipemd/.render.md",
+    "  cat .pipemd/live/.render.md",
     "",
     "If the snapshot is missing or stale (daemon not running), generate a fresh",
     "render on demand:",
-    "  pmd run -o .pipemd/.render.md && cat .pipemd/.render.md",
+    "  pmd run -o .pipemd/live/.render.md && cat .pipemd/live/.render.md",
     "  # or simply stream it to stdout:",
     "  pmd run",
     "",
