@@ -5,11 +5,12 @@ import type { DeliveryMode } from "./injection-types.js";
 import type { HookInstallResult, HarnessAdapter } from "./hooks.js";
 import { log, errMsg } from "./logger.js";
 
-declare const PKG_VERSION: string;
+declare const PKG_VERSION: string | undefined;
 
 const OPENCODE_PLUGIN_VERSION = (() => {
-  const numeric = PKG_VERSION.split(".")[0] || "1";
-  const minor = PKG_VERSION.split(".")[1] || "0";
+  const v = typeof PKG_VERSION === "string" ? PKG_VERSION : "0.0.0";
+  const numeric = v.split(".")[0] || "1";
+  const minor = v.split(".")[1] || "0";
   return (Number(numeric) || 1) * 100 + (Number(minor) || 0);
 })();
 

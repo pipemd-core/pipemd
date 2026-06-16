@@ -262,7 +262,7 @@ function harnessTargetFile(name: HarnessName): string {
 }
 
 function harnessNeedsLegacy(name: HarnessName): boolean {
-  return name === "Cursor" || name === "OpenClaw" || name === "Hermes" || name === "OS Agent";
+  return name === "Cursor" || name === "OpenClaw" || name === "OS Agent";
 }
 
 interface ScaffoldResult {
