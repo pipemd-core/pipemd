@@ -88,6 +88,7 @@ let syncTimer: ReturnType<typeof setInterval> | null = null;
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let server: http.Server | null = null;
 let relayStartTime: number | null = null;
+let lastSyncLatencyMs: number | null = null;
 
 type BlockKey = `${string}:${string}:${string}`;
 const blockStore = new Map<BlockKey, BlockEntry>();
@@ -319,6 +320,7 @@ function handleCrew(req: http.IncomingMessage, res: http.ServerResponse) {
 }
 
 function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
+  const t0 = Date.now();
   const token = cachedRelayToken || readToken();
   const auth = req.headers.authorization;
   if (!token || !auth || !timingSafeEqual(auth, `Bearer ${token}`)) {
@@ -355,6 +357,7 @@ function handleSync(req: http.IncomingMessage, res: http.ServerResponse) {
       }
 
       peerLastSync.set(safeHostname, now);
+      lastSyncLatencyMs = Date.now() - t0;
       jsonResponse(res, 200, { hostname: hostname(), groups: myGroups });
     })
     .catch(() => jsonResponse(res, 400, { error: "invalid body" }));
@@ -393,6 +396,21 @@ function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
     uptime: uptimeSeconds,
     peers: readPeers().length,
     pid: process.pid,
+  });
+}
+
+function handleMetrics(_req: http.IncomingMessage, res: http.ServerResponse) {
+  let crewSessions = 0;
+  for (const origins of store.values()) {
+    for (const entry of origins.values()) {
+      crewSessions += entry.sessions.length;
+    }
+  }
+  jsonResponse(res, 200, {
+    hostname: hostname(),
+    blocks: blockStore.size,
+    crewSessions,
+    syncLatencyMs: lastSyncLatencyMs,
   });
 }
 
@@ -461,6 +479,8 @@ function requestHandler(req: http.IncomingMessage, res: http.ServerResponse) {
     handleStatus(req, res);
   } else if (req.method === "GET" && req.url === "/health") {
     handleHealth(req, res);
+  } else if (req.method === "GET" && req.url === "/metrics") {
+    handleMetrics(req, res);
   } else {
     jsonResponse(res, 404, { error: "not found" });
   }
@@ -507,6 +527,7 @@ export function stopRelay() {
     server = null;
   }
   relayStartTime = null;
+  lastSyncLatencyMs = null;
   blockStore.clear();
   log.info("Relay stopped");
 }

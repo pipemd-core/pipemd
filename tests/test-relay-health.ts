@@ -135,3 +135,89 @@ describe("GET /health", () => {
     assert.equal(status, 200);
   });
 });
+
+describe("GET /metrics", () => {
+  it("returns 200 with blocks, crewSessions, syncLatencyMs, hostname", async () => {
+    const { status, data } = await get(relayPort, "/metrics");
+    const d = data as Record<string, unknown> | null;
+    assert.equal(status, 200);
+    assert.ok(d, "response body should be JSON");
+    assert.ok(typeof d!.blocks === "number" && (d!.blocks as number) >= 0);
+    assert.ok(
+      typeof d!.crewSessions === "number" && (d!.crewSessions as number) >= 0,
+    );
+    assert.ok(
+      d!.syncLatencyMs === null || typeof d!.syncLatencyMs === "number",
+      "syncLatencyMs must be null or a number",
+    );
+    assert.ok(typeof d!.hostname === "string");
+  });
+
+  it("reflects newly pushed blocks in the block count", async () => {
+    const before = await get(relayPort, "/metrics");
+    const blocksBefore = (before.data as Record<string, unknown>).blocks as number;
+
+    await post(relayPort, "/blocks", {
+      group: "metrics-block-group",
+      hostname: "metrics-host",
+      commitSha: "metricsha",
+      blocks: [
+        { source: "test-failures", data: "x", timestamp: Date.now(), hash: "m1" },
+        { source: "git-delta", data: "y", timestamp: Date.now(), hash: "m2" },
+        { source: "todo", data: "z", timestamp: Date.now(), hash: "m3" },
+      ],
+    });
+
+    const after = await get(relayPort, "/metrics");
+    const blocksAfter = (after.data as Record<string, unknown>).blocks as number;
+    assert.ok(
+      blocksAfter >= blocksBefore + 3,
+      `expected block count to increase by >= 3: ${blocksBefore} -> ${blocksAfter}`,
+    );
+  });
+
+  it("reflects newly pushed crew sessions in the crew session count", async () => {
+    const before = await get(relayPort, "/metrics");
+    const crewBefore = (before.data as Record<string, unknown>)
+      .crewSessions as number;
+
+    await post(relayPort, "/crew", {
+      group: "metrics-crew-group",
+      hostname: "metrics-crew-host",
+      sessions: [
+        makeSession({ id: "cr_metrics_a" }),
+        makeSession({ id: "cr_metrics_b" }),
+      ],
+    });
+
+    const after = await get(relayPort, "/metrics");
+    const crewAfter = (after.data as Record<string, unknown>).crewSessions as number;
+    assert.ok(
+      crewAfter >= crewBefore + 2,
+      `expected crew count to increase by >= 2: ${crewBefore} -> ${crewAfter}`,
+    );
+  });
+
+  it("reports a numeric sync latency after a peer sync handshake", async () => {
+    const initial = await get(relayPort, "/metrics");
+    assert.equal(
+      (initial.data as Record<string, unknown>).syncLatencyMs,
+      null,
+      "syncLatencyMs should be null before any sync",
+    );
+
+    await post(
+      relayPort,
+      "/sync",
+      { hostname: "latency-peer", groups: {} },
+      { Authorization: `Bearer ${testToken}` },
+    );
+
+    const after = await get(relayPort, "/metrics");
+    const lat = (after.data as Record<string, unknown>).syncLatencyMs;
+    assert.ok(
+      typeof lat === "number" && lat >= 0,
+      `syncLatencyMs should be a non-negative number after sync, got ${lat}`,
+    );
+  });
+});
