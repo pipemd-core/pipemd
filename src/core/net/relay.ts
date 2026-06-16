@@ -562,6 +562,9 @@ function forwardToOpencode(
     const headers: Record<string, string> = {
       "Content-Type": contentType,
       Authorization: opencodeBasicAuth(),
+      // One-shot proxy hop: close after each request so a stale keep-alive
+      // socket (e.g. opencode recycled) never poisons the next dispatch.
+      Connection: "close",
       ...extraHeaders,
     };
     if (body.length > 0) headers["Content-Length"] = String(Buffer.byteLength(body));
@@ -607,6 +610,9 @@ function forwardToPeer(
     const headers: Record<string, string> = {
       "Content-Type": contentType,
       Authorization: `Bearer ${target.token}`,
+      // One-shot proxy hop: close after each request so a stale keep-alive
+      // socket to a peer relay never poisons the next forwarded request.
+      Connection: "close",
     };
     if (body.length > 0) headers["Content-Length"] = String(Buffer.byteLength(body));
     const downstream = http.request(
