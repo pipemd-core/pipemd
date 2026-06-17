@@ -137,7 +137,7 @@ describe("hooks.ts dispatch for Hermes", () => {
 
 // ─── Phase 2: Fleet section (A2-1) ──────────────────────────────────────
 
-describe("hermesAdapter \u2014 Fleet section (A2-1)", () => {
+describe("hermesAdapter — Fleet section (A2-1)", () => {
   it("skill body contains the Fleet section header", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const body = fs.readFileSync(skillFile(), "utf-8");
@@ -159,17 +159,24 @@ describe("hermesAdapter \u2014 Fleet section (A2-1)", () => {
     assert.match(body, /relay\.json/);
   });
 
-  it("skill body instructs pull-based topology (read /fleet first)", () => {
+  it("skill body instructs pull-based topology (read /fleet first, no push)", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const body = fs.readFileSync(skillFile(), "utf-8");
     assert.match(body, /GET \{relay\}\/fleet/);
     assert.match(body, /pull-based/i);
+    assert.match(body, /Never push/i);
+  });
+
+  it("skill body explains takeover replaces SSH + tmux", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    const body = fs.readFileSync(skillFile(), "utf-8");
+    assert.match(body, /REPLACES.*SSH.*tmux/i);
   });
 });
 
 // ─── Phase 2: Relay config injection (A2-2) ─────────────────────────────
 
-describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
+describe("hermesAdapter — relay config injection (A2-2)", () => {
   let origRelay: string | undefined;
 
   beforeEach(() => {
@@ -185,7 +192,7 @@ describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
     else process.env.PMD_RELAY = origRelay;
   });
 
-  it("writes relay.json with baseUrl and token", () => {
+  it("writes relay.json with baseUrl and token resolved from secure config", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const relayJson = JSON.parse(fs.readFileSync(relayFile(), "utf-8"));
     assert.equal(relayJson.baseUrl, "http://test-relay:9741");
@@ -205,6 +212,12 @@ describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
     assert.equal(mode, 0o600);
   });
 
+  it("skips relay.json when no relay URL is configured (graceful)", () => {
+    delete process.env.PMD_RELAY;
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.ok(!fs.existsSync(relayFile()), "relay.json must not be written without a relay URL");
+  });
+
   it("removeHooks cleans up relay.json alongside the skill", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     assert.ok(fs.existsSync(relayFile()));
@@ -215,20 +228,22 @@ describe("hermesAdapter \u2014 relay config injection (A2-2)", () => {
 
 // ─── Phase 2: Boot-time fleet awareness (A2-3) ──────────────────────────
 
-describe("hermesAdapter \u2014 boot-time fleet awareness (A2-3)", () => {
+describe("hermesAdapter — boot-time fleet awareness (A2-3)", () => {
   it("ensures commands.fleet in config.yml", () => {
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
     assert.match(cfg, /fleet:\s*pmd fleet/);
   });
 
-  it("adds a fleet block to template.md when missing", () => {
+  it("adds a marker-tagged fleet block to template.md when missing", () => {
     const tplPath = path.join(tmpDir, ".pipemd", "template.md");
     fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
     hermesAdapter.installHooks(tmpDir, "passive", false, true);
     const tpl = fs.readFileSync(tplPath, "utf-8");
     assert.match(tpl, /<!-- pmd: fleet -->/);
     assert.match(tpl, /<!-- \/pmd -->/);
+    assert.match(tpl, /<!-- pipemd-fleet-section -->/, "fleet section must be marker-tagged (N5)");
+    assert.match(tpl, /<!-- \/pipemd-fleet-section -->/);
   });
 
   it("does not duplicate the fleet block if already present", () => {
@@ -241,5 +256,31 @@ describe("hermesAdapter \u2014 boot-time fleet awareness (A2-3)", () => {
     const tpl = fs.readFileSync(tplPath, "utf-8");
     const count = (tpl.match(/<!-- pmd: fleet -->/g) || []).length;
     assert.equal(count, 1);
+  });
+
+  it("reports 'template: not found' when template.md is absent (N4 diagnostic)", () => {
+    const r = hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    assert.match(r.detail, /template: not found/);
+  });
+
+  it("removeHooks strips commands.fleet from config.yml (install/remove symmetry, N2)", () => {
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    let cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.match(cfg, /fleet:/);
+    hermesAdapter.removeHooks(tmpDir);
+    cfg = fs.readFileSync(path.join(tmpDir, ".pipemd", "config.yml"), "utf-8");
+    assert.doesNotMatch(cfg, /fleet:\s*pmd fleet/, "commands.fleet should be stripped on remove");
+  });
+
+  it("removeHooks strips the fleet block from template.md (N2)", () => {
+    const tplPath = path.join(tmpDir, ".pipemd", "template.md");
+    fs.writeFileSync(tplPath, "# Existing template\n\nSome content\n");
+    hermesAdapter.installHooks(tmpDir, "passive", false, true);
+    let tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.match(tpl, /pipemd-fleet-section/);
+    hermesAdapter.removeHooks(tmpDir);
+    tpl = fs.readFileSync(tplPath, "utf-8");
+    assert.doesNotMatch(tpl, /pipemd-fleet-section/, "fleet section should be stripped on remove");
+    assert.doesNotMatch(tpl, /<!-- pmd: fleet -->/, "fleet block should be stripped on remove");
   });
 });

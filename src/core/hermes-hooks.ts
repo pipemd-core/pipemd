@@ -14,7 +14,10 @@ const TEMPLATE_RENDER = ".pipemd/template.md";
 const CONFIG_REL = path.join(".pipemd", "config.yml");
 const TEMPLATE_REL = path.join(".pipemd", "template.md");
 const RELAY_CONFIG_NAME = "relay.json";
+const RELAY_TOKEN_REL = path.join(".pipemd", "link", "relay.token");
 const FLEET_BLOCK_TAG = "<!-- pmd: fleet -->";
+const FLEET_SECTION_OPEN = "<!-- pipemd-fleet-section -->";
+const FLEET_SECTION_CLOSE = "<!-- /pipemd-fleet-section -->";
 
 /** Marker written into the skill body so removeHooks can detect our install. */
 const PMD_MARKER = "<!-- pipemd-managed-skill -->";
@@ -43,7 +46,7 @@ function safeRead(p: string): string {
 /**
  * Hermes skill body. Kept inline (not a separate template file) because it is
  * the only Hermes-specific artifact. Covers three concerns:
- *   1. Reading context (.pipemd/live/.render.md snapshot — a regular file, always safe).
+ *   1. Reading context (WORKSPACE_CONTEXT.md FIFO via cat + pmd run fallback).
  *   2. Crew coordination (register, claim, heartbeat, leave).
  *   3. Fleet awareness — see and drive the fleet through the relay (pull-based).
  */
@@ -51,7 +54,7 @@ function skillBody(): string {
   return [
     "---",
     "name: pipemd-context",
-    "description: PipeMD context for Hermes. Read .pipemd/live/.render.md for live project",
+    "description: PipeMD context for Hermes. Read WORKSPACE_CONTEXT.md for live project",
     "  context, register as a crew coordinator, claim files, and drive the fleet",
     "  through the relay.",
     "version: 2.0.0",
@@ -62,26 +65,24 @@ function skillBody(): string {
     "# PipeMD Context (Hermes)",
     "",
     "This project is PipeMD-enabled. PipeMD renders live project context (git state,",
-    "architecture map, crew status, fleet topology, file errors) into",
-    "`WORKSPACE_CONTEXT.md`, kept fresh by the PipeMD daemon via a named pipe (mkfifo).",
+    "architecture map, crew status, file errors) into `WORKSPACE_CONTEXT.md`, kept",
+    "fresh by the PipeMD daemon via a named pipe (mkfifo).",
     "",
     "## Reading the context",
     "",
-    "Prefer the daemon's snapshot file — it is a regular file, always safe to read:",
-    "  cat .pipemd/live/.render.md",
-    "",
-    "If the snapshot is missing or stale (daemon not running), generate a fresh",
-    "render on demand:",
-    "  pmd run -o .pipemd/live/.render.md && cat .pipemd/live/.render.md",
-    "  # or simply stream it to stdout:",
+    "Prefer `pmd run` for a guaranteed-fresh render streamed to stdout:",
     "  pmd run",
     "",
-    "Do NOT read `WORKSPACE_CONTEXT.md` directly with read_file — it is a named pipe",
+    "For the live pipe read, use `cat` (the FIFO is safe with cat):",
+    "  cat WORKSPACE_CONTEXT.md",
+    "",
+    "Do NOT use read_file on WORKSPACE_CONTEXT.md directly \u2014 it is a named pipe",
     "(FIFO) and a synchronous read may block until the daemon opens the write end.",
+    "If a cat read looks stale or empty, the daemon may not be running: start it with",
+    "`pmd start`, or fall back to `pmd run` for a one-shot render.",
     "",
     "It contains `<!-- pmd: <id> --> ... <!-- /pmd -->` blocks populated by the",
-    "daemon. Treat their contents as read-only ground truth. The `<!-- pmd: fleet -->`",
-    "block gives you boot-time fleet topology.",
+    "daemon. Treat their contents as read-only ground truth.",
     "",
     "## Crew coordination",
     "",
@@ -103,11 +104,15 @@ function skillBody(): string {
     "Your relay endpoint and bearer token are written to:",
     "  ~/.hermes/skills/devops/pipemd-context/relay.json",
     "Read that file first to resolve the concrete {relay} base URL and token.",
+    "All requests require: Authorization: Bearer <token> (from relay.json).",
     "",
-    "ALWAYS start by reading the fleet topology (pull-based, no push/webhooks):",
+    "DECISION RULE — always start pull-based: read the fleet topology first, then",
+    "act. Never push state; the relay (Track B) is the fabric, Hermes is a",
+    "pull-based consumer + commander.",
+    "",
+    "See the fleet (build your topology model before acting):",
     "  GET {relay}/fleet",
     "Returns all machines, their projects, active sessions/agents, and PTYs.",
-    "Build your mental model from this before acting.",
     "",
     "Read a specific worker's live context:",
     "  GET {relay}/workspace/:agent_id/context",
@@ -122,8 +127,6 @@ function skillBody(): string {
     "The response returns a relay WebSocket URL. Connect to it with `cursor` to",
     "stream and resume the session. This REPLACES manual SSH + tmux.",
     "",
-    "All requests require: Authorization: Bearer <token> (from relay.json).",
-    "",
     PMD_MARKER,
     "",
   ].join("\n");
@@ -131,11 +134,12 @@ function skillBody(): string {
 
 /**
  * Read the relay base URL and bearer token from Empire secure config:
- *   - URL:  config.yml `link.relay` or PMD_RELAY env var.
+ *   - URL:  PMD_RELAY env var, or config.yml `link.relay`.
  *   - Token: ~/.pipemd/link/relay.token (generated by `pmd link`).
- * Returns null when no relay URL is configured.
+ * Returns null when no relay URL is configured. Never hardcodes host/secret.
+ * Exported so fleet-summary.ts reuses the same source of truth (self-review N8).
  */
-function readRelayInfo(cwd: string): { baseUrl: string; token: string } | null {
+export function readRelayInfo(cwd: string): { baseUrl: string; token: string } | null {
   let baseUrl = process.env.PMD_RELAY || "";
   if (!baseUrl) {
     try {
@@ -154,7 +158,7 @@ function readRelayInfo(cwd: string): { baseUrl: string; token: string } | null {
 
   let token = "";
   try {
-    const tokenFile = path.join(os.homedir(), ".pipemd", "link", "relay.token");
+    const tokenFile = path.join(os.homedir(), RELAY_TOKEN_REL);
     if (fs.existsSync(tokenFile)) {
       token = fs.readFileSync(tokenFile, "utf-8").trim();
     }
@@ -168,8 +172,8 @@ function readRelayInfo(cwd: string): { baseUrl: string; token: string } | null {
 /**
  * Idempotently write the relay endpoint + token into
  * `~/.hermes/skills/devops/pipemd-context/relay.json` (chmod 0o600) so the
- * skill's Fleet instructions resolve to a concrete endpoint. Returns whether a
- * change was (or would be, under dryRun) made.
+ * skill's Fleet instructions resolve to a concrete endpoint (A2-2).
+ * Returns whether a change was (or would be, under dryRun) made.
  */
 function reconcileRelayConfig(
   cwd: string,
@@ -206,11 +210,10 @@ function reconcileRelayConfig(
 }
 
 /**
- * Idempotently ensure `.pipemd/config.yml` has:
- *   1. A WORKSPACE_CONTEXT.md pipe entry (render: .pipemd/template.md, mode: pipe).
- *   2. A `fleet` command entry pointing to `pmd fleet` (A2-3 boot-time awareness).
- * The scaffold adds the pipe on `pmd init`; this is insurance for projects that
- * ran init before the adapter existed. Mirrors scaffold.ts updateConfigInjected.
+ * Idempotently ensure `.pipemd/config.yml` has a WORKSPACE_CONTEXT.md pipe entry
+ * (render: .pipemd/template.md, mode: pipe). The scaffold adds the pipe on
+ * `pmd init`; this is insurance for projects that ran init before the adapter
+ * existed. Mirrors scaffold.ts updateConfigInjected.
  */
 function reconcileConfig(cwd: string, dryRun: boolean): boolean {
   const cfgPath = path.join(cwd, CONFIG_REL);
@@ -233,7 +236,6 @@ function reconcileConfig(cwd: string, dryRun: boolean): boolean {
 
   let changed = false;
 
-  // (a) Pipe entry for WORKSPACE_CONTEXT.md (mode: pipe).
   const pipes = Array.isArray(config.pipes) ? config.pipes : [];
   const entry = pipes.find(
     (p) => p.file === TARGET_FILE || p.render === TEMPLATE_RENDER,
@@ -258,7 +260,9 @@ function reconcileConfig(cwd: string, dryRun: boolean): boolean {
   }
   config.pipes = pipes;
 
-  // (b) Fleet command for boot-time fleet awareness (A2-3).
+  // Fleet command for boot-time fleet awareness (A2-3). The daemon's render
+  // pipeline resolves the template's <!-- pmd: fleet --> block by running this
+  // command, which calls renderFleetSummary() (pull-based HTTP to the relay).
   if (!config.commands || typeof config.commands !== "object") {
     config.commands = {};
   }
@@ -278,23 +282,28 @@ function reconcileConfig(cwd: string, dryRun: boolean): boolean {
 }
 
 /**
- * Idempotently ensure `.pipemd/template.md` has a `<!-- pmd: fleet -->` block
- * so the daemon's render includes boot-time fleet topology (A2-3). The scaffold
- * owns the template; this appends the block only if it's missing.
+ * Idempotently ensure `.pipemd/template.md` has a PipeMD-owned `<!-- pmd: fleet -->`
+ * block so the daemon's render includes boot-time fleet topology (A2-3). The
+ * scaffold owns the template; this appends a marker-tagged section only if the
+ * fleet tag is missing. Returns a tri-state for accurate diagnostics (N4/N5).
  */
-function reconcileTemplate(cwd: string, dryRun: boolean): boolean {
+function reconcileTemplate(
+  cwd: string,
+  dryRun: boolean,
+): "added" | "present" | "absent" {
   const tplPath = path.join(cwd, TEMPLATE_REL);
   let raw: string;
   try {
     raw = fs.readFileSync(tplPath, "utf-8");
   } catch {
-    return false;
+    return "absent";
   }
 
-  if (raw.includes(FLEET_BLOCK_TAG)) return false;
+  if (raw.includes(FLEET_BLOCK_TAG)) return "present";
 
-  const fleetBlock = [
+  const fleetSection = [
     "",
+    FLEET_SECTION_OPEN,
     "---",
     "",
     "## Fleet",
@@ -305,16 +314,73 @@ function reconcileTemplate(cwd: string, dryRun: boolean): boolean {
     "```",
     "<!-- /pmd -->",
     "",
+    FLEET_SECTION_CLOSE,
+    "",
   ].join("\n");
 
   if (!dryRun) {
     try {
-      fs.writeFileSync(tplPath, raw.replace(/\s*$/, "") + "\n" + fleetBlock, "utf-8");
+      fs.writeFileSync(tplPath, raw.replace(/\s*$/, "") + "\n" + fleetSection, "utf-8");
     } catch (err: unknown) {
       log.debug(`reconcileTemplate write: ${errMsg(err)}`);
     }
   }
-  return true;
+  return "added";
+}
+
+/**
+ * Best-effort strip the PipeMD-owned fleet section from template.md (N2/N5).
+ * Removes only the span between FLEET_SECTION_OPEN and FLEET_SECTION_CLOSE.
+ */
+function stripFleetFromTemplate(cwd: string): void {
+  const tplPath = path.join(cwd, TEMPLATE_REL);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(tplPath, "utf-8");
+  } catch {
+    return;
+  }
+  if (!raw.includes(FLEET_SECTION_OPEN)) return;
+  const re = new RegExp(
+    `${escapeRegExp(FLEET_SECTION_OPEN)}[\\s\\S]*?${escapeRegExp(FLEET_SECTION_CLOSE)}\\n?`,
+    "g",
+  );
+  try {
+    fs.writeFileSync(tplPath, raw.replace(re, "").replace(/\n{3,}/g, "\n\n"), "utf-8");
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromTemplate: ${errMsg(err)}`);
+  }
+}
+
+/**
+ * Best-effort remove the `commands.fleet` entry from config.yml (N2).
+ */
+function stripFleetFromConfig(cwd: string): void {
+  const cfgPath = path.join(cwd, CONFIG_REL);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(cfgPath, "utf-8");
+  } catch {
+    return;
+  }
+  let config: PipeConfig;
+  try {
+    config = parseYaml(raw) as PipeConfig;
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromConfig parse: ${errMsg(err)}`);
+    return;
+  }
+  if (!config?.commands?.fleet) return;
+  delete config.commands.fleet;
+  try {
+    fs.writeFileSync(cfgPath, stringifyYaml(config), "utf-8");
+  } catch (err: unknown) {
+    log.debug(`stripFleetFromConfig write: ${errMsg(err)}`);
+  }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function installHermesHooks(
@@ -349,26 +415,29 @@ function installHermesHooks(
     results.push("skill: already installed");
   }
 
-  // (2) Reconcile config.yml (pipe entry + fleet command).
+  // (2) Reconcile config.yml (pipe entry).
   if (reconcileConfig(cwd, dryRun)) {
     changed = true;
-    results.push("config: WORKSPACE_CONTEXT.md pipe + fleet command ensured");
+    results.push("config: WORKSPACE_CONTEXT.md pipe ensured");
   } else {
-    results.push("config: pipe + fleet command already present");
+    results.push("config: pipe entry already present");
   }
 
-  // (3) Ensure the fleet block is in template.md (A2-3 boot-time awareness).
-  if (reconcileTemplate(cwd, dryRun)) {
-    changed = true;
-    results.push("template: fleet block ensured");
-  } else {
-    results.push("template: fleet block already present");
-  }
-
-  // (4) Reconcile relay endpoint config (A2-2).
+  // (3) Reconcile relay endpoint config (A2-2).
   const relayResult = reconcileRelayConfig(cwd, dryRun);
   if (relayResult.changed) changed = true;
   results.push(relayResult.detail);
+
+  // (4) Ensure the fleet block is in template.md (A2-3 boot-time awareness).
+  const tplState = reconcileTemplate(cwd, dryRun);
+  if (tplState === "added") {
+    changed = true;
+    results.push("template: fleet block ensured");
+  } else if (tplState === "present") {
+    results.push("template: fleet block already present");
+  } else {
+    results.push("template: not found (skipped)");
+  }
 
   const prefix = dryRun && changed ? "needs update: " : "";
   return {
@@ -379,7 +448,7 @@ function installHermesHooks(
   };
 }
 
-function removeHermesHooks(_cwd: string): HookInstallResult {
+function removeHermesHooks(cwd: string): HookInstallResult {
   const sPath = skillPath();
   let removed = false;
   let detail = "nothing to remove";
@@ -392,7 +461,6 @@ function removeHermesHooks(_cwd: string): HookInstallResult {
       try {
         fs.unlinkSync(sPath);
         removed = true;
-        // best-effort: prune the now-empty skill directory (also removes relay.json)
         try {
           fs.rmSync(path.dirname(sPath), { recursive: true });
         } catch (err: unknown) {
@@ -405,6 +473,14 @@ function removeHermesHooks(_cwd: string): HookInstallResult {
     }
   } catch (err: unknown) {
     log.debug(`removeHermesHooks read: ${errMsg(err)}`);
+  }
+
+  // Install/remove symmetry (N2): strip project-local fleet artifacts that
+  // installHermesHooks wrote, so the daemon stops spawning `pmd fleet` after
+  // the harness is removed. Best-effort — never fails the remove.
+  if (removed) {
+    stripFleetFromConfig(cwd);
+    stripFleetFromTemplate(cwd);
   }
 
   return {
