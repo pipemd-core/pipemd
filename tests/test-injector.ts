@@ -51,17 +51,19 @@ describe("injectContent", () => {
     assert.ok(result!.includes("bbb"));
   });
 
-  it("handles failing command gracefully", () => {
+  it("collapses a failing command block (no error leaks into context)", () => {
     const content = "<!-- pmd: bad -->\n```\n\n```\n<!-- /pmd -->";
     const result = injectContent(content, makeConfig({ bad: "false" }));
-    assert.ok(result);
-    assert.ok(result!.includes("PipeMD Error"));
+    assert.notEqual(result, null, "expected a change (block should collapse)");
+    assert.ok(!result!.includes("PipeMD Error"), "error string leaked into context");
+    assert.ok(!result!.includes("bad"), "block tag should be collapsed, not rendered");
   });
 
-  it("returns null when command output matches existing content", () => {
+  it("collapses a command that returns empty output (no empty code-block noise)", () => {
     const content = "<!-- pmd: empty -->\n```\n\n```\n<!-- /pmd -->";
     const result = injectContent(content, makeConfig({ empty: "true" }));
-    assert.equal(result, null);
+    assert.notEqual(result, null, "empty output should collapse the block (a change)");
+    assert.ok(!result!.includes("<!-- pmd: empty"), "empty-output block should be removed");
   });
 
   it("preserves content outside blocks", () => {
@@ -127,10 +129,11 @@ describe("renderContentAsync", () => {
     assert.ok(!result.includes("old"));
   });
 
-  it("handles failing async command gracefully", async () => {
+  it("collapses a failing async command (no error leaks into context)", async () => {
     const template = "<!-- pmd: bad -->\n```\n\n```\n<!-- /pmd -->";
     const result = await renderContentAsync(template, makeConfig({ bad: "false" }));
-    assert.ok(result.includes("PipeMD Error"));
+    assert.ok(!result.includes("PipeMD Error"), "error string leaked into context");
+    assert.ok(!result.includes("bad"), "block tag should be collapsed, not rendered");
   });
 
   it("truncates output when maxLines is exceeded", async () => {

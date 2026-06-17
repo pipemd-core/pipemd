@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { COMMAND_TIMEOUT_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
 import { buildSafeEnv } from "./json-utils.js";
+import { log, errMsg } from "./logger.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,9 +25,6 @@ export function parseCommand(cmd: string): { bin: string; args: string[]; env: R
 
 const BLOCK_RE = /<!--\s*pmd:\s*([\w-]+)\s*-->\n?([\s\S]*?)<!--\s*\/pmd\s*-->/g;
 
-const ERROR_BLOCK = (commandName: string, cmd: string, detail: string) =>
-  `⚠️ PipeMD Error: Command '${commandName}' failed to execute.\n${cmd}: ${detail}\nCheck .pipemd/daemon.log`;
-
 export function injectFile(filePath: string, config: PipeConfig, outputPath?: string): boolean {
   const content = fs.readFileSync(filePath, "utf-8");
   const updated = injectContent(content, config);
@@ -45,7 +43,7 @@ export function injectContent(content: string, config: PipeConfig): string | nul
     const cmd = config.commands[commandName];
     if (!cmd) return _match;
     const output = runCommandSync(commandName, cmd, config);
-    const replacement = buildBlock(commandName, output);
+    const replacement = output ? buildBlock(commandName, output) : "";
     if (replacement !== _match) {
       changed = true;
     }
@@ -80,13 +78,12 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         const output = stdout.trim();
         results.set(name, output ? buildBlock(name, output) : "");
       } catch (err: unknown) {
-        const execErr = err as { stderr?: string; message?: string; killed?: boolean; signal?: string } | null;
-        if (execErr?.killed || execErr?.signal === "SIGTERM") {
-          results.set(name, "");
-        } else {
-          const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
-          results.set(name, buildBlock(name, ERROR_BLOCK(name, cmd, detail)));
+        const execErr = err as { stderr?: string; killed?: boolean; signal?: string } | null;
+        if (!(execErr?.killed || execErr?.signal === "SIGTERM")) {
+          const detail = execErr?.stderr?.trimEnd() || errMsg(err);
+          log.warn(`block '${name}' suppressed after error: ${detail}`);
         }
+        results.set(name, "");
       }
     })
   );
@@ -141,9 +138,12 @@ function runCommandSync(commandName: string, cmd: string, config?: PipeConfig): 
     const out = execFileSync(bin, args, { encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"], cwd: process.cwd(), env: buildSafeEnv(cmdEnv) });
     return out.trimEnd();
   } catch (err: unknown) {
-    const execErr = err as { stderr?: string; message?: string } | null;
-    const detail = execErr?.stderr?.trimEnd() || execErr?.message || "Unknown error";
-    return ERROR_BLOCK(commandName, cmd, detail);
+    const execErr = err as { stderr?: string; killed?: boolean; signal?: string } | null;
+    if (!(execErr?.killed || execErr?.signal === "SIGTERM")) {
+      const detail = execErr?.stderr?.trimEnd() || errMsg(err);
+      log.warn(`block '${commandName}' suppressed after error: ${detail}`);
+    }
+    return "";
   }
 }
 

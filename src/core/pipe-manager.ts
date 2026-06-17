@@ -218,9 +218,12 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
         closeSafe(writeFd);
         trackedSetTimeout(reServe, delay);
       }).catch((err: unknown) => {
-        const e = err as { stderr?: string; message?: string };
-        const detail = e.stderr?.trimEnd() || e.message || "Unknown error";
-        writeSafe(writeFd, `\`\`\`\n⚠️ Command failed: ${cmd}\n${detail}\n\`\`\``);
+        const e = err as { stderr?: string; killed?: boolean; signal?: string };
+        if (!(e.killed || e.signal === "SIGTERM")) {
+          const detail = e.stderr?.trimEnd() || errMsg(err);
+          log.warn(`pipe '${command}' suppressed after error: ${detail}`);
+        }
+        writeSafe(writeFd, "");
         closeSafe(writeFd);
         trackedSetTimeout(reServe, delay);
       });
