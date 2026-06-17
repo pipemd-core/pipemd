@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# Auto-detect dependency file and list dependencies, prioritizing detected ecosystem
+# Auto-detect dependency file and list dependencies, prioritizing detected ecosystem.
+# Fallback resolver for ecosystems without a dedicated deps.sh (Rust, Lua, Generic).
 source "$(dirname "$0")/../lib/limit.sh"
 
 eco="${PMD_ECOSYSTEM:-}"
@@ -41,6 +42,7 @@ check_rust() {
     if [ -n "$out" ]; then
       echo "Dependencies:"
       echo "$out"
+      command -v cargo &>/dev/null && { echo "Verify: cargo test"; echo "Lint: cargo clippy"; }
       exit 0
     fi
   fi
@@ -57,18 +59,60 @@ check_go() {
   fi
 }
 
+check_lua() {
+  local rockspecs
+  rockspecs=$(ls ./*.rockspec 2>/dev/null)
+  if [ -n "$rockspecs" ]; then
+    out=$(awk '
+      /^[[:space:]]*dependencies[[:space:]]*=/ { in_deps=1; next }
+      in_deps && /\}/ { in_deps=0 }
+      in_deps {
+        gsub(/['"'"'"]/,""); gsub(/[,{}]/,""); sub(/[<=>!~].*/,""); gsub(/^[[:space:]]+/,"")
+        if (length($0)>0) print
+      }
+    ' $rockspecs 2>/dev/null | sort -u | head -"$MAX_DEPS")
+    if [ -n "$out" ]; then
+      echo "Dependencies:"
+      echo "$out"
+    else
+      echo "Dependencies: rockspec present, none parsed"
+    fi
+    command -v lua      &>/dev/null && echo "Toolchain: $(lua -v 2>&1)"
+    command -v busted   &>/dev/null && echo "Verify: busted"
+    command -v luacheck &>/dev/null && echo "Lint: luacheck ."
+    exit 0
+  fi
+  if [ -f luarocks.lock ] || [ -f .luarocks ]; then
+    echo "Dependencies: see luarocks manifest"
+    exit 0
+  fi
+  return 1
+}
+
+# Surface any installed toolchain so the agent isn't blind in the generic case.
+show_toolchain() {
+  command -v node    &>/dev/null && echo "Toolchain: $(node --version)"
+  command -v python3 &>/dev/null && echo "Toolchain: $(python3 --version 2>&1)"
+  command -v cargo   &>/dev/null && echo "Verify: cargo test"
+  command -v go      &>/dev/null && echo "Verify: go test ./..."
+  command -v make    &>/dev/null && echo "Verify: make test"
+}
+
 case "$eco" in
   Node-TypeScript) check_node ;;
   Python) check_python ;;
   Rust) check_rust ;;
   Go) check_go ;;
   C-CPP) ;;
+  Lua) check_lua ;;
 esac
 
-# Generic: try all in order
+# Generic: try all in order, then Lua
 check_node || true
 check_python || true
 check_rust || true
 check_go || true
+check_lua || true
 
-echo "No dependency file recognized"
+echo "No recognized dependency manifest"
+show_toolchain
