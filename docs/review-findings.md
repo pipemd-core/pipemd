@@ -169,3 +169,40 @@ the "flawless" gate.
 18. **PLUG-003** — remove broken `cleanupFifoTemp`
 19. **PLUG-005** — async inject (replace `execFileSync` with cached `execFile`)
 20. **PLUG-007** — lint + typecheck plugins
+
+---
+
+## Maintenance Log
+
+### 2026-06-17 — Rebase `experimental` + phase2 branches onto `main`
+
+After `main` received the 36-finding fix (`24ff188`) via a force-update of
+`exoserver/main`, the `experimental` incubator branch and its two phase2
+children (`feat/track-a-phase2`, `feat/track-b-phase2`) were left on the
+pre-fix lineage — missing CORE-001/002/004/009, SEC-003/004/005/006/013/014,
+PLUG-001/003/005/009/010, and the new FIFO/fuzz/concurrent test coverage.
+
+Per discipline ("product preempts infra"), all three branches were rebased:
+
+- `experimental` (8b60b1c → f660f91): `git rebase --rebase-merges main`,
+  17 commits replayed. Resolved conflicts in `package.json` (union of
+  test:unit lists across the track-a/track-b merge forks) and
+  `src/core/net/relay.ts` (kept `safeHostname` sanitizer from SEC-004,
+  layered Phase 1 `lastSyncLatencyMs` metric). Refreshed `pnpm-lock.yaml`.
+- `feat/track-a-phase2` (d56715f → 72f37fc): `git rebase --onto f660f91
+  8b60b1c`, 4 commits replayed clean (A2-1/A2-2/A2-3 fleet wiring).
+- `feat/track-b-phase2` (3ca8061 → 1c986f8): `git rebase --onto f660f91
+  8b60b1c`, 7 commits replayed. Resolved `relay.ts` conflict at B2-2/B2-3
+  (kept main's `safeHostname`, added Phase 2 fleet merge) and `package.json`
+  (added `test-relay-fleet.ts` to test:unit). Added a follow-up commit to
+  fix a pre-existing `no-useless-assignment` lint error in
+  `opencode-subscriber.ts:206` (the branch had been pushed lint-dirty).
+
+Verification per branch: `tsc --noEmit` clean, `eslint src/` 0 errors
+(only pre-existing dead-code warnings on Phase 2 fabric), `test:unit`
+green (experimental 22, track-a-phase2 27, track-b-phase2 45 incl. 23
+fleet suite tests). `main` e2e.sh 36/36 PASS, 0 SKIP.
+
+All three branches force-pushed to `exoserver` with `--force-with-lease`.
+`origin/main` and `exoserver/main` untouched. Rollback tags retained
+locally: `_pre-rebase/{experimental,track-a-phase2,track-b-phase2}`.
