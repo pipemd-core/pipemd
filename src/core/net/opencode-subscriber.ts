@@ -203,7 +203,7 @@ export class OpencodeSubscriber {
     this.buffer += chunk.toString("utf-8");
     // SSE frames are delimited by a blank line. Process only complete frames;
     // keep the trailing partial in the buffer.
-    let sep = -1;
+    let sep: number;
     while ((sep = this.frameBoundary()) !== -1) {
       const frame = this.buffer.slice(0, sep);
       this.buffer = this.buffer.slice(sep).replace(/^(\r?\n){1,2}/, "");
