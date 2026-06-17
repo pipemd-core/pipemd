@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
@@ -159,7 +159,20 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
   const entry = readCache(`validation:${file}`);
-  if (entry && entry.data) return entry.data;
+  if (entry && entry.data) {
+    // Trust > coverage: if the file changed after we validated, the cached
+    // result may describe a previous state — suppress it rather than present a
+    // since-fixed error as current truth (the s1 "stale after fix" case).
+    // We compare the validator-snapshotted mtime to the current mtime (same
+    // statSync clock) so sub-ms cross-clock jitter can't flag fresh as stale.
+    const storedMtime = entry.metadata?.mtime;
+    if (storedMtime !== undefined) {
+      try {
+        if (fs.statSync(file).mtimeMs > Number(storedMtime)) return "";
+      } catch { /* file missing — serve the cache rather than go blank */ }
+    }
+    return entry.data;
+  }
   return "";
 }
 
@@ -697,6 +710,47 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
 
 const ESLINT_EXTS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
 const POST_EDIT_LINT_TIMEOUT_MS = 4000;
+const VALIDATOR_TIMEOUT_MS = 10_000;
+const VALIDATOR_MAX_LINES = 15;
+const _binAvailable = new Map<string, boolean>();
+
+function commandAvailable(bin: string): boolean {
+  const cached = _binAvailable.get(bin);
+  if (cached !== undefined) return cached;
+  let ok = true;
+  try {
+    execFileSync("sh", ["-c", `command -v ${bin} >/dev/null 2>&1`], { stdio: "ignore" });
+  } catch { ok = false; }
+  _binAvailable.set(bin, ok);
+  return ok;
+}
+
+interface FileValidator {
+  bin: string;
+  args: string[];
+  format: (code: number, stdout: string) => string;
+}
+
+// Picks the per-file validator for the file's ecosystem. Returns null when no
+// validator applies (unknown extension, or the toolchain isn't on PATH) — the
+// caller then suppresses rather than running a wrong tool (e.g. eslint on a .go
+// file, which previously leaked "File ignored… no matching configuration").
+function pickValidator(filePath: string): FileValidator | null {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ESLINT_EXTS.has(ext)) {
+    return { bin: "npx", args: ["eslint", filePath, "--no-color"], format: (_c, stdout) => stdout.trim() };
+  }
+  if (ext === ".py" && commandAvailable("ruff")) {
+    return { bin: "ruff", args: ["check", "--no-cache", filePath], format: (code, stdout) => (code !== 0 ? stdout.trim() : "") };
+  }
+  if (ext === ".go" && commandAvailable("go")) {
+    return { bin: "gofmt", args: ["-l", filePath], format: (_c, stdout) => (stdout.trim() ? `${filePath}: needs gofmt` : "") };
+  }
+  if (ext === ".lua" && commandAvailable("luacheck")) {
+    return { bin: "luacheck", args: ["--no-config", filePath], format: (code, stdout) => (code !== 0 ? stdout.trim() : "") };
+  }
+  return null;
+}
 
 export async function buildPostEditFeedback(file: string): Promise<string | null> {
   if (!file) return null;
@@ -843,34 +897,43 @@ export async function resolveInjections(
 
 export async function triggerAsyncValidation(filePath: string): Promise<void> {
   const cacheKey = `validation:${filePath}`;
-  const guardKey = "validation:running";
+  const guardKey = `validation:running:${filePath}`;
   if (isFresh(guardKey)) return;
   writeCache(guardKey, "1", VALIDATION_COOLDOWN_MS);
 
+  const validator = pickValidator(filePath);
+  if (!validator) {
+    // No validator for this file type / toolchain — drop any stale entry from a
+    // previous toolchain and release the guard rather than running a wrong tool.
+    invalidate(cacheKey);
+    invalidate(guardKey);
+    return;
+  }
+
   try {
-    const errors: string[] = [];
-
+    let result = "";
     try {
-      const eslintResult = await new Promise<string>((resolve) => {
-        execFile("npx", ["eslint", filePath, "--no-color"], {
-          timeout: 10000,
-        }, (err, stdout) => {
-          if (err) {
-            if (stdout && typeof stdout === "string") {
-              const out = stdout.trim();
-              if (out) errors.push(out);
-            }
-            resolve("");
-          } else {
-            resolve(typeof stdout === "string" ? stdout.trim() : "");
-          }
-        });
+      const { stdout } = await execFileAsync(validator.bin, validator.args, {
+        encoding: "utf-8",
+        timeout: VALIDATOR_TIMEOUT_MS,
       });
-      if (eslintResult) errors.push(eslintResult);
-    } catch (err: unknown) { log.debug(`eslint validation failed: ${errMsg(err)}`); }
-
-    const content = errors.length > 0 ? errors.join("\n") : "No errors found";
-    writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000);
+      result = validator.format(0, stdout);
+    } catch (err: unknown) {
+      const execErr = err as { stdout?: string; code?: number };
+      const stdout = typeof execErr.stdout === "string" ? execErr.stdout : "";
+      result = validator.format(execErr.code ?? 1, stdout);
+    }
+    const content = result
+      ? result.split("\n").slice(0, VALIDATOR_MAX_LINES).join("\n")
+      : "No errors found";
+    // Snapshot the file's mtime so the reader can detect post-validation edits
+    // by comparing the same clock (statSync mtimeMs) before/after — Date.now()
+    // vs mtimeMs cross-clock jitter would otherwise flag fresh entries as stale.
+    let mtimeMeta: Record<string, string> | undefined;
+    try { mtimeMeta = { mtime: String(fs.statSync(filePath).mtimeMs) }; } catch { /* file gone */ }
+    writeCache(cacheKey, content, DEFAULT_TTLS.validation ?? 60000, mtimeMeta);
+  } catch (err: unknown) {
+    log.debug(`validation failed for ${filePath}: ${errMsg(err)}`);
   } finally {
     invalidate(guardKey);
   }

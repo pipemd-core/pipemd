@@ -1,4 +1,4 @@
-import { describe, it, after, beforeEach } from "node:test"
+import { describe, it, after, before, beforeEach } from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
@@ -48,7 +48,7 @@ process.chdir(tmpDir)
 
 const { resolveInjections, triggerAsyncValidation } = await import("../src/core/injection-engine.js")
 const { clearMemCache } = await import("../src/core/dedup.js")
-const { invalidateCachePattern, writeCache } = await import("../src/core/cache.js")
+const { invalidateCachePattern, writeCache, readCache, DEFAULT_TTLS } = await import("../src/core/cache.js")
 
 function clearDedup() {
   const dir = path.join(tmpDir, ".pipemd", "cache", "injected")
@@ -183,6 +183,57 @@ describe("updated defaults", () => {
     assert.ok(editDiff, "edit-diff rule should exist in after-edit")
 
     process.chdir(tmpDir)
+  })
+})
+
+describe("file-errors dispatch + freshness", () => {
+  const injPath = path.join(tmpDir, ".pipemd", "injection.yml")
+  let origInj: string | null = null
+
+  before(() => {
+    // Force the default active rules so before-edit `file-errors` is active.
+    origInj = fs.existsSync(injPath) ? fs.readFileSync(injPath, "utf8") : null
+    if (fs.existsSync(injPath)) fs.unlinkSync(injPath)
+  })
+  after(() => {
+    if (origInj !== null) fs.writeFileSync(injPath, origInj)
+    else if (fs.existsSync(injPath)) fs.unlinkSync(injPath)
+  })
+
+  it("suppresses validation for a file type with no validator (no eslint-on-non-JS leak)", async () => {
+    clearAllCache()
+    const f = path.join(tmpDir, "unknown.xyz")
+    fs.writeFileSync(f, "data\n")
+    await triggerAsyncValidation(f)
+    const entry = readCache(`validation:${f}`)
+    assert.equal(entry, null, "no validation entry should exist for an unsupported file type")
+  })
+
+  it("suppresses a stale entry when the file changed after validation", async () => {
+    clearDedup()
+    const f = path.join(tmpDir, "stale.ts")
+    fs.writeFileSync(f, "export const x = 1;\n")
+    const mtimeAtValidation = fs.statSync(f).mtimeMs
+    writeCache(`validation:${f}`, "STALE: a since-fixed lint issue", DEFAULT_TTLS.validation, { mtime: String(mtimeAtValidation) })
+    // Bump the file's mtime into the future so current mtime > snapshotted mtime → stale.
+    const future = Math.floor(Date.now() / 1000) + 60
+    fs.utimesSync(f, future, future)
+    const payloads = await resolveInjections("before-edit", f, "sess-stale")
+    const fe = payloads.find((p) => p.source === "file-errors")
+    assert.equal(fe, undefined, "stale entry (file mtime > snapshotted mtime) should be suppressed")
+  })
+
+  it("serves a fresh entry when the file is unchanged since validation", async () => {
+    clearDedup()
+    const f = path.join(tmpDir, "fresh.ts")
+    fs.writeFileSync(f, "export const y = 2;\n")
+    // Snapshot the file's mtime at validation time (same as triggerAsyncValidation does).
+    const mtimeAtValidation = fs.statSync(f).mtimeMs
+    writeCache(`validation:${f}`, "FRESH: a real lint issue", DEFAULT_TTLS.validation, { mtime: String(mtimeAtValidation) })
+    const payloads = await resolveInjections("before-edit", f, "sess-fresh")
+    const fe = payloads.find((p) => p.source === "file-errors")
+    assert.ok(fe, "fresh entry should be served")
+    assert.ok(fe!.content.includes("FRESH"), `expected FRESH marker in: ${fe?.content}`)
   })
 })
 
