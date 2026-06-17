@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# report-html.sh — Generate a self-contained HTML report from bench JSONL
+# report-html.sh — Generate a self-contained HTML report from bench JSONL.
+# (v2: 3-condition — WITH / PASSIVE / STATIC. STATIC replaces the old bare WITHOUT.)
 #
 # Usage: bash bench/report-html.sh <results.jsonl> [output.html]
 set -euo pipefail
@@ -16,8 +17,9 @@ BASENAME="$(basename "$INPUT" .jsonl)"
 RESULTS_DIR="$(dirname "$INPUT")"
 OUTPUT="${2:-$RESULTS_DIR/report-${BASENAME#run-}.html}"
 
-SCENARIO_NAMES='{"1":"Crew Export (PipeMD)","2":"Timing Middleware (Hono)","3":"Error Handler (Hono)"}'
-SCENARIO_TARGETS='{"1":"pipemd","2":"hono","3":"hono"}'
+# Driven by baselines.json when present (authoritative); hardcoded fallback below.
+SCENARIO_NAMES='{"1":"Response Cache (Hono / TS)","2":"Parallel Bug (bt-lua / Lua)","3":"Eviction Callback (cachetools / Python)","4":"Compare+Sort (gofrs/uuid / Go)"}'
+SCENARIO_TARGETS='{"1":"hono","2":"bt-lua","3":"python","4":"go"}'
 
 node "$SCRIPT_DIR/report-html.mjs" \
   "$INPUT" "$OUTPUT" "$REPO_ROOT" \

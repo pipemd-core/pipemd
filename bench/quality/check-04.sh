@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
-# Quality check for scenario 04: fix parallel node bug in behaviourtreelua2e
-# Runs INSIDE a git worktree of the bt-lua repo
+# Quality gate — s4 (gofrs/uuid): Compare + Sort.
+# Runs INSIDE the per-run worktree. Injects a bench-owned _bench_test.go (same
+# package) at grade time, then runs go vet + go test. The Go toolchain is
+# expected in PATH; if missing, falls back to ~/.local/go/bin.
+#
+# Score: 0 = gofmt/vet fail; 1 = clean but tests fail; 2 = tests pass.
 set -euo pipefail
 
-SCORE=0
-
-# Grade 1: was parallel.lua modified?
-modified=$(git status --porcelain -- lib/node_types/parallel.lua 2>/dev/null | wc -l)
-if [ "$modified" -eq 0 ]; then
-  echo "0"
-  exit 0
-fi
-SCORE=1
-
-# Grade 2: does the fix actually work? Run the reproduction test
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEST_SCRIPT="$SCRIPT_DIR/../tests/parallel_bug_test.lua"
+BENCH_TESTS="$SCRIPT_DIR/../tests"
 
-if [ -f "$TEST_SCRIPT" ] && lua "$TEST_SCRIPT" 2>/dev/null | grep -q "PASS"; then
-  SCORE=2
+command -v go >/dev/null 2>&1 || export PATH="$HOME/.local/go/bin:$PATH"
+
+score=0
+
+# Inject the grade spec into the package dir (same package uuid).
+cp "$BENCH_TESTS/uuid_bench_test.go" ./bench_compare_test.go 2>/dev/null || true
+
+# Grade 0: gofmt + go vet must be clean on the agent's own files.
+# (bench_compare_test.go is injected by this gate — exclude it from gofmt.)
+gofmt_ok=true
+gofmt_out="$(gofmt -l *.go 2>/dev/null | grep -v '^bench_compare_test\.go$' || true)"
+[ -n "$gofmt_out" ] && gofmt_ok=false
+if [ "$gofmt_ok" = true ] && go vet ./... >/dev/null 2>&1; then
+  score=1
 fi
 
-echo "$SCORE"
+# Grade 2: the grader tests pass.
+if [ "$score" -eq 1 ] && [ -f ./bench_compare_test.go ]; then
+  if go test -run 'TestBench' ./... >/dev/null 2>&1; then
+    score=2
+  fi
+fi
+
+rm -f ./bench_compare_test.go 2>/dev/null || true
+
+echo "$score"

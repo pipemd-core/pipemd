@@ -1,1 +1,0 @@
-The `pmd doctor` command in `src/commands/doctor.ts` doesn't verify that the rendered context file (`AGENTS.md`) exists. Add a check that reports whether `AGENTS.md` is present in the project root. Make sure `npx tsc --noEmit` passes.

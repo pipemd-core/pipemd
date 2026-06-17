@@ -69,6 +69,7 @@ function computeStats(data) {
     tc: stat(m => m.tool_calls), r: stat(m => m.reads), e: stat(m => m.edits),
     it: stat(m => m.input_tokens), ot: stat(m => m.output_tokens),
     w: stat(m => m.wall_ms), cr: stat(m => m.context_reads || 0),
+    inj: stat(m => m.injections_delivered || 0),
     q: median(q), n: data.length,
   };
 }
@@ -87,7 +88,7 @@ function readPrompt(s) {
 
 const COLORS = {
   bg: "#0f172a", card: "#1e293b", border: "#334155", text: "#e2e8f0",
-  dim: "#94a3b8", withCol: "#60a5fa", withoutCol: "#fb923c",
+  dim: "#94a3b8", withCol: "#60a5fa", staticCol: "#fb923c",
   green: "#22c55e", yellow: "#f59e0b", red: "#ef4444", gray: "#6b7280",
   passiveCol: "#a78bfa",
 };
@@ -106,20 +107,22 @@ function qualityBadge(q) {
   return `<span class="qbadge" style="--c:${color}">${l[q] || "N/A"}</span>`;
 }
 
-function svgBar(withVal, passiveVal, withoutVal, maxVal) {
+function svgBar(withVal, passiveVal, staticVal, maxVal) {
   const W = 200, H = 14, gap = 2;
-  const vals = [withVal, passiveVal, withoutVal].filter(v => v != null);
+  const vals = [withVal, passiveVal, staticVal].filter(v => v != null);
   maxVal = Math.max(...vals, maxVal || 0, 1);
   const wW = withVal != null ? Math.max(3, (withVal / maxVal) * W) : 0;
   const pW = passiveVal != null ? Math.max(3, (passiveVal / maxVal) * W) : 0;
-  const woW = withoutVal != null ? Math.max(3, (withoutVal / maxVal) * W) : 0;
+  const woW = staticVal != null ? Math.max(3, (staticVal / maxVal) * W) : 0;
   const totalH = H * 3 + gap * 2;
   return `<svg class="bar-svg" width="${W}" height="${totalH}" viewBox="0 0 ${W} ${totalH}">
     <rect x="0" y="0" width="${wW}" height="${H}" rx="3" fill="${COLORS.withCol}" opacity="0.75"/>
     <rect x="0" y="${H + gap}" width="${pW}" height="${H}" rx="3" fill="${COLORS.passiveCol}" opacity="0.75"/>
-    <rect x="0" y="${(H + gap) * 2}" width="${woW}" height="${H}" rx="3" fill="${COLORS.withoutCol}" opacity="0.75"/>
+    <rect x="0" y="${(H + gap) * 2}" width="${woW}" height="${H}" rx="3" fill="${COLORS.staticCol}" opacity="0.75"/>
   </svg>`;
 }
+
+const TOKEN_GUARD_PCT = 100;
 
 function computeVerdict(sw, swo, withData) {
   const callsW = sw?.tc?.med || 0;
@@ -149,6 +152,8 @@ function computeVerdict(sw, swo, withData) {
     verdict = "VOID"; detail = "No injections delivered";
   } else if (qW != null && qWo != null && qW !== qWo) {
     verdict = "INCONCLUSIVE"; detail = `Quality differs (${qW} vs ${qWo})`;
+  } else if (tokDelta > TOKEN_GUARD_PCT) {
+    verdict = "INCONCLUSIVE"; detail = `Token regression caps verdict (WITH +${tokDelta.toFixed(0)}% input tokens vs STATIC) — ${sig}`;
   } else if (wins >= 2) {
     verdict = "PASS"; detail = `Equal quality, ${wins}/3 efficiency wins (${sig})`;
   } else if (wins === 1) {
@@ -176,17 +181,17 @@ function verdictColor(v) {
 function scenarioCard(s) {
   const withData = groups[`${s}-with`] || [];
   const passiveData = groups[`${s}-passive`] || [];
-  const withoutData = groups[`${s}-without`] || [];
+  const staticData = groups[`${s}-static`] || [];
   const sw = computeStats(withData);
   const sp = computeStats(passiveData);
-  const swo = computeStats(withoutData);
+  const swo = computeStats(staticData);
   const name = scenarioNames[s] || `Scenario ${s}`;
   const target = scenarioTargets[s] || "?";
   const prompt = readPrompt(s);
   const promptFirstLine = prompt ? prompt.split("\n")[0] : "";
   const v = computeVerdict(sw, swo, withData);
   const vc = verdictColor(v.verdict);
-  const maxRuns = Math.max(withData.length, passiveData.length, withoutData.length);
+  const maxRuns = Math.max(withData.length, passiveData.length, staticData.length);
 
   const compRows = metricsDef.map(md => {
     const wv = sw?.[md.key], pv = sp?.[md.key], wov = swo?.[md.key];
@@ -213,7 +218,7 @@ function scenarioCard(s) {
   const qW = sw?.q, qP = sp?.q, qWo = swo?.q;
 
   const detailRows = Array.from({ length: maxRuns }, (_, i) => {
-    const w = withData[i], p = passiveData[i], wo = withoutData[i];
+    const w = withData[i], p = passiveData[i], wo = staticData[i];
     return `        <tr>
           <td class="run-num">${i + 1}</td>
           <td>${qualityBadge(w?.quality)}</td>
@@ -267,7 +272,7 @@ function scenarioCard(s) {
           <th>Metric</th>
           <th class="with-col">WITH</th>
           <th class="passive-col">PASSIVE</th>
-          <th class="without-col">WITHOUT</th>
+          <th class="static-col">STATIC</th>
           <th>W vs WO</th>
           <th>W vs P</th>
           <th class="bar-header">Visual</th>
@@ -293,7 +298,7 @@ ${compRows}
     </table>
 
     <div class="verdict-box" style="--vc:${vc}">
-      WITH vs WITHOUT: ${v.verdict}
+      WITH vs STATIC: ${v.verdict}
     </div>
     <div class="verdict-detail">${v.detail}</div>
 
@@ -306,7 +311,7 @@ ${compRows}
             <th rowspan="2">#</th>
             <th colspan="5" class="with-col">WITH</th>
             <th colspan="5" class="passive-col">PASSIVE</th>
-            <th colspan="5" class="without-col">WITHOUT</th>
+            <th colspan="5" class="static-col">STATIC</th>
           </tr>
           <tr>
             <th class="with-col">Q</th><th class="with-col">Calls</th>
@@ -315,9 +320,9 @@ ${compRows}
             <th class="passive-col">Q</th><th class="passive-col">Calls</th>
             <th class="passive-col">Reads</th><th class="passive-col">Tokens</th>
             <th class="passive-col">Time</th>
-            <th class="without-col">Q</th><th class="without-col">Calls</th>
-            <th class="without-col">Reads</th><th class="without-col">Tokens</th>
-            <th class="without-col">Time</th>
+            <th class="static-col">Q</th><th class="static-col">Calls</th>
+            <th class="static-col">Reads</th><th class="static-col">Tokens</th>
+            <th class="static-col">Time</th>
           </tr>
         </thead>
         <tbody>
@@ -334,12 +339,12 @@ ${retroHtml}${promptHtml}
 function summaryRow() {
   const allWith = runs.filter(r => r.condition === "with");
   const allPassive = runs.filter(r => r.condition === "passive");
-  const allWithout = runs.filter(r => r.condition === "without");
-  if (!allWith.length && !allWithout.length) return "";
+  const allStatic = runs.filter(r => r.condition === "static");
+  if (!allWith.length && !allStatic.length) return "";
 
   const sw = computeStats(allWith);
   const sp = computeStats(allPassive);
-  const swo = computeStats(allWithout);
+  const swo = computeStats(allStatic);
   const v = computeVerdict(sw, swo, allWith);
   const vc = verdictColor(v.verdict);
 
@@ -365,7 +370,7 @@ function summaryRow() {
           <th></th>
           <th colspan="5" class="with-col">WITH (median)</th>
           <th colspan="5" class="passive-col">PASSIVE (median)</th>
-          <th colspan="5" class="without-col">WITHOUT (median)</th>
+          <th colspan="5" class="static-col">STATIC (median)</th>
         </tr>
         <tr>
           <th>Condition</th>
@@ -375,9 +380,9 @@ function summaryRow() {
           <th class="passive-col">Calls</th><th class="passive-col">Reads</th>
           <th class="passive-col">Tokens In</th><th class="passive-col">Tokens Out</th>
           <th class="passive-col">Time</th>
-          <th class="without-col">Calls</th><th class="without-col">Reads</th>
-          <th class="without-col">Tokens In</th><th class="without-col">Tokens Out</th>
-          <th class="without-col">Time</th>
+          <th class="static-col">Calls</th><th class="static-col">Reads</th>
+          <th class="static-col">Tokens In</th><th class="static-col">Tokens Out</th>
+          <th class="static-col">Time</th>
         </tr>
       </thead>
       <tbody>
@@ -390,7 +395,7 @@ function summaryRow() {
       </tbody>
     </table>
     <div class="verdict-box" style="--vc:${vc}">
-      WITH vs WITHOUT: ${v.verdict}
+      WITH vs STATIC: ${v.verdict}
     </div>
     <div class="verdict-detail">${v.detail}</div>
     <div class="summary-note">
@@ -414,7 +419,7 @@ const html = `<!DOCTYPE html>
     :root {
       --bg: ${COLORS.bg}; --card: ${COLORS.card}; --border: ${COLORS.border};
       --text: ${COLORS.text}; --dim: ${COLORS.dim};
-      --with: ${COLORS.withCol}; --without: ${COLORS.withoutCol}; --passive: ${COLORS.passiveCol};
+      --with: ${COLORS.withCol}; --static: ${COLORS.staticCol}; --passive: ${COLORS.passiveCol};
     }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -460,9 +465,9 @@ const html = `<!DOCTYPE html>
     .range { color: #475569; font-size: 11px; }
     .delta { font-size: 11px; }
     .with-col { color: var(--with); }
-    .without-col { color: var(--without); }
+    .static-col { color: var(--static); }
     .passive-col { color: var(--passive); }
-    th.with-col, th.without-col, th.passive-col { text-align: center; }
+    th.with-col, th.static-col, th.passive-col { text-align: center; }
 
     /* Comparison table */
     .comp-table { font-size: 13px; margin-bottom: 16px; }
@@ -557,8 +562,9 @@ ${scenarioCards}
     <table class="meth-table">
       <tr><td class="meth-label">Quality-First Rule</td><td>Efficiency metrics are only compared between runs at the same quality grade. Fast-but-broken does not beat slow-but-correct.</td></tr>
       <tr><td class="meth-label">Consumption Signal</td><td>AGENTS.md is auto-loaded into the system prompt at session start. Consumption is verified via injections_delivered > 0, not token overhead.</td></tr>
-      <tr><td class="meth-label">Verdict Logic</td><td>PASS = equal quality AND ≥2 of {fewer tool calls, fewer reads, faster wall time}. WEAK = 1 of 3. INCONCLUSIVE = 0 of 3 or quality differs.</td></tr>
-      <tr><td class="meth-label">3-Condition Design</td><td>WITH = daemon + plugin + live injection. PASSIVE = rendered snapshot only, no daemon. WITHOUT = no PipeMD. PASSIVE vs WITH answers: does live injection earn its keep?</td></tr>
+      <tr><td class="meth-label">Verdict Logic</td><td>PASS = equal quality AND ≥2 of {fewer tool calls, fewer reads, faster wall time}. WEAK = 1 of 3. INCONCLUSIVE = 0 of 3, quality differs, OR token regression > ${TOKEN_GUARD_PCT}% (WITH using >2× STATIC's input tokens caps the verdict — a win that costs 2× the tokens isn't a win).</td></tr>
+      <tr><td class="meth-label">3-Condition Design</td><td>WITH = daemon + plugin + live injection. PASSIVE = a single rendered snapshot, daemon then killed (frozen). STATIC = a hand-written-style AGENTS.md with NO pmd blocks — the realistic control (a normal project's static context file). <b>WITH vs STATIC</b> answers the product question: does dynamic injection beat a normal static AGENTS.md? <b>PASSIVE vs STATIC</b>: is a frozen pmd snapshot worth more than a hand-written file? <b>WITH vs PASSIVE</b>: does live injection earn its keep over a frozen snapshot?</td></tr>
+      <tr><td class="meth-label">Multi-ecosystem</td><td>Scenarios span TypeScript (Hono), Lua (bt-lua), Python (cachetools), Go (gofrs/uuid). Each task is middle-length and graded by a NATIVE gate (tsc+vitest / lua / pytest+ruff / go test+gofmt) — never a grep.</td></tr>
       <tr><td class="meth-label">Delivery Mode</td><td>Legacy/file mode forced for bench (not FIFO). AGENTS.md is a real file on disk, rendered by the daemon before the agent starts.</td></tr>
       <tr><td class="meth-label">Render Timeout</td><td>Daemon has 60s to render AGENTS.md. Failed renders mark the cell VOID and exclude it from analysis.</td></tr>
     </table>
