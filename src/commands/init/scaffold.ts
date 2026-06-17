@@ -290,11 +290,13 @@ function writeScripts(
   ecosystem: Ecosystem,
   selectedScripts: ScriptDef[],
   addFile: (filepath: string, content: string) => void,
-): void {
+): string[] {
   const ecosystemKey = ecosystem;
+  const written: string[] = [];
   for (const script of selectedScripts) {
     const scriptContent = loadScriptContent(ecosystemKey, script.file);
     if (scriptContent) {
+      written.push(script.id);
       const scriptPath = path.join(SCRIPTS_DIR, script.file);
       addFile(scriptPath, scriptContent);
       try { fs.chmodSync(scriptPath, 0o755); } catch (err: unknown) { log.debug(`chmod script ${scriptPath}: ${errMsg(err)}`); }
@@ -311,6 +313,7 @@ function writeScripts(
       }
     }
   }
+  return written;
 }
 
 function writeLibraryFiles(
@@ -368,10 +371,6 @@ function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: T
 
   const ecoEnv = `PMD_ECOSYSTEM=${ecosystem.replace(/\//g, "-")}`;
   const profileEnv = `PMD_TOKEN_PROFILE=${profile}`;
-  const commands: Record<string, string> = {};
-  for (const script of selectedScripts) {
-    commands[script.id] = `${profileEnv} ${ecoEnv} ${script.command}`;
-  }
 
   const createdFiles: { path: string; status: "created" | "skipped" }[] = [];
   const addFile = (filepath: string, content: string) => {
@@ -379,8 +378,20 @@ function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: T
     createdFiles.push({ path: filepath, status: created ? "created" : "skipped" });
   };
 
-  writeScripts(ecosystem, selectedScripts, addFile);
+  const writtenIds = new Set(writeScripts(ecosystem, selectedScripts, addFile));
   writeLibraryFiles(ecosystem, addFile);
+
+  for (const script of selectedScripts) {
+    if (!writtenIds.has(script.id)) {
+      console.warn(chalk.yellow(`  ⚠ Skipped "${script.label}": no script template for ${ecosystem}`));
+    }
+  }
+
+  const scaffoldableScripts = selectedScripts.filter((s) => writtenIds.has(s.id));
+  const commands: Record<string, string> = {};
+  for (const script of scaffoldableScripts) {
+    commands[script.id] = `${profileEnv} ${ecoEnv} ${script.command}`;
+  }
 
   addFile(path.join(PIPEMD_DIR, ".gitignore"), "live/\ncrew/\n.daemon.pid\ndaemon.log\n");
 
@@ -389,7 +400,7 @@ function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: T
     addFile(path.join(PIPEMD_DIR, "AI_SETUP_PIPEMD.md"), fs.readFileSync(aiSetupSrc, "utf-8"));
   }
 
-  return { selectedScripts, commands, createdFiles, addFile };
+  return { selectedScripts: scaffoldableScripts, commands, createdFiles, addFile };
 }
 
 function updateConfigInjected(configPath: string, mdFile: string, harnessPipes?: { file: string; render: string; mode?: PipeMode }[]): boolean {
