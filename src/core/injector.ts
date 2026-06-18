@@ -52,7 +52,13 @@ export function injectContent(content: string, config: PipeConfig): string | nul
   return changed ? result : null;
 }
 
-export async function renderContentAsync(template: string, config: PipeConfig, maxLines?: number): Promise<string> {
+export async function renderContentAsync(
+  template: string,
+  config: PipeConfig,
+  maxLines?: number,
+  slowBlockNames?: Set<string>,
+  slowResults?: Map<string, string>,
+): Promise<string> {
   const commands = new Map<string, string>();
   const tagRe = /<!--\s*pmd:\s*([\w-]+)\s*-->/g;
   let match: RegExpExecArray | null;
@@ -71,19 +77,33 @@ export async function renderContentAsync(template: string, config: PipeConfig, m
         results.set(name, "");
         return;
       }
+      // Slow-block tiering: a block classified slow (project-wide tsc/eslint/arch)
+      // is served from the caller's cache on fast ticks so the render loop isn't
+      // blocked by it. The cache is refreshed on a slower cadence by the caller
+      // clearing it. This keeps volatile fast blocks (git/tree/deps) fresh even
+      // while a slow tool is mid-run.
+      if (slowBlockNames?.has(name) && slowResults?.has(name)) {
+        results.set(name, slowResults.get(name) ?? "");
+        return;
+      }
+      let blockResult: string;
       try {
         const { bin, args, env: cmdEnv } = parseCommand(cmd);
         const timeout = config.commandTimeouts?.[name] ?? COMMAND_TIMEOUT_MS;
         const { stdout } = await execFileAsync(bin, args, { encoding: "utf-8", timeout, cwd: process.cwd(), env: buildSafeEnv(cmdEnv) });
         const output = stdout.trim();
-        results.set(name, output ? buildBlock(name, output) : "");
+        blockResult = output ? buildBlock(name, output) : "";
       } catch (err: unknown) {
         const execErr = err as { stderr?: string; killed?: boolean; signal?: string } | null;
         if (!(execErr?.killed || execErr?.signal === "SIGTERM")) {
           const detail = execErr?.stderr?.trimEnd() || errMsg(err);
           log.warn(`block '${name}' suppressed after error: ${detail}`);
         }
-        results.set(name, "");
+        blockResult = "";
+      }
+      results.set(name, blockResult);
+      if (slowBlockNames?.has(name) && slowResults) {
+        slowResults.set(name, blockResult);
       }
     })
   );

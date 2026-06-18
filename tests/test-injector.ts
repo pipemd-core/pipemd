@@ -167,6 +167,27 @@ describe("renderContentAsync", () => {
     assert.ok(result.includes("aa"));
     assert.ok(result.includes("bb"));
   });
+
+  it("serves slow blocks from cache between slow ticks (fast ticks don't re-run them)", async () => {
+    const src = path.join(tmpDir, "slow-source.txt");
+    fs.writeFileSync(src, "A");
+    const template = "<!-- pmd: slow -->\n```\n\n```\n<!-- /pmd -->";
+    const cfg = makeConfig({ slow: `cat ${src}` });
+    const slowNames = new Set(["slow"]);
+    const slowResults = new Map<string, string>();
+    // First call: cache miss → slow block runs and is cached.
+    const first = await renderContentAsync(template, cfg, undefined, slowNames, slowResults);
+    assert.ok(first.includes("A"), "first render should see A");
+    assert.ok(slowResults.has("slow"), "slow block result should be cached after first run");
+    // Change the source — a fast tick must NOT see it (served from cache).
+    fs.writeFileSync(src, "B");
+    const second = await renderContentAsync(template, cfg, undefined, slowNames, slowResults);
+    assert.ok(second.includes("A") && !second.includes("B"), "fast tick must serve cached slow output, not re-run");
+    // After a slow tick clears the cache, the slow block re-runs and sees B.
+    slowResults.clear();
+    const third = await renderContentAsync(template, cfg, undefined, slowNames, slowResults);
+    assert.ok(third.includes("B"), "after cache clear (slow tick), slow block must re-run");
+  });
 });
 
 describe("reverseInject", () => {

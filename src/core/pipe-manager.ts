@@ -21,6 +21,14 @@ const WRITE_BUFFER_DEBOUNCE_MS = 1000;
 const WRITE_BUFFER_MAX_BYTES = 512 * 1024;
 const RENDER_REQUEUE_DELAY_MS = 500;
 
+// Slow-block tiering: these project-wide blocks shell out to expensive tools
+// (tsc/eslint/ast-grep) that can take seconds. Running them on every 1s render
+// tick blocks the whole loop and makes the cheap volatile blocks (git/tree/deps)
+// stale. Instead they render on a separate, slower cadence and are cached in
+// _slowResults between slow ticks so fast ticks stay sub-second.
+const SLOW_BLOCK_NAMES = new Set(["lint", "type-check", "arch"]);
+const SLOW_REFRESH_TICKS = 30;
+
 const activeTimeouts: NodeJS.Timeout[] = [];
 const activeIntervals: NodeJS.Timer[] = [];
 const contextStreamEntries: { fd: number; stream: fs.ReadStream }[] = [];
@@ -237,6 +245,8 @@ export function serveCommandPipe(pipePath: string, command: string, config: Pipe
 let _cachedRenderedContent: string = "";
 let _isRendering = false;
 let _renderPending = false;
+let _slowTick = 0;
+const _slowResults = new Map<string, string>();
 
 export function getCachedRenderedContent(): string { return _cachedRenderedContent; }
 export function setIsRendering(value: boolean): void { _isRendering = value; }
@@ -252,7 +262,14 @@ async function updateCache(templatePath: string, config: PipeConfig) {
   try {
     const start = Date.now();
     const template = fs.readFileSync(templatePath, "utf-8");
-    const rendered = await renderContentAsync(template, config);
+    // Slow-tier cadence: clear the slow-block cache every Nth tick so those
+    // expensive blocks re-run; in between they're served from cache and the
+    // fast blocks render on the normal cadence.
+    _slowTick++;
+    if (_slowTick % SLOW_REFRESH_TICKS === 0) {
+      _slowResults.clear();
+    }
+    const rendered = await renderContentAsync(template, config, undefined, SLOW_BLOCK_NAMES, _slowResults);
     const base = loadBase(config);
     _cachedRenderedContent = composeContent(base, rendered);
     try { atomicWrite(RENDERED_SNAPSHOT, _cachedRenderedContent); }
