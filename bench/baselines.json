@@ -37,6 +37,15 @@
       "with_pmd": null,
       "passive": null,
       "static": null
+    },
+    "05-json-dates": {
+      "target": "hono-full",
+      "ecosystem": "TypeScript",
+      "repo": "hono @ 87e256b (pre-#1806)",
+      "task": "real bug hono #1800: c.json() rejects Date; fix-light, exploration-heavy",
+      "with_pmd": null,
+      "passive": null,
+      "static": null
     }
   },
   "methodology": {

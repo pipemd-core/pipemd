@@ -18,8 +18,8 @@ RESULTS_DIR="$(dirname "$INPUT")"
 OUTPUT="${2:-$RESULTS_DIR/report-${BASENAME#run-}.html}"
 
 # Driven by baselines.json when present (authoritative); hardcoded fallback below.
-SCENARIO_NAMES='{"1":"Response Cache (Hono / TS)","2":"Parallel Bug (bt-lua / Lua)","3":"Eviction Callback (cachetools / Python)","4":"Compare+Sort (gofrs/uuid / Go)"}'
-SCENARIO_TARGETS='{"1":"hono","2":"bt-lua","3":"python","4":"go"}'
+SCENARIO_NAMES='{"1":"Response Cache (Hono / TS)","2":"Parallel Bug (bt-lua / Lua)","3":"Eviction Callback (cachetools / Python)","4":"Compare+Sort (gofrs/uuid / Go)","5":"JSON Dates (full Hono / TS — real bug)"}'
+SCENARIO_TARGETS='{"1":"hono","2":"bt-lua","3":"python","4":"go","5":"hono-full"}'
 
 node "$SCRIPT_DIR/report-html.mjs" \
   "$INPUT" "$OUTPUT" "$REPO_ROOT" \

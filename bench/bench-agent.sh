@@ -32,7 +32,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Defaults
 RUNS=3
 MODEL="zai-coding-plan/glm-5.1"
-SCENARIOS="1,2,3,4"
+SCENARIOS="1,2,3,4,5"
 DRY_RUN=false
 REPORT_ONLY=""
 GEN_MODEL="${PMD_GEN_MODEL:-zai-coding-plan/glm-5.1}"
@@ -107,8 +107,15 @@ SCENARIO_CHECK[3]="$SCRIPT_DIR/quality/check-03.sh"
 SCENARIO_TARGET[4]="go"
 SCENARIO_PROMPT[4]="$SCRIPT_DIR/prompts/04-compare-sort.go.md"
 SCENARIO_CHECK[4]="$SCRIPT_DIR/quality/check-04.sh"
+# 5: TypeScript (full hono) — real bug: c.json() rejects Date (hono #1800/#1806)
+#    Large multi-module codebase; fix-light, exploration-heavy. The value
+#    dimension: where structural blocks (exports/arch/tree) can earn their keep,
+#    which the small-repo floor (s1-s4) structurally can't reward.
+SCENARIO_TARGET[5]="hono-full"
+SCENARIO_PROMPT[5]="$SCRIPT_DIR/prompts/05-json-dates.hono-full.md"
+SCENARIO_CHECK[5]="$SCRIPT_DIR/quality/check-05.sh"
 
-for s in 1 2 3 4; do SCENARIO_RUNS[$s]=$RUNS; done
+for s in 1 2 3 4 5; do SCENARIO_RUNS[$s]=$RUNS; done
 
 IFS=',' read -ra SCEN <<< "$SCENARIOS"
 
@@ -137,7 +144,7 @@ fi
 install_deps() {
   local dir="$1" target="$2"
   case "$target" in
-    hono)
+    hono|hono-full)
       (cd "$dir" && bun install --silent 2>/dev/null) \
         || (cd "$dir" && npm install --silent 2>/dev/null) \
         || (cd "$dir" && pnpm install --silent 2>/dev/null) \
