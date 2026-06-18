@@ -331,7 +331,7 @@ run_cell() {
         [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null && break
       done
       if [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null; then
-        log "    Context OK: $(grep -c 'pmd:' "$work_dir/AGENTS.md") pmd blocks (${waited}s)"
+        log "    Context OK: $(grep -c 'pmd:' "$work_dir/AGENTS.md") pmd blocks, $(wc -c < "$work_dir/AGENTS.md") bytes (${waited}s)"
       else
         log "    VOID: AGENTS.md render failed after ${waited}s — excluding cell"
         render_failed=true
@@ -340,14 +340,14 @@ run_cell() {
   elif [ "$condition" = "passive" ]; then
     rm -f "$work_dir/.pipemd/.daemon.pid" 2>/dev/null || true
     if [ -f "$work_dir/AGENTS.md" ] && grep -q 'pmd:' "$work_dir/AGENTS.md" 2>/dev/null; then
-      log "    Passive context OK: $(grep -c 'pmd:' "$work_dir/AGENTS.md") blocks (frozen snapshot)"
+      log "    Passive context OK: $(grep -c 'pmd:' "$work_dir/AGENTS.md") blocks, $(wc -c < "$work_dir/AGENTS.md") bytes (frozen snapshot)"
     else
       log "    VOID: passive snapshot missing — excluding cell"
       render_failed=true
     fi
   elif [ "$condition" = "static" ]; then
     if [ -f "$work_dir/AGENTS.md" ]; then
-      log "    Static context OK: $(wc -l < "$work_dir/AGENTS.md")-line AGENTS.md (no pmd blocks)"
+      log "    Static context OK: $(wc -l < "$work_dir/AGENTS.md")-line AGENTS.md, $(wc -c < "$work_dir/AGENTS.md") bytes (no pmd blocks)"
     else
       log "    VOID: static AGENTS.md missing — excluding cell"
       render_failed=true
