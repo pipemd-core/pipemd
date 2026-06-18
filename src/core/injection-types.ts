@@ -102,9 +102,7 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
       { source: "now", scope: "global", "interval-min": 1 },
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
-    "on-idle": [
-      { source: "now", scope: "global", "interval-min": 5 },
-    ],
+    "on-idle": [],
   },
 };
 

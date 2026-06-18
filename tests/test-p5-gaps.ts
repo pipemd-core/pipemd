@@ -209,13 +209,13 @@ describe("P5 Gap Fixes", () => {
       assert.equal(handoff[0].scope, "global");
     });
 
-    it("on-idle includes a now rule (handoff removed to avoid per-turn token tax)", () => {
+    it("now fires on-start only (no on-idle echo — avoids the double-fire)", () => {
       const onIdle = DEFAULT_ACTIVE_RULES.rules["on-idle"];
       assert.ok(onIdle, "on-idle rules exist");
-      const now = onIdle!.filter((r) => r.source === "now");
-      assert.equal(now.length, 1, "exactly one now rule in on-idle");
-      const handoff = onIdle!.filter((r) => r.source === "handoff");
-      assert.equal(handoff.length, 0, "handoff removed from on-idle");
+      assert.equal(onIdle!.filter((r) => r.source === "now").length, 0, "no now rule in on-idle (was the double-fire source)");
+      assert.equal(onIdle!.filter((r) => r.source === "handoff").length, 0, "handoff removed from on-idle");
+      const onStart = DEFAULT_ACTIVE_RULES.rules["on-start"];
+      assert.equal(onStart!.filter((r) => r.source === "now").length, 1, "exactly one now rule in on-start");
     });
   });
 
