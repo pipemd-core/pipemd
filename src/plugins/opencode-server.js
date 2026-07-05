@@ -8,7 +8,7 @@
 //   event(session.idle / session.status) → heartbeat + worker cleanup
 //   experimental.chat.system.transform → sub-agent detection + LLM context injection
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync, mkdtempSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, mkdirSync, renameSync, appendFileSync, statSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
 import { resolve as resolvePath, join as joinPath, dirname as pathDirname } from "node:path";
 import { tmpdir } from "node:os";
 import crypto from "node:crypto";
@@ -32,6 +32,14 @@ const WITH_INJECTION = CONFIG.delivery === "active" || CONFIG.delivery === "expe
 
 const FIFO_TEMP_DIR = mkdtempSync(joinPath(tmpdir(), "pmd-fifo-"));
 const RENDERED_SNAPSHOT = joinPath(process.cwd(), ".pipemd", "live", ".render.md");
+
+// P3 — Clean up FIFO temp files on exit so they don't accumulate in $TMPDIR.
+function cleanupFifoTempDir() {
+  try { rmSync(FIFO_TEMP_DIR, { recursive: true, force: true }); } catch {}
+}
+process.on("exit", cleanupFifoTempDir);
+process.on("SIGINT", () => { cleanupFifoTempDir(); process.exit(0); });
+process.on("SIGTERM", () => { cleanupFifoTempDir(); process.exit(0); });
 
 function isFifoFile(filePath) {
   if (!filePath) return false;
