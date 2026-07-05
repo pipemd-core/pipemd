@@ -18,9 +18,6 @@ rules:
     - source: crew-status
       scope: global
       max-lines: 3
-    - source: crew-todos
-      scope: global
-      max-lines: 10
   before-edit:
     - source: crew-locks
       scope: target-file

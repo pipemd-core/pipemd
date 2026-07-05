@@ -258,7 +258,6 @@ function heartbeat() {
 }
 
 const PLAN_CHECK_INTERVAL = 30_000;
-let lastTodosJson = "";
 
 async function detectPlanMode(ocSessionId) {
   if (!serverUrl || !ocSessionId) return false;
@@ -306,26 +305,7 @@ function captureTodos(toolName, output) {
     const todos = output && output.metadata && output.metadata.todos;
     if (!Array.isArray(todos)) return;
     const active = todos.filter(t => t.status === "in_progress" || t.status === "pending");
-    if (active.length === 0) {
-      updateTodoCache([]);
-      updateCrewNoteForTodos([]);
-      return;
-    }
-    const summary = active.slice(0, 5).map(t => `[${t.status}] ${t.content} (${t.priority})`);
-    updateTodoCache(active);
     updateCrewNoteForTodos(active);
-  } catch {}
-}
-
-function updateTodoCache(activeTodos) {
-  try {
-    const dir = joinPath(".pipemd", "cache", "sources");
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const data = JSON.stringify(activeTodos);
-    const hash = crypto.createHash("sha256").update(data).digest("hex").slice(0, 8);
-    const entry = JSON.stringify({ key: "crew-todos", data, hash, timestamp: Date.now(), ttl: 120_000 });
-    writeFileSync(joinPath(dir, "crew-todos.json"), entry, "utf-8");
-    lastTodosJson = data;
   } catch {}
 }
 

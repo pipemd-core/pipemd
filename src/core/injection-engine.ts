@@ -140,20 +140,48 @@ async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
   return `⚠️ CONFLICT on ${file}: ${ids}`;
 }
 
-async function resolveCrewTodos(_ctx: ResolverContext): Promise<string> {
-  const sessions = listSessions();
-  const hasRemote = sessions.some((s) => s._remote);
-  if (sessions.length < 2 && !hasRemote) return "";
+async function resolveSessionValidate(_ctx: ResolverContext): Promise<string> {
+  const session = resolveActiveSession();
+  if (!session || session.claimedFiles.length === 0) return "";
 
-  const entry = readCache("crew-todos");
-  if (!entry || !entry.data) return "";
+  const files = session.claimedFiles.map((c) => c.path).filter((f) => {
+    const ext = path.extname(f).toLowerCase();
+    return ESLINT_EXTS.has(ext);
+  });
+  if (files.length === 0) return "";
+
+  const cacheKey = `session-validate:${session.id}`;
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
 
   try {
-    const todos: Array<{ content: string; status: string; priority: string }> = JSON.parse(entry.data);
-    if (!Array.isArray(todos) || todos.length === 0) return "";
-    const lines = todos.slice(0, 5).map((t) => `${t.status === "in_progress" ? "▶" : "○"} ${t.content} [${t.priority}]`);
-    return lines.join("\n");
-  } catch { return ""; }
+    const { stdout } = await execFileAsync("npx", ["eslint", ...files, "--no-color", "--no-error-on-unmatched-pattern"], {
+      encoding: "utf-8",
+      timeout: 4000,
+      cwd: process.cwd(),
+    });
+    const output = stdout.trim();
+    if (!output) {
+      const result = `✔ No errors in ${files.length} claimed file(s)`;
+      writeCache(cacheKey, result, 30_000);
+      return result;
+    }
+    const lines = output.split("\n").slice(0, 20);
+    const result = lines.join("\n");
+    writeCache(cacheKey, result, 30_000);
+    return result;
+  } catch (err: unknown) {
+    const e = err as { stdout?: string } | null;
+    const output = e?.stdout?.trim();
+    if (output) {
+      const lines = output.split("\n").slice(0, 20);
+      const result = lines.join("\n");
+      writeCache(cacheKey, result, 30_000);
+      return result;
+    }
+    log.debug(`resolveSessionValidate failed: ${errMsg(err)}`);
+    return "";
+  }
 }
 
 async function resolveValidation(ctx: ResolverContext): Promise<string> {
@@ -180,6 +208,16 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
 async function resolveGitContext(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
   if (!file) return "";
+
+  // H3 — Conditional: only inject when the file has uncommitted changes.
+  // V10 found git-context is not significant (Δ = −12.4s, CI includes 0).
+  // Don't waste tokens on clean files.
+  try {
+    const { stdout } = await execFileAsync("git", ["status", "--porcelain", "--", file], {
+      encoding: "utf-8", timeout: 2000,
+    });
+    if (!stdout.trim()) return "";
+  } catch { return ""; }
 
   const cacheKey = `git-context:${file}`;
   const cached = readCache(cacheKey);
@@ -281,7 +319,57 @@ const SYNTAX_EXT_MAP: Record<string, string> = {
   ".mjs": "node",
   ".cjs": "node",
   ".jsx": "node",
+  ".ts": "tsc",
+  ".tsx": "tsc",
+  ".py": "python",
+  ".go": "go",
+  ".rs": "cargo",
 };
+
+const TSC_CACHE_KEY = "syntax-check:tsc-project";
+const TSC_CACHE_TTL = 30_000;
+const CARGO_CACHE_KEY = "syntax-check:cargo-project";
+const CARGO_CACHE_TTL = 30_000;
+
+async function runProjectTypeCheck(
+  cacheKey: string,
+  cacheTtl: number,
+  bin: string,
+  args: string[],
+  cwd: string,
+): Promise<string | null> {
+  const cached = readCache(cacheKey);
+  if (cached && cached.data) return cached.data;
+  try {
+    const { stdout, stderr } = await execFileAsync(bin, args, {
+      encoding: "utf-8",
+      timeout: 15_000,
+      cwd,
+    });
+    const output = (stdout + stderr).trim();
+    writeCache(cacheKey, output, cacheTtl);
+    return output;
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string } | null;
+    const output = ((e?.stdout ?? "") + (e?.stderr ?? "")).trim();
+    if (output) {
+      writeCache(cacheKey, output, cacheTtl);
+      return output;
+    }
+    return null;
+  }
+}
+
+function filterTypeCheckOutput(output: string, targetFile: string): string {
+  const rel = path.relative(process.cwd(), targetFile);
+  const lines = output.split("\n").filter((l) => {
+    const trimmed = l.trim();
+    return trimmed.startsWith(targetFile) || trimmed.startsWith(rel) ||
+           trimmed.startsWith(`./${rel}`);
+  });
+  if (lines.length === 0) return "";
+  return lines.slice(0, 5).join("\n");
+}
 
 async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
   const file = ctx.targetFile;
@@ -295,21 +383,69 @@ async function resolveSyntaxCheck(ctx: ResolverContext): Promise<string> {
   const checker = SYNTAX_EXT_MAP[ext];
   if (!checker) return "";
 
-  try {
-    await execFileAsync("node", ["--check", file], {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const content = "No syntax errors";
-    writeCache(cacheKey, content, DEFAULT_TTLS["syntax-check"] ?? 10000);
-    return content;
-  } catch (err: unknown) {
-    const e = err as { stderr?: string; message?: string } | null;
-    const detail = e?.stderr?.trim() || e?.message || "Syntax error";
-    const lines = detail.split("\n").slice(0, 5).join("\n");
-    writeCache(cacheKey, lines, DEFAULT_TTLS["syntax-check"] ?? 10000);
-    return lines;
+  let result = "";
+
+  if (checker === "node") {
+    try {
+      await execFileAsync("node", ["--check", file], {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+      result = "No syntax errors";
+    } catch (err: unknown) {
+      const e = err as { stderr?: string; message?: string } | null;
+      result = (e?.stderr?.trim() || e?.message || "Syntax error").split("\n").slice(0, 5).join("\n");
+    }
+  } else if (checker === "python") {
+    try {
+      await execFileAsync("python", ["-m", "py_compile", file], {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+      result = "No syntax errors";
+    } catch (err: unknown) {
+      const e = err as { stderr?: string } | null;
+      result = (e?.stderr?.trim() || "Python syntax error").split("\n").slice(0, 5).join("\n");
+    }
+  } else if (checker === "go") {
+    try {
+      await execFileAsync("go", ["vet", file], {
+        encoding: "utf-8",
+        timeout: 8000,
+      });
+      result = "No issues";
+    } catch (err: unknown) {
+      const e = err as { stderr?: string; stdout?: string } | null;
+      result = (e?.stderr?.trim() || e?.stdout?.trim() || "Go vet error").split("\n").slice(0, 5).join("\n");
+    }
+  } else if (checker === "tsc") {
+    const projectOutput = await runProjectTypeCheck(
+      TSC_CACHE_KEY, TSC_CACHE_TTL,
+      "npx", ["tsc", "--noEmit", "--pretty", "false"], process.cwd(),
+    );
+    if (projectOutput === null) {
+      result = "";
+    } else {
+      const filtered = filterTypeCheckOutput(projectOutput, file);
+      result = filtered || "No type errors";
+    }
+  } else if (checker === "cargo") {
+    const projectOutput = await runProjectTypeCheck(
+      CARGO_CACHE_KEY, CARGO_CACHE_TTL,
+      "cargo", ["check", "--message-format=short"], process.cwd(),
+    );
+    if (projectOutput === null) {
+      result = "";
+    } else {
+      const filtered = filterTypeCheckOutput(projectOutput, file);
+      result = filtered || "No cargo errors";
+    }
   }
+
+  if (result) {
+    writeCache(cacheKey, result, DEFAULT_TTLS["syntax-check"] ?? 10000);
+  }
+  return result;
 }
 
 async function resolveTestFailures(_ctx: ResolverContext): Promise<string> {
@@ -691,7 +827,6 @@ async function resolveFileContent(ctx: ResolverContext): Promise<string> {
 export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   "crew-status": resolveCrewStatus,
   "crew-locks": resolveCrewLocks,
-  "crew-todos": resolveCrewTodos,
   "file-errors": resolveValidation,
   "git-context": resolveGitContext,
   "git-delta": resolveGitDelta,
@@ -704,6 +839,7 @@ export const RESOLVERS: Record<ContextSource, SourceResolver> = {
   handoff: resolveHandoff,
   "import-graph": resolveImportGraph,
   "session-diff": resolveSessionDiff,
+  "session-validate": resolveSessionValidate,
   "exports": resolveExports,
   "file-content": resolveFileContent,
   now: resolveNow,

@@ -47,8 +47,8 @@ export type TopologySource =
   | "test-failures"
   | "crew-status"
   | "crew-locks"
-  | "crew-todos"
   | "session-diff"
+  | "session-validate"
   | "handoff"
   | "file-content"
   | "custom"
@@ -86,8 +86,8 @@ export function topologyAllows(source: TopologySource, targetFile?: string): boo
     case "test-failures":
     case "crew-status":
     case "crew-locks":
-    case "crew-todos":
     case "session-diff":
+    case "session-validate":
     case "handoff":
     case "file-content":
     case "custom":

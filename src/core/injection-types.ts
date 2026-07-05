@@ -11,7 +11,6 @@ export type InjectionTrigger = "before-read" | "before-edit" | "after-edit" | "o
 export type ContextSource =
   | "crew-status"
   | "crew-locks"
-  | "crew-todos"
   | "file-errors"
   | "git-context"
   | "git-delta"
@@ -24,6 +23,7 @@ export type ContextSource =
   | "handoff"
   | "import-graph"
   | "session-diff"
+  | "session-validate"
   | "exports"
   | "file-content"
   | "now";
@@ -60,7 +60,6 @@ const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after
 const VALID_SOURCES: ContextSource[] = [
   "crew-status",
   "crew-locks",
-  "crew-todos",
   "file-errors",
   "git-context",
   "git-delta",
@@ -73,6 +72,7 @@ const VALID_SOURCES: ContextSource[] = [
   "handoff",
   "import-graph",
   "session-diff",
+  "session-validate",
   "exports",
   "file-content",
   "now",
@@ -97,12 +97,15 @@ export const DEFAULT_ACTIVE_RULES: InjectionConfig = {
       { source: "edit-diff", scope: "target-file", async: true, "max-lines": 20 },
       { source: "syntax-check", scope: "target-file", async: true, "max-lines": 5 },
       { source: "file-errors", scope: "target-file", async: true, "max-lines": 15 },
+      { source: "session-validate", scope: "global", async: true, "max-lines": 20 },
     ],
     "on-start": [
       { source: "now", scope: "global", "interval-min": 1 },
       { source: "handoff", scope: "global", "max-lines": 30 },
     ],
-    "on-idle": [],
+    "on-idle": [
+      { source: "session-validate", scope: "global", "max-lines": 20 },
+    ],
   },
 };
 
@@ -323,7 +326,7 @@ export function generateInjectionYml(config: InjectionConfig): string {
     "# sources:  crew-status | crew-locks | file-errors",
     "#           git-context | git-delta | git-staged | git-diff-stat",
     "#           edit-diff | syntax-check | test-failures | custom",
-    "#           import-graph | handoff | session-diff | exports | now",
+    "#           import-graph | handoff | session-diff | session-validate | exports | now",
     "# scope:    target-file | global",
     "# interval-min: (now source only) minutes to round time to, controlling refresh frequency",
     "",
