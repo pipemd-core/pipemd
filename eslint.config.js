@@ -20,7 +20,19 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/", "tests/", "scripts/", "*.mjs", "src/plugins/", ".pipemd/", ".opencode/"],
+    files: ["src/plugins/**/*.js"],
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "no-empty": "off",
+      "no-control-regex": "off",
+      "no-undef": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    ignores: ["dist/", "tests/", "scripts/", "*.mjs", ".pipemd/", ".opencode/"],
   },
   {
     files: ["tsup.config.ts"],
