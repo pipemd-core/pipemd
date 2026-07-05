@@ -6,6 +6,7 @@ import { PIPEMD_DIR, PID_FILE, TUI_STATS_FILE } from "./paths.js";
 import { tryReadJson, isPidAlive } from "./json-utils.js";
 import { findContextBytes, readInjectStats } from "./statusline-data.js";
 import { log, errMsg } from "./logger.js";
+import { getPmdVersion } from "./version.js";
 
 const DASHBOARD_FILE = path.join(PIPEMD_DIR, ".dashboard.json");
 
@@ -16,6 +17,7 @@ interface DashboardData {
   daemon: {
     pid: number | null;
     uptime: number;
+    version: string;
   };
   crew: {
     sessions: Array<{
@@ -108,6 +110,7 @@ export function writeDashboard(): void {
     daemon: {
       pid,
       uptime: pid ? Date.now() - daemonStartTime : 0,
+      version: getPmdVersion(),
     },
     crew,
     context: {

@@ -13,6 +13,7 @@ import {
 import type { DeliveryMode } from "../../core/injection-types.js";
 import { PIPEMD_DIR, PIPES_DIR, LIVE_DIR, SCRIPTS_DIR, TEMPLATE_PATH, CONFIG_PATH } from "../../core/paths.js";
 import { log, errMsg } from "../../core/logger.js";
+import { getPmdVersion } from "../../core/version.js";
 import { HARNESS_TARGETS } from "../../core/detectHarness.js";
 import type { HarnessName } from "../../core/detectHarness.js";
 import type { Ecosystem } from "../../core/detect.js";
@@ -394,6 +395,10 @@ function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: T
   }
 
   addFile(path.join(PIPEMD_DIR, ".gitignore"), "live/\ncrew/\n.daemon.pid\ndaemon.log\n");
+
+  // V2 — Stamp the PipeMD version at init time so `pmd refresh` and `pmd doctor`
+  // can detect version drift between the installed CLI and the scaffolded scripts.
+  addFile(path.join(PIPEMD_DIR, ".version"), JSON.stringify({ version: getPmdVersion(), installedAt: new Date().toISOString() }, null, 2) + "\n");
 
   const aiSetupSrc = path.join(__dirname, "..", "AI_SETUP_PIPEMD.md");
   if (fs.existsSync(aiSetupSrc)) {

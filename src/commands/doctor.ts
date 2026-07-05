@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { Command } from "commander";
 import chalk from "chalk";
 import { readPidFile } from "../core/daemon.js";
+import { getPmdVersion } from "../core/version.js";
 import { listSessions } from "../core/crew.js";
 import { detectHarnesses } from "../core/detectHarness.js";
 import { installHooks } from "../core/hooks.js";
@@ -35,6 +36,7 @@ export const doctorCommand = new Command("doctor")
     console.log();
     console.log(chalk.bold("PipeMD Health Check"));
     console.log(chalk.dim("─".repeat(40)));
+    console.log(chalk.cyan(`  PipeMD version: ${getPmdVersion()}`));
 
     const nodeVersion = process.versions.node;
     const major = parseInt(nodeVersion.split(".")[0], 10);

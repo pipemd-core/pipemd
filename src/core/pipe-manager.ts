@@ -11,6 +11,7 @@ import type { PipeConfig } from "../config.js";
 import { LIVE_DIR, STATUS_FILE, RENDERED_SNAPSHOT, BASE_PATH } from "./paths.js";
 import { atomicWrite } from "./fs-utils.js";
 import { buildSafeEnv } from "./json-utils.js";
+import { getPmdVersion } from "./version.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -198,7 +199,7 @@ export function updateStatus(status: {
   renderedBytes?: number;
 }) {
   try {
-    fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2), "utf-8");
+    fs.writeFileSync(STATUS_FILE, JSON.stringify({ ...status, version: getPmdVersion() }, null, 2), "utf-8");
   } catch (err) {
     log.error(`Error updating status file: ${err}`);
   }

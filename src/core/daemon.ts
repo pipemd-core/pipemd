@@ -6,6 +6,7 @@ import { writeDashboard, resetDaemonStart } from "./dashboard.js";
 import { ensureCacheDir } from "./cache.js";
 import { purgeOldRecords } from "./dedup.js";
 import { log, errMsg } from "./logger.js";
+import { getPmdVersion } from "./version.js";
 import type { PipeConfig } from "../config.js";
 import { PID_FILE, INJECTION_LOG_DIR, LIVE_DIR } from "./paths.js";
 import { startRelayClient, stopRelayClient } from "./net/daemon-client.js";
@@ -107,7 +108,7 @@ function shutdown(allPipePaths: string[], exitCode: number = 0) {
 }
 
 export function runDaemon() {
-  log.info("PipeMD daemon starting...");
+  log.info(`PipeMD daemon starting (v${getPmdVersion()})...`);
 
   process.on("SIGPIPE", () => {});
 

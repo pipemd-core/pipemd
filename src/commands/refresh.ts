@@ -16,6 +16,7 @@ import {
 } from "./init.js";
 import { PIPEMD_DIR, CONFIG_PATH, SCRIPTS_DIR, TEMPLATE_PATH } from "../core/paths.js";
 import { log, errMsg } from "../core/logger.js";
+import { getPmdVersion } from "../core/version.js";
 import { UserError } from "../core/errors.js";
 import { loadConfig, ConfigError } from "../core/daemon-config.js";
 import {
@@ -199,9 +200,26 @@ export const refreshCommand = new Command("refresh")
 
     console.log();
     console.log(chalk.cyan("🏴‍☠️ PipeMD Refresh"));
+    console.log(chalk.dim(`  Running:  v${getPmdVersion()}`));
+    // V2 — Check .pipemd/.version for drift
+    try {
+      const versionFile = path.join(PIPEMD_DIR, ".version");
+      if (fs.existsSync(versionFile)) {
+        const installed = JSON.parse(fs.readFileSync(versionFile, "utf-8"));
+        if (installed.version && installed.version !== getPmdVersion()) {
+          console.log(chalk.yellow(`  Scripts:  installed by v${installed.version} (refresh recommended)`));
+        } else {
+          console.log(chalk.dim(`  Scripts:  installed by v${installed.version}`));
+        }
+      } else {
+        console.log(chalk.dim(`  Scripts:  version unknown (no .pipemd/.version)`));
+      }
+    } catch {
+      console.log(chalk.dim(`  Scripts:  version unknown`));
+    }
     console.log(chalk.dim(`  Ecosystem: ${ecosystem}`));
     console.log(chalk.dim(`  Profile:   ${profile}`));
-    console.log(chalk.dim(`  Scripts:   ${Object.keys(config.commands).length} active`));
+    console.log(chalk.dim(`  Active:    ${Object.keys(config.commands).length} commands`));
     console.log();
 
     const changes = analyzeScripts(config, ecosystem);

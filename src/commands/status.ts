@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import { readPidFile } from "../core/daemon.js";
+import { getPmdVersion } from "../core/version.js";
 import { log, tailLog, errMsg } from "../core/logger.js";
 import { STATUS_FILE, LIVE_DIR, INJECT_STATS_FILE } from "../core/paths.js";
 import { loadConfig, ConfigError } from "../core/daemon-config.js";
@@ -31,7 +32,7 @@ export const statusCommand = new Command("status")
       return;
     }
 
-    console.log(chalk.green(`✔ Daemon running (PID ${pid})`));
+    console.log(chalk.green(`✔ Daemon running (PID ${pid})`) + chalk.dim(`  [PipeMD v${getPmdVersion()}]`));
 
     if (fs.existsSync(STATUS_FILE)) {
       try {
