@@ -7,11 +7,16 @@ import type { HookEntry } from "./hook-utils.js";
 const CREW_HOOKS: HookEntry[] = [
   { event: "BeforeTool", matcher: "read_file|cat|search|list_directory", command: "pmd crew heartbeat >/dev/null 2>&1; echo '{}'", category: "crew" },
   { event: "AfterTool", matcher: "write_file|replace|edit_file|edit", command: 'f=$(jq -r \'.tool_input.file_path // .tool_args.file_path // .tool_input.absolute_path // .tool_args.absolute_path // .file_path // empty\' 2>/dev/null); [ -n "$f" ] && pmd crew claim "$f" >/dev/null 2>&1; echo \'{}\'', category: "crew" },
-  { event: "SessionStart", matcher: "startup", command: "pmd statusline --format gemini 2>/dev/null; true", category: "statusline" },
+  { event: "SessionStart", matcher: "startup", command: "pmd crew join >/dev/null 2>&1; pmd statusline --format gemini 2>/dev/null; true", category: "crew" },
   { event: "AfterAgent", matcher: "*", command: "pmd statusline --format gemini 2>/dev/null; true", category: "statusline" },
 ];
 
 const INJECT_HOOKS: HookEntry[] = [
+  {
+    event: "SessionStart", matcher: "startup", injectOnly: true,
+    command: 'pmd inject --trigger on-start --format gemini-json --session "${PMD_SESSION:-}" 2>/dev/null; true',
+    category: "inject",
+  },
   {
     event: "BeforeTool", matcher: "read_file|cat|search|list_directory", injectOnly: true,
     command: 'pmd inject --trigger before-read --file "$(jq -r \'.tool_input.file_path // .tool_args.file_path // empty\' 2>/dev/null)" --format gemini-json --session "${PMD_SESSION:-}" 2>/dev/null; true',
@@ -24,7 +29,12 @@ const INJECT_HOOKS: HookEntry[] = [
   },
   {
     event: "AfterTool", matcher: "write_file|replace|edit_file|edit", injectOnly: true,
-    command: 'pmd inject --trigger after-edit --file "$(jq -r \'.tool_input.file_path // .tool_args.file_path // .file_path // empty\' 2>/dev/null)" --async-validate --session "${PMD_SESSION:-}" >/dev/null 2>&1; echo \'{}\'',
+    command: 'f=$(jq -r \'.tool_input.file_path // .tool_args.file_path // .file_path // empty\' 2>/dev/null); pmd inject --trigger after-edit --file "$f" --async-validate --format gemini-json --session "${PMD_SESSION:-}" >/dev/null 2>&1; [ -n "$f" ] && pmd inject --invalidate "$f" >/dev/null 2>&1; echo \'{}\'',
+    category: "inject",
+  },
+  {
+    event: "AfterAgent", matcher: "*", injectOnly: true,
+    command: 'pmd inject --trigger on-idle --format gemini-json --session "${PMD_SESSION:-}" 2>/dev/null; true',
     category: "inject",
   },
 ];

@@ -17,6 +17,11 @@ const CREW_HOOKS: HookEntry[] = [
 
 const INJECT_HOOKS: HookEntry[] = [
   {
+    event: "SessionStart", injectOnly: true,
+    command: 'pmd inject --trigger on-start --format claude-hook --session "${PMD_SESSION:-}" 2>/dev/null; true',
+    category: "inject",
+  },
+  {
     event: "PreToolUse", matcher: "Read|ReadFile|Glob|Grep", injectOnly: true,
     command: 'pmd inject --trigger before-read --file "$(jq -r \'.tool_input.file_path // .tool_input.pattern // empty\' 2>/dev/null)" --format claude-hook --session "${PMD_SESSION:-}" 2>/dev/null; true',
     timeout: 5, category: "inject",
