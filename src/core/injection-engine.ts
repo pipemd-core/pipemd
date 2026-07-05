@@ -615,10 +615,21 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       }
     }
     if (confirmed.length > 0) {
+      // C2 — Dependents-at-risk: when editing a hub file (many importers),
+      // surface the blast radius prominently. V10: import-graph is the #3
+      // reward block (−23.6s); risk context adds signal density.
+      if (confirmed.length >= 5) {
+        lines.push(`⚠️ Hub file — ${confirmed.length} dependents may be affected by this edit`);
+      }
       lines.push("Imported by:");
-      for (const line of confirmed.slice(0, 15)) {
+      // Sort by coupling (importers with more specifiers first)
+      const annotated = confirmed.map((line) => {
         const specifiers = extractImportSpecifiers(line);
         const consumerFile = line.split(":")[0];
+        const coupling = specifiers ? specifiers.split(",").length : 1;
+        return { consumerFile, specifiers, coupling };
+      }).sort((a, b) => b.coupling - a.coupling);
+      for (const { consumerFile, specifiers } of annotated.slice(0, 15)) {
         if (specifiers) {
           lines.push(`  ${consumerFile} → ${specifiers}`);
         } else {
@@ -817,10 +828,48 @@ async function resolveFileContent(ctx: ResolverContext): Promise<string> {
     if (!fs.existsSync(file)) return "";
     const stat = fs.statSync(file);
     if (stat.size > 20000) return `(file too large: ${(stat.size / 1024).toFixed(0)}KB)`;
-    const content = fs.readFileSync(file, "utf-8");
-    const lines = content.split("\n");
-    if (lines.length <= maxLines) return content;
-    return lines.slice(0, maxLines).join("\n") + `\n... (${lines.length - maxLines} more lines)`;
+
+    // C1 — mtime-aware cache: serve the previous render if the file hasn't
+    // changed since. This is V10's #1 reward block (−58.8s); freshness is
+    // the top signal. Re-reading + re-rendering on every resolve is wasteful
+    // when the file hasn't changed.
+    const cacheKey = `file-content:${file}`;
+    const cached = readCache(cacheKey);
+    if (cached?.data && cached.metadata?.mtime === String(stat.mtimeMs)) {
+      return cached.data;
+    }
+
+    const rawContent = fs.readFileSync(file, "utf-8");
+
+    // C1 — Signal density: collapse consecutive blank lines (max 1), trim
+    // trailing whitespace per line. Removes visual noise that wastes tokens.
+    const lines = rawContent.split("\n").map((l) => l.trimEnd());
+    const denseLines: string[] = [];
+    let prevBlank = false;
+    for (const l of lines) {
+      const isBlank = l.trim() === "";
+      if (isBlank && prevBlank) continue;
+      denseLines.push(l);
+      prevBlank = isBlank;
+    }
+
+    let result: string;
+    if (denseLines.length <= maxLines) {
+      result = denseLines.join("\n");
+    } else {
+      // C1 — Smart truncation: show the head (imports/setup) + tail
+      // (exports/close) with a collapsed middle. Fits more signal in the
+      // budget than naive head-only truncation.
+      const headLines = Math.ceil(maxLines * 0.6);
+      const tailLines = maxLines - headLines;
+      const head = denseLines.slice(0, headLines);
+      const tail = denseLines.slice(denseLines.length - tailLines);
+      const hidden = denseLines.length - headLines - tailLines;
+      result = head.join("\n") + `\n... (${hidden} lines collapsed) ...\n` + tail.join("\n");
+    }
+
+    writeCache(cacheKey, result, 10_000, { mtime: String(stat.mtimeMs) });
+    return result;
   } catch { return ""; }
 }
 
