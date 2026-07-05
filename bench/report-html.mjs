@@ -70,6 +70,7 @@ function computeStats(data) {
     it: stat(m => m.input_tokens), ot: stat(m => m.output_tokens),
     w: stat(m => m.wall_ms), cr: stat(m => m.context_reads || 0),
     inj: stat(m => m.injections_delivered || 0),
+    rw: stat(m => m.rework || 0), ufe: stat(m => m.unique_files_edited || 0),
     q: median(q), n: data.length,
   };
 }
@@ -168,6 +169,8 @@ const metricsDef = [
   { key: "tc", label: "Tool Calls", fn: m => m.tool_calls, lower: true },
   { key: "r", label: "Reads", fn: m => m.reads, lower: true },
   { key: "e", label: "Edits", fn: m => m.edits, lower: true },
+  { key: "rw", label: "Rework (re-edits)", fn: m => m.rework || 0, lower: true },
+  { key: "ufe", label: "Files Edited", fn: m => m.unique_files_edited || 0, lower: false },
   { key: "it", label: "Input Tokens", fn: m => m.input_tokens, lower: false },
   { key: "ot", label: "Output Tokens", fn: m => m.output_tokens, lower: true },
   { key: "w", label: "Wall Time", fn: m => m.wall_ms, fmt: fmtMs, lower: true },
@@ -348,7 +351,7 @@ function summaryRow() {
   const v = computeVerdict(sw, swo, allWith);
   const vc = verdictColor(v.verdict);
 
-  const metrics = ["tc", "r", "it", "ot", "w"];
+  const metrics = ["tc", "r", "rw", "it", "ot", "w"];
 
   const fmtCell = (stat, key) => {
     const val = stat?.[key]?.med;
@@ -368,19 +371,22 @@ function summaryRow() {
       <thead>
         <tr>
           <th></th>
-          <th colspan="5" class="with-col">WITH (median)</th>
-          <th colspan="5" class="passive-col">PASSIVE (median)</th>
-          <th colspan="5" class="static-col">STATIC (median)</th>
+          <th colspan="6" class="with-col">WITH (median)</th>
+          <th colspan="6" class="passive-col">PASSIVE (median)</th>
+          <th colspan="6" class="static-col">STATIC (median)</th>
         </tr>
         <tr>
           <th>Condition</th>
           <th class="with-col">Calls</th><th class="with-col">Reads</th>
+          <th class="with-col">Rework</th>
           <th class="with-col">Tokens In</th><th class="with-col">Tokens Out</th>
           <th class="with-col">Time</th>
           <th class="passive-col">Calls</th><th class="passive-col">Reads</th>
+          <th class="passive-col">Rework</th>
           <th class="passive-col">Tokens In</th><th class="passive-col">Tokens Out</th>
           <th class="passive-col">Time</th>
           <th class="static-col">Calls</th><th class="static-col">Reads</th>
+          <th class="static-col">Rework</th>
           <th class="static-col">Tokens In</th><th class="static-col">Tokens Out</th>
           <th class="static-col">Time</th>
         </tr>

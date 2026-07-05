@@ -37,6 +37,7 @@ DRY_RUN=false
 REPORT_ONLY=""
 GEN_MODEL="${PMD_GEN_MODEL:-zai-coding-plan/glm-5.1}"
 NO_GEN=false
+CONDITIONS="with,passive,static"
 
 RETROSPECTIVE_PROMPT="You just completed a task using PipeMD context (the AGENTS.md file with <!-- pmd: --> blocks). Give honest, concise feedback in a numbered list.
 
@@ -57,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --gen-model) GEN_MODEL="$2"; shift 2 ;;
     --no-gen) NO_GEN=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --conditions) CONDITIONS="$2"; shift 2 ;;
     --report)
       if [ -z "${2:-}" ]; then echo "Usage: --report <results.jsonl>"; exit 1; fi
       REPORT_ONLY="$2"; shift 2 ;;
@@ -66,7 +68,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       cat <<EOF
 Usage: bash bench/bench-agent.sh [--runs N] [--model MODEL] [--scenarios 1,2,3,4]
-                                 [--gen-model MODEL] [--no-gen] [--dry-run]
+                                 [--conditions with,static] [--gen-model MODEL] [--no-gen] [--dry-run]
        bash bench/bench-agent.sh --resume <results.jsonl>
        bash bench/bench-agent.sh --report <results.jsonl>
 Conditions: with (live), passive (frozen snapshot), static (hand-written AGENTS.md)
@@ -213,6 +215,7 @@ parse_run_metrics() {
   local context_reads=0
   local wall_start="" wall_end=""
   local first_turn_input=0
+  declare -A file_edits
 
   while IFS= read -r line; do
     [ -z "$line" ] && continue
@@ -241,6 +244,16 @@ parse_run_metrics() {
         ' 2>/dev/null || echo "")
         case "$tool_input" in
           *AGENTS.md*|*AI_CONTEXT.md*|*CLAUDE.md*) context_reads=$((context_reads + 1)) ;;
+        esac
+        # Track rework: count edits/writes per file path
+        case "$tool_name" in
+          edit|file_edit|write|file_write)
+            local edit_file
+            edit_file=$(echo "$line" | jq -r '.part.state.input.filePath // .part.state.input.path // .part.state.input.file_path // .part.state.input.absolute_path // empty' 2>/dev/null || echo "")
+            if [ -n "$edit_file" ]; then
+              file_edits["$edit_file"]=$(( ${file_edits["$edit_file"]:-0} + 1 ))
+            fi
+            ;;
         esac
         ;;
       step_finish)
@@ -278,6 +291,17 @@ parse_run_metrics() {
     wall_ms=$(( wall_end - wall_start ))
   fi
 
+  # Rework metric (V14/V15): per-file re-edits. Σ max(0, edits_per_file - 1).
+  # A file edited once = 0 rework (first edit is creation). Two edits = 1 rework, etc.
+  local rework=0 unique_files_edited=0
+  for f in "${!file_edits[@]}"; do
+    local count=${file_edits[$f]}
+    unique_files_edited=$((unique_files_edited + 1))
+    if [ "$count" -gt 1 ]; then
+      rework=$((rework + count - 1))
+    fi
+  done
+
   jq -n -c \
     --argjson tool_calls "$tool_calls" \
     --argjson reads "$reads" \
@@ -290,7 +314,9 @@ parse_run_metrics() {
     --argjson input_tokens "$input_tokens" \
     --argjson output_tokens "$output_tokens" \
     --argjson first_turn_input "$first_turn_input" \
-    '{input_tokens: $input_tokens, output_tokens: $output_tokens, tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms, context_reads: $context_reads, first_turn_input: $first_turn_input}' \
+    --argjson rework "$rework" \
+    --argjson unique_files_edited "$unique_files_edited" \
+    '{input_tokens: $input_tokens, output_tokens: $output_tokens, tool_calls: $tool_calls, reads: $reads, edits: $edits, writes: $writes, greps: $greps, globs: $globs, wall_ms: $wall_ms, context_reads: $context_reads, first_turn_input: $first_turn_input, rework: $rework, unique_files_edited: $unique_files_edited}' \
     > "$result_file"
 }
 
@@ -470,7 +496,7 @@ run_cell() {
   local metrics_json
   metrics_json=$(cat "$metrics_file" 2>/dev/null || true)
   if ! (echo "$metrics_json" | jq empty 2>/dev/null); then
-    metrics_json='{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0}'
+    metrics_json='{"input_tokens":0,"output_tokens":0,"tool_calls":0,"reads":0,"edits":0,"writes":0,"greps":0,"globs":0,"wall_ms":0,"context_reads":0,"rework":0,"unique_files_edited":0}'
   fi
   if [ "$condition" = "with" ]; then
     metrics_json=$(echo "$metrics_json" | jq --argjson inj "$injections_delivered" --argjson dedup "$dedup_hits" \
@@ -565,7 +591,7 @@ ensure_static_baselines() {
 # ==========================================================================
 log "=== PipeMD Agent A/B Benchmark v2 (3-condition, multi-ecosystem) ==="
 log "Model: $MODEL  (gen: $GEN_MODEL)  Runs/cell: $RUNS  Scenarios: $SCENARIOS"
-log "Conditions: with (live), passive (frozen), static (hand-written AGENTS.md)"
+log "Conditions: ${CONDITIONS}"
 log ""
 
 ensure_static_baselines
@@ -580,7 +606,8 @@ for s in "${SCEN[@]}"; do
     continue
   fi
 
-  for condition in with passive static; do
+  IFS=',' read -ra COND_ARR <<< "$CONDITIONS"
+  for condition in "${COND_ARR[@]}"; do
     log "  Condition: $condition"
     worktree_base="$RESULTS_DIR/${target}-${condition}"
 
