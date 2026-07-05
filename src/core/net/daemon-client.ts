@@ -115,11 +115,29 @@ async function isTreeDirty(): Promise<boolean> {
   }
 }
 
+// D5 — Cache git state (SHA + dirty flag) with 5s TTL. pushBlocks() is called
+// every 5s by the relay poll; without this cache it spawns two git processes
+// per tick. The cache is invalidated when the SHA changes (detected on refresh).
+const GIT_STATE_TTL_MS = 5_000;
+const _gitStateCache = { sha: "", dirty: true, ts: 0 };
+
+async function getGitState(): Promise<{ sha: string; dirty: boolean }> {
+  const now = Date.now();
+  if (now - _gitStateCache.ts < GIT_STATE_TTL_MS) {
+    return { sha: _gitStateCache.sha, dirty: _gitStateCache.dirty };
+  }
+  const [sha, dirty] = await Promise.all([getCommitSha(), isTreeDirty()]);
+  _gitStateCache.sha = sha;
+  _gitStateCache.dirty = dirty;
+  _gitStateCache.ts = now;
+  return { sha, dirty };
+}
+
 async function pushBlocks(group: string): Promise<number> {
   const urlStr = relayUrl();
   if (!urlStr) return 0;
 
-  const [sha, dirty] = await Promise.all([getCommitSha(), isTreeDirty()]);
+  const { sha, dirty } = await getGitState();
   if (!sha || dirty) return 0;
 
   const blocks: BlockEntry[] = [];

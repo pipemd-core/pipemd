@@ -26,17 +26,30 @@ export interface CrewStatusJson {
   uncommittedFiles: string[];
 }
 
+// D4 — Cache uncommitted files (git status --porcelain) with 5s TTL.
+// getStatusJson() is called every 5s by the dashboard writer; without this
+// cache, it spawns a git process on every tick.
+const UNCOMMITTED_CACHE_TTL_MS = 5_000;
+const _uncommittedCache = { files: [] as string[], ts: 0 };
+
 function resolveUncommittedFiles(): string[] {
+  const now = Date.now();
+  if (now - _uncommittedCache.ts < UNCOMMITTED_CACHE_TTL_MS) {
+    return _uncommittedCache.files;
+  }
   try {
     const out = execFileSync("git", ["status", "--porcelain"], {
       encoding: "utf-8",
       timeout: 5000,
       stdio: ["ignore", "pipe", "ignore"],
     });
-    return out.split("\n").filter(Boolean).map((l) => l.slice(3));
+    const files = out.split("\n").filter(Boolean).map((l) => l.slice(3));
+    _uncommittedCache.files = files;
+    _uncommittedCache.ts = now;
+    return files;
   } catch (err: unknown) {
     log.debug(`resolveUncommittedFiles failed: ${errMsg(err)}`);
-    return [];
+    return _uncommittedCache.files;
   }
 }
 

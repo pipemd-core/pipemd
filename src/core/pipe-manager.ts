@@ -8,7 +8,7 @@ import { loadBase, composeContent, handleIncomingWrite } from "./daemon-write-ba
 import { log, errMsg } from "./logger.js";
 import { COMMAND_TIMEOUT_MS, DEFAULT_RESERVE_DELAY_MS } from "../config.js";
 import type { PipeConfig } from "../config.js";
-import { LIVE_DIR, STATUS_FILE, RENDERED_SNAPSHOT } from "./paths.js";
+import { LIVE_DIR, STATUS_FILE, RENDERED_SNAPSHOT, BASE_PATH } from "./paths.js";
 import { atomicWrite } from "./fs-utils.js";
 import { buildSafeEnv } from "./json-utils.js";
 
@@ -28,6 +28,60 @@ const RENDER_REQUEUE_DELAY_MS = 500;
 // _slowResults between slow ticks so fast ticks stay sub-second.
 const SLOW_BLOCK_NAMES = new Set(["lint", "type-check", "arch"]);
 const SLOW_REFRESH_TICKS = 30;
+
+// D2 — Idle backoff: when no reader has been seen for IDLE_THRESHOLD_MS,
+// slow the render cadence to IDLE_RENDER_DELAY_MS (30s). The write loop's
+// exponential backoff (D3) complements this. When a reader reappears, both
+// loops snap back to fast cadence and trigger an immediate render.
+const IDLE_THRESHOLD_MS = 60_000;
+const IDLE_RENDER_DELAY_MS = 30_000;
+
+// D1 — Input signature: a cheap proxy for "has anything the render pipeline
+// cares about changed?" Computed from stat calls + one cached `git status`
+// (5s TTL). If the signature matches the last render, skip the full pipeline
+// (which spawns N bash processes) entirely.
+const GIT_STATUS_TTL_MS = 5_000;
+const _gitStatusCache = { value: "\0", ts: 0 };
+let _lastInputSignature = "";
+
+// D2 — Reader tracking: updated whenever writeToPipe or serveCommandPipe
+// successfully opens the FIFO for writing (i.e., a reader is present).
+let _lastReaderSeen = Date.now();
+
+function computeInputSignature(templatePath: string, config: PipeConfig): string {
+  const parts: string[] = [];
+  try {
+    const s = fs.statSync(templatePath);
+    parts.push(`tpl:${s.mtimeMs}:${s.size}`);
+  } catch { parts.push("tpl:?"); }
+  const basePath = config.base || BASE_PATH;
+  try {
+    const s = fs.statSync(basePath);
+    parts.push(`base:${s.mtimeMs}:${s.size}`);
+  } catch { parts.push("base:?"); }
+  const now = Date.now();
+  if (now - _gitStatusCache.ts > GIT_STATUS_TTL_MS) {
+    try {
+      _gitStatusCache.value = execFileSync("git", ["status", "--porcelain"], {
+        encoding: "utf-8", timeout: 2000, cwd: process.cwd(),
+      }).trim();
+    } catch {
+      _gitStatusCache.value = "no-git";
+    }
+    _gitStatusCache.ts = now;
+  }
+  parts.push(`git:${_gitStatusCache.value}`);
+  parts.push(`slow:${Math.floor(_slowTick / SLOW_REFRESH_TICKS)}`);
+  return parts.join("|");
+}
+
+function isIdle(): boolean {
+  return Date.now() - _lastReaderSeen > IDLE_THRESHOLD_MS;
+}
+
+function getRenderDelay(baseDelay: number): number {
+  return isIdle() ? Math.max(baseDelay, IDLE_RENDER_DELAY_MS) : baseDelay;
+}
 
 const activeTimeouts: NodeJS.Timeout[] = [];
 const activeIntervals: NodeJS.Timer[] = [];
@@ -257,6 +311,18 @@ async function updateCache(templatePath: string, config: PipeConfig) {
     _renderPending = true;
     return;
   }
+
+  // D1 — Content-hash gate: if the inputs haven't changed since the last
+  // render, skip the entire pipeline (which spawns N bash processes).
+  // The signature includes template/base mtimes, a cached `git status` (5s
+  // TTL), and the slow-tier epoch. This eliminates >99% of wasted renders
+  // between tool calls where nothing in the project has changed.
+  const sig = computeInputSignature(templatePath, config);
+  if (sig === _lastInputSignature) {
+    return;
+  }
+  _lastInputSignature = sig;
+
   _isRendering = true;
   _renderPending = false;
   try {
@@ -293,10 +359,21 @@ async function updateCache(templatePath: string, config: PipeConfig) {
 }
 
 export function serveContextPipe(pipePath: string, templatePath: string, config: PipeConfig, writeBackGuard: { value: boolean }) {
-  const delay = config.settings.reServeDelayMs ?? DEFAULT_RESERVE_DELAY_MS;
+  const baseDelay = config.settings.reServeDelayMs ?? DEFAULT_RESERVE_DELAY_MS;
 
-  trackedSetInterval(() => updateCache(templatePath, config), delay);
+  // D2 — Adaptive render cadence: recursive setTimeout that checks
+  // getRenderDelay() each tick. When idle (no reader for 60s), backs off
+  // to 30s. When active, stays at the configured baseDelay (1s default).
+  const scheduleRender = () => {
+    if (shuttingDown) return;
+    const delay = getRenderDelay(baseDelay);
+    trackedSetTimeout(() => {
+      updateCache(templatePath, config);
+      scheduleRender();
+    }, delay);
+  };
   updateCache(templatePath, config);
+  scheduleRender();
 
   try {
     const readFd = fs.openSync(pipePath, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
@@ -338,15 +415,24 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
     log.warn(`Could not attach ReadStream to context pipe: ${msg}. Write-back disabled for this pipe.`);
   }
 
+  // D3 — FIFO write pump with exponential backoff. When no reader is
+  // present (ENXIO), back off progressively to reduce syscall churn. When
+  // a reader opens, reset to fast cadence and mark _lastReaderSeen so the
+  // render loop (D2) also snaps back to fast cadence.
+  const WRITE_BACKOFF_STEPS = [1000, 2000, 5000, 10_000];
+  let writeBackoffIdx = 0;
+
   const writeToPipe = () => {
     if (shuttingDown) return;
     if (writeBackGuard.value) {
-      trackedSetTimeout(writeToPipe, delay);
+      trackedSetTimeout(writeToPipe, baseDelay);
       return;
     }
 
+    let readerPresent = false;
     try {
       const fd = fs.openSync(pipePath, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK);
+      readerPresent = true;
       try {
         if (_cachedRenderedContent) {
           writeSafe(fd, _cachedRenderedContent);
@@ -362,7 +448,17 @@ export function serveContextPipe(pipePath: string, templatePath: string, config:
       }
     }
 
-    trackedSetTimeout(writeToPipe, delay);
+    if (readerPresent) {
+      _lastReaderSeen = Date.now();
+      writeBackoffIdx = 0;
+    } else {
+      writeBackoffIdx = Math.min(writeBackoffIdx + 1, WRITE_BACKOFF_STEPS.length - 1);
+    }
+
+    const nextDelay = readerPresent
+      ? baseDelay
+      : WRITE_BACKOFF_STEPS[writeBackoffIdx];
+    trackedSetTimeout(writeToPipe, nextDelay);
   };
 
   writeToPipe();
