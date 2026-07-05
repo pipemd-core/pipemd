@@ -8,7 +8,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { log, errMsg } from "./logger.js";
-import { tryReadJson, readInjectStats as readInjectStatsFromUtils } from "./json-utils.js";
+import { tryReadJson, isPidAlive, readInjectStats as readInjectStatsFromUtils } from "./json-utils.js";
+import { estimateTokens, formatTokenCount } from "./tokens.js";
 import { atomicWrite } from "./fs-utils.js";
 import { DEFAULT_STALE_MS } from "./crew.js";
 import { CONTEXT_FILES } from "./paths.js";
@@ -33,14 +34,7 @@ export interface InjectStats {
   lastEvent?: InjectEvent;
 }
 
-export function estimateTokens(bytes: number): number {
-  return Math.round(bytes / 4);
-}
-
-export function formatTokenCount(n: number): string {
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return String(n);
-}
+export { estimateTokens, formatTokenCount } from "./tokens.js";
 
 export function findContextBytes(pipemdDir: string, cwd: string): number {
   const st = tryReadJson<{ renderedBytes?: number }>(path.join(pipemdDir, STATUS_FILE));
