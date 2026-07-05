@@ -5,6 +5,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { readPidFile } from "../core/daemon.js";
 import { getPmdVersion } from "../core/version.js";
+import { DEFAULT_ACTIVE_RULES } from "../core/injection-types.js";
 import { listSessions } from "../core/crew.js";
 import { detectHarnesses } from "../core/detectHarness.js";
 import { installHooks } from "../core/hooks.js";
@@ -30,7 +31,7 @@ function findScripts(dir: string): string[] {
 
 export const doctorCommand = new Command("doctor")
   .description("Check that everything is installed and healthy")
-  .action(() => {
+  .action(async () => {
     let hasErrors = false;
 
     console.log();
@@ -196,6 +197,64 @@ export const doctorCommand = new Command("doctor")
         console.log(`    ${h.name}: hooks ${hookStatus}${deliveryLabel}`);
         if (hookResult.detail?.includes("needs update")) {
           console.log(chalk.dim(`      → run 'pmd crew install-hooks' or 'pmd init' to update`));
+        }
+      }
+    }
+
+    // ── Resolver health ──
+    console.log(chalk.dim("─".repeat(40)));
+    console.log(chalk.bold("  Resolver Health"));
+
+    const beforeEditRules = DEFAULT_ACTIVE_RULES.rules["before-edit"] || [];
+    if (beforeEditRules.length === 0) {
+      console.log(chalk.dim("  · No before-edit rules configured"));
+    } else {
+      let sampleFile: string | null = null;
+      const srcDir = path.join(process.cwd(), "src");
+      if (fs.existsSync(srcDir)) {
+        const walk = (dir: string): string | null => {
+          try {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (entry.isDirectory()) {
+                const found = walk(path.join(dir, entry.name));
+                if (found) return found;
+              } else if (/\.[tc]sx?$/.test(entry.name)) {
+                return path.join(dir, entry.name);
+              }
+            }
+          } catch { /* ignore */ }
+          return null;
+        };
+        sampleFile = walk(srcDir);
+      }
+
+      if (!sampleFile) {
+        console.log(chalk.dim("  · No .ts/.js source file found in src/ to test resolvers"));
+      } else {
+        const { RESOLVERS } = await import("../core/injection-engine.js");
+        const testConfig = { delivery: "active" as const, rules: {} };
+        for (const rule of beforeEditRules) {
+          const resolver = (RESOLVERS as Record<string, (ctx: unknown) => Promise<string>>)[rule.source];
+          if (!resolver) {
+            console.log(chalk.red(`  ✖ ${rule.source}: resolver not registered`));
+            continue;
+          }
+          try {
+            const start = Date.now();
+            const result = await Promise.race([
+              resolver({ trigger: "before-edit", targetFile: sampleFile!, config: testConfig, maxLines: rule["max-lines"] }),
+              new Promise<string>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+            ]);
+            const elapsed = Date.now() - start;
+            if (result.length > 0) {
+              console.log(chalk.green(`  ✔ ${rule.source}: ${result.length} bytes (${elapsed}ms)`));
+            } else {
+              console.log(chalk.yellow(`  ⚠ ${rule.source}: empty for ${path.basename(sampleFile!)}`));
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.log(chalk.yellow(`  ⚠ ${rule.source}: ${msg}`));
+          }
         }
       }
     }
