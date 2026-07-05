@@ -95,7 +95,8 @@ A feature crosses experimental → main when ALL of:
 ## Definition of Done
 
 - **On either lane:** committed (not just written); new tests wired into
-  `test:unit`; `tsc --noEmit` clean; `eslint src/` clean.
+  `test:unit`; `tsc --noEmit` clean; `eslint src/` clean; `CHANGELOG.md`
+  entry added for any user-visible change.
 - **On main, additionally:** single-machine suites green; FIFO e2e fails
   (not SKIPs) on regression; Layer 2 contract committed for any new block
   or resolver; `ROADMAP.md` updated if the change shifts a phase boundary.

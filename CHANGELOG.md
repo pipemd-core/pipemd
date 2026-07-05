@@ -2,6 +2,62 @@
 
 All notable changes to PipeMD.
 
+## [Unreleased]
+
+### Added — ML Research Closure & Topology Filter
+- **Topology filter shipped in the active-mode baseline** — V7's 15× label-spread signal as a deterministic file-type gate. Skips `syntax-check` for non-typeable files, `file-errors` for non-lintable, `import-graph`/`exports` for non-JS/TS. V15 prospective A/B measured −30% input tokens at equal quality. Zero ML in the loop.
+- **Rewrite tracker (dormant)** — Session-scoped per-file edit counter. Infrastructure for future rewrite-aware policies; no consumer wired (the V15 adaptive boost was prospectively disproved).
+- **15-version ML research closed** — V1–V15 investigated ML-driven context injection. Verdict: injection helps on average (~−29s/step), "always inject within budget" is the best-supported policy (confirmed prospectively), ML-based per-context selection has not earned its place. Full findings in `docs/ml-lessons-for-main.md`.
+
+### Added — Adapter Parity
+- **All three adapters now cover 5/5 injection triggers** (before-read, before-edit, after-edit, on-idle, on-start). Previously: Claude 4/5, Gemini 3/5.
+- **Claude on-start inject hook** — fires `pmd inject --trigger on-start` at SessionStart.
+- **Gemini on-start + on-idle inject hooks** — were missing entirely.
+- **Gemini `--invalidate` after edit** — cache was staying stale after edits.
+- **Gemini crew join on SessionStart** — sessions now formally register.
+
+### Added — Versioning & Visibility
+- **`pmd status` shows the running version** alongside daemon PID.
+- **`pmd doctor` shows PipeMD version** as the first health check line.
+- **Daemon startup log includes version** — `PipeMD daemon starting (v1.2.0)...`.
+- **`.status.json` and `.dashboard.json` include version**.
+- **`.pipemd/.version` stamped at init** — `pmd refresh` warns on version drift.
+
+### Added — Phase 2 Block Types
+- **Script-based resolver system** — 41 block types across 7 ecosystems (TS/JS, Python, Go, Rust, Angular, Django, DevOps).
+- **ast-grep integration** — structural code parsing for express-routes, fastapi-routes, react-components.
+- **Dead-code block** — knip-based, self-caching. Dogfooded: removed 42 unused exports, 15 unused types, zod dependency.
+- **Workspace-map, Angular-structure, Django-urls, Hotspots, Now** blocks.
+- **Compact lint summaries** — rule frequency, severity split, `PMD_LINT_SEVERITY`.
+
+### Changed — Daemon Performance
+- **Content-hash gate** — the render loop now computes a cheap input signature (template stat + base.md stat + cached `git status` at 5s TTL) and skips the full render pipeline (N bash processes) if nothing changed. Eliminates >99% of wasted renders between tool calls.
+- **Idle backoff** — when no reader has been seen for 60s, the render cadence slows from 1s to 30s. Snaps back to 1s on first reader.
+- **FIFO write pump exponential backoff** — was retrying every 1s even with no reader (ENXIO). Now backs off 1s → 2s → 5s → 10s.
+- **Cached git status in dashboard path** — was spawning `git status --porcelain` every 5s uncached.
+- **Cached git SHA + dirty in relay poll** — was spawning two git processes every 5s.
+
+### Removed
+- **MCP server (568 LOC)** — zero production consumers.
+- **`pmd task` CLI (146 LOC)** — orchestration, not context.
+- **Dead resolvers** — `crew-todos`, `claimed-errors`, `git-context` before-edit (caches never written).
+- **zod dependency** — replaced by dead-code block dogfooding.
+- Net: ~836 LOC removed in Phase 0+1, plus continued trimming.
+
+### Fixed — 36 Review Findings
+- Concurrent resolver execution with per-item 4s timeout
+- TOCTOU-safe pipe creation via mkfifo-at-temp + atomic rename
+- Write-back buffer capped at 512KB
+- Dedup per-source TTL stops indefinite suppression
+- PID-based stale lock detection for dedup writes
+- `unhandledRejection` no longer kills daemon
+- ESM binary resolution fix for `@ast-grep/cli`
+- Full list in commit `24ff188`
+
+### Fixed — Plugin
+- **OpenCode FIFO temp file cleanup** — temp files no longer accumulate in `$TMPDIR`.
+- **OpenCode Effect.js `readAlloc` mitigation** — FIFO reads redirected to temp files (established earlier; now with cleanup).
+
 ## [1.1.2] — 2026-05-24
 
 A hardening release focused on stability, security, and code quality. 10 commits, 67 files changed (+5,373 / −3,373). The daemon no longer blocks on shell commands, fatal errors clean up properly, credential files are protected, and the sync/async code duplication is eliminated. 96 unit tests (up from 7).
