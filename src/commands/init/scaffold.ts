@@ -82,7 +82,17 @@ function appendGitignoreEntries(targetFiles: string[]): void {
     "# PipeMD ephemeral context files",
     ...targetFiles,
     ".pipemd/live/",
+    ".pipemd/crew/",
     ".pipemd/.daemon.pid",
+    ".pipemd/daemon.log*",
+    ".pipemd/.status.json",
+    ".pipemd/.dashboard.json",
+    ".pipemd/.inject-stats.json",
+    ".pipemd/.tui-stats.json",
+    ".pipemd/.injection-log/",
+    ".pipemd/cache/",
+    ".pipemd/.plugin-errors.log",
+    ".pipemd/.crew-subagent-env",
   ];
 
   for (const filepath of [GITIGNORE_PATH, ".ignore"]) {
@@ -394,7 +404,22 @@ function scaffoldProject(ecosystem: Ecosystem, selectedIds: string[], profile: T
     commands[script.id] = `${profileEnv} ${ecoEnv} ${script.command}`;
   }
 
-  addFile(path.join(PIPEMD_DIR, ".gitignore"), "live/\ncrew/\n.daemon.pid\ndaemon.log\n");
+  addFile(path.join(PIPEMD_DIR, ".gitignore"), [
+    "# PipeMD — ignore everything except committed configuration",
+    "# Ephemeral files (daemon state, caches, injection logs, crew sessions)",
+    "# are auto-ignored. Only config, scripts, and templates are tracked.",
+    "*",
+    "!.gitignore",
+    "!.version",
+    "!config.yml",
+    "!injection.yml",
+    "!template.md",
+    "!base.md",
+    "!AI_SETUP_PIPEMD.md",
+    "!scripts/",
+    "!scripts/**",
+    "",
+  ].join("\n"));
 
   // V2 — Stamp the PipeMD version at init time so `pmd refresh` and `pmd doctor`
   // can detect version drift between the installed CLI and the scaffolded scripts.

@@ -5,8 +5,8 @@
 <h1 align="center">PipeMD</h1>
 
 <p align="center">
-  <strong>Real-time project context for AI coding agents.</strong><br>
-  Zero git churn. Always fresh. Works with any agent.
+  <strong>Live project context for AI coding agents.</strong><br>
+  Zero git churn. Fresh on every read. Works with any agent.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 AI coding agents need to know your project state — git status, lint errors, TODOs, who else is editing. Static context files go stale. Auto-updated files pollute your git history.
 
-**PipeMD makes `AGENTS.md` a named pipe.** When your AI reads it, PipeMD intercepts the read, runs your scripts concurrently, and streams live context straight to the agent. Zero files change on disk. The output is completely ephemeral.
+**PipeMD makes `AGENTS.md` a named pipe.** When your AI reads it, PipeMD intercepts the read, runs your scripts concurrently, and streams live context straight to the agent. Zero files change on disk — the context output never touches git.
 
 Every context block is one file, one emitter, no architectural change. Blocks are inputs — the injection pipeline is the product.
 
@@ -406,7 +406,7 @@ PMD_LINK_PORT=9741             # Override relay listen port
 - `/sync` endpoint (relay → relay) requires a **bearer token** — auto-generated on relay start
 - Relay binds to **127.0.0.1** by default — not exposed to the network
 - `/status` and `/health` are read-only — no sensitive data exposed
-- All session data is **ephemeral** — stored in-memory only, expires after 15 seconds without refresh
+- All session data is **ephemeral on the wire** — the relay keeps sessions in-memory with a 15s TTL. The daemon persists sessions as JSON under `.pipemd/crew/` (gitignored) with a 90s reap cycle.
 
 ---
 

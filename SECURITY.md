@@ -26,7 +26,7 @@ PipeMD executes commands defined in `.pipemd/config.yml` on every context render
 
 **Mitigations:**
 - PipeMD does not auto-start. The user must explicitly run `pmd start` or `pmd init`.
-- `pmd init` shows every command it will configure and requires confirmation.
+- `pmd init` in interactive mode shows script labels and token estimates before scaffolding. Use `pmd init --headless` or `--yes` to skip prompts (CI/CD).
 - Commands run with the user's normal permissions — no elevation.
 
 **Recommendation:** Audit `.pipemd/config.yml` and `.pipemd/scripts/` when cloning an unfamiliar repository, just as you would audit `package.json` scripts or `Makefile` targets.

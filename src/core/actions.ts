@@ -20,7 +20,13 @@ export function stopLogic(): void {
   if (pid) {
     try {
       process.kill(pid, "SIGTERM");
-    } catch {}
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EPERM") {
+        throw new UserError(`Cannot stop daemon (PID ${pid}) — permission denied. The daemon may be running as a different user.`);
+      }
+      // ESRCH = process doesn't exist — expected for stale PID, continue to cleanup
+    }
   }
   cleanStaleState();
 }
@@ -28,23 +34,23 @@ export function stopLogic(): void {
 function cleanStaleState() {
   try {
     if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
-  } catch {}
+  } catch { /* best effort — may be locked by another start */ }
 
-  // Cleanup pipes
+  // Cleanup pipes from config (best effort — config may be malformed)
   try {
     const rawConfig = fs.readFileSync(CONFIG_PATH, "utf-8");
     const config = YAML.parse(rawConfig) as { pipes?: { file?: string }[] };
     for (const pipe of config.pipes || []) {
       if (pipe.file && fs.existsSync(pipe.file)) {
-        fs.unlinkSync(pipe.file);
+        try { fs.unlinkSync(pipe.file); } catch { /* in use */ }
       }
     }
-  } catch {}
+  } catch { /* malformed config — LIVE_DIR cleanup below catches most pipes */ }
 
   if (fs.existsSync(LIVE_DIR)) {
     const entries = fs.readdirSync(LIVE_DIR);
     for (const entry of entries) {
-      try { fs.unlinkSync(path.join(LIVE_DIR, entry)); } catch {}
+      try { fs.unlinkSync(path.join(LIVE_DIR, entry)); } catch { /* in use */ }
     }
   }
 }
@@ -72,6 +78,22 @@ export function startLogic(): number {
   if (!child.pid) {
     throw new UserError("Failed to spawn daemon process — system may be out of resources (EMFILE or similar).");
   }
-  writePidFile(child.pid);
+
+  // H2 — Atomic PID file creation: use O_EXCL to prevent the two-daemon
+  // start race. If another start is in progress and created the PID file
+  // between our cleanStaleState and here, EEXIST tells us we lost the race.
+  try {
+    const fd = fs.openSync(PID_FILE, "wx");
+    fs.writeFileSync(fd, String(child.pid));
+    fs.closeSync(fd);
+    try { fs.chmodSync(PID_FILE, 0o600); } catch { /* best effort */ }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      try { process.kill(child.pid, "SIGTERM"); } catch { /* lost the race */ }
+      throw new UserError("Another daemon start is in progress. Wait a moment and retry.");
+    }
+    // Non-EEXIST error — fall back to the simple write
+    writePidFile(child.pid);
+  }
   return child.pid;
 }

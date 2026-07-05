@@ -173,7 +173,14 @@ export const uninstallCommand = new Command("uninstall")
       console.log(chalk.red(`  ✖ Could not remove ${PIPEMD_DIR}: ${msg}`));
     }
 
-    const gitignoreEntries = [contextFile, ".pipemd/live/", ".pipemd/crew/", ".pipemd/.daemon.pid"].filter(Boolean) as string[];
+    const gitignoreEntries = [
+      contextFile,
+      ".pipemd/live/", ".pipemd/crew/", ".pipemd/.daemon.pid",
+      ".pipemd/daemon.log*", ".pipemd/.status.json", ".pipemd/.dashboard.json",
+      ".pipemd/.inject-stats.json", ".pipemd/.tui-stats.json",
+      ".pipemd/.injection-log/", ".pipemd/cache/",
+      ".pipemd/.plugin-errors.log", ".pipemd/.crew-subagent-env",
+    ].filter(Boolean) as string[];
     removeLinesFromFile(GITIGNORE_PATH, gitignoreEntries);
 
     const ignoreEntries = [contextFile].filter(Boolean) as string[];

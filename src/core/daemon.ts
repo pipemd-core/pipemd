@@ -212,6 +212,7 @@ export function runDaemon() {
 
 export function writePidFile(pid: number) {
   fs.writeFileSync(PID_FILE, String(pid), "utf-8");
+  try { fs.chmodSync(PID_FILE, 0o600); } catch { /* best effort */ }
 }
 
 export function readPidFile(): number | null {

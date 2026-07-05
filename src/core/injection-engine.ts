@@ -905,7 +905,7 @@ function commandAvailable(bin: string): boolean {
   if (cached !== undefined) return cached;
   let ok = true;
   try {
-    execFileSync("sh", ["-c", `command -v ${bin} >/dev/null 2>&1`], { stdio: "ignore" });
+    execFileSync(bin, ["--version"], { stdio: "ignore", timeout: 2000 });
   } catch { ok = false; }
   _binAvailable.set(bin, ok);
   return ok;

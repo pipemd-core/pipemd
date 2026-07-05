@@ -120,7 +120,7 @@ export function checkMkfifo(): boolean {
   try {
     const testPipe = path.join(LIVE_DIR, ".pmd-mkfifo-test");
     fs.mkdirSync(LIVE_DIR, { recursive: true });
-    execFileSync("mkfifo", [testPipe], { encoding: "utf-8", stdio: "pipe" });
+    execFileSync("mkfifo", [testPipe, "-m", "0600"], { encoding: "utf-8", stdio: "pipe" });
     fs.unlinkSync(testPipe);
     return true;
   } catch (err: unknown) {
