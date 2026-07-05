@@ -4,6 +4,24 @@ All notable changes to PipeMD.
 
 ## [Unreleased]
 
+### Added — Phase 2 Harden Complete
+- **Ecosystem-aware syntax checking** — TypeScript (.ts/.tsx) now runs `tsc --noEmit` (project-wide, 30s cache). Python → `py_compile`. Go → `go vet`. Rust → `cargo check`. Previously: only JS via `node --check`; TS got nothing.
+- **`session-validate` resolver** — runs eslint on the active session's claimed files. Registered in after-edit + on-idle defaults. Replaces the dead `claimed-errors`.
+- **`pmd doctor` resolver health check** — runs each before-edit resolver against a sample source file and reports output size + latency.
+
+### Added — Layer 2 Measurement Infrastructure
+- **Intrinsic bench harness** (`pnpm bench`) — runs every bash resolver script against all 15 test fixtures, measuring tokens + latency. 300 baseline entries.
+- **Token ratchet** — fails CI if any block grows >15% AND >50 tokens. Catches silent token bloat.
+- **Unified `estimateTokens()`** — single canonical implementation in `src/core/tokens.ts`.
+
+### Added — Content Layer (Phase 2C partial)
+- **`file-content` freshness + signal density** — mtime-aware caching (skip re-read if unchanged), blank-line collapsing, smart head+tail truncation. V10's #1 reward block (−58.8s).
+- **`import-graph` dependents-at-risk** — hub files (≥5 importers) get a risk annotation. Importers sorted by coupling strength.
+
+### Changed
+- **`git-context` is now conditional** — only fires when the file has uncommitted changes (V10: not significant, was noisy).
+- **`crew-todos` fully removed** — source, resolver, plugin producer. Dead code eliminated.
+
 ### Added — ML Research Closure & Topology Filter
 - **Topology filter shipped in the active-mode baseline** — V7's 15× label-spread signal as a deterministic file-type gate. Skips `syntax-check` for non-typeable files, `file-errors` for non-lintable, `import-graph`/`exports` for non-JS/TS. V15 prospective A/B measured −30% input tokens at equal quality. Zero ML in the loop.
 - **Rewrite tracker (dormant)** — Session-scoped per-file edit counter. Infrastructure for future rewrite-aware policies; no consumer wired (the V15 adaptive boost was prospectively disproved).

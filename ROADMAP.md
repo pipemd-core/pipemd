@@ -1,6 +1,6 @@
 # PipeMD Roadmap
 
-*Last updated: 2026-07-05 (v1.2.0)*
+*Last updated: 2026-07-05 (Phase 2 complete)*
 
 > **PipeMD is a context provider. Its job: resolve fresh, relevant context and
 > push it to AI agents faster than anything else.**
@@ -48,10 +48,10 @@ The roadmap below redirects effort accordingly.
 |-------|---------------|--------|
 | **0. Stabilize** | Zero dead resolvers. Per-resolver timeouts. | **Done** (`8719fab`) |
 | **1. Trim** | MCP server gone. Task CLI gone. ~836 LOC removed. | **Done** (`8719fab`) |
+| **2. Harden** | 41 block types. Ecosystem syntax checking. session-validate. Conditional git-context. Resolver health in doctor. | **Done** |
 | **2A. ML-Derived Defaults** | Topology filter in the active baseline. Rewrite-tracker as dormant infra. | **Done** (`de0f5de`) |
-| **2. Harden** | 41 block types. Compact quality summaries. Weak blocks demoted. | **In Progress** |
-| **2B. Measure** | Token/latency/accuracy contracts (Layer 2). Prospective A/B harness (Layer 3). | **In Progress** (Layer 3 harness built by V15) |
-| **2C. Content Layer** | Resolver quality, freshness, and signal density for the high-reward blocks. | **Planned** (the positive V10/V15 agenda) |
+| **2B. Measure** | Intrinsic bench harness + token ratchet (Layer 2). Prospective A/B harness (Layer 3). | **Layer 2 done** (`a6bd597`); Layer 3 built by V15 |
+| **2C. Content Layer** | file-content freshness + signal density. import-graph dependents-at-risk. | **Partial** (`fa3bcf0`); tiers deferred |
 | **2D. Performance** | Content-hash gate. Idle backoff. FIFO backoff. Git caching. | **Done** (`e5483ce`) |
 | **2E. Versioning** | PKG_VERSION surfaced in status/doctor/daemon/dashboard. `.pipemd/.version` at init. | **Done** (`27c7215`) |
 | **2F. Adapter Parity** | All adapters 5/5 triggers. Gemini parity. Claude on-start. | **Done** (`3aa7f47`) |
