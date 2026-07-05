@@ -1,6 +1,6 @@
 # PipeMD Roadmap
 
-*Last updated: 2026-07-05 (Phase 2 complete)*
+*Last updated: 2026-07-05 (v2.0.0 — first stable release)*
 
 > **PipeMD is a context provider. Its job: resolve fresh, relevant context and
 > push it to AI agents faster than anything else.**

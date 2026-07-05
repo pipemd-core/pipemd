@@ -1,6 +1,6 @@
 {
   "name": "@pipemd-core/pipemd",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "The Dynamic Context Harness for AI Coding Agents",
   "type": "module",
   "bin": {
