@@ -17,7 +17,7 @@ import type {
 } from "./injection-types.js";
 import { checkInjectionStatus, recordInjection } from "./dedup.js";
 import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession } from "./crew.js";
-import { formatTimeAgo, buildSafeEnv } from "./json-utils.js";
+import { buildSafeEnv } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
 import { getTasksForSession, formatTaskBlock } from "./tasks.js";
 import { topologyAllows } from "./topology-filter.js";
@@ -85,6 +85,7 @@ async function runGitAsync(args: string[], fallback: string = ""): Promise<strin
     const { stdout } = await execFileAsync("git", args, {
       encoding: "utf-8",
       timeout: 5000,
+      env: { ...process.env, LC_ALL: "C", LC_TIME: "C" },
     });
     return stdout.trim();
   } catch (err: unknown) {
@@ -104,18 +105,29 @@ async function resolveCrewStatus(_ctx: ResolverContext): Promise<string> {
   if (!hasRemote && conflicts.length === 0 && !hasClaims) return "";
 
   const lines: string[] = [];
+  const agentCount = sessions.length;
+  lines.push(`${agentCount} agent${agentCount > 1 ? "s" : ""} active.`);
+
   for (const s of sessions) {
-    const claimed = s.claimedFiles.map((c) => c.path).join(", ") || "none";
-    const origin = s._origin ? ` from ${s._origin}` : "";
-    lines.push(`Crew: ${sessions.length} session(s) — ${s.harness} (${s.id}, claimed: ${claimed})${origin}`);
-    if (s.note) lines.push(`  note: ${s.note}`);
+    const claims = s.claimedFiles.map((c) => toRel(c.path)).filter(Boolean);
+    let activity: string;
+    if (claims.length > 0) {
+      activity = `editing ${claims.slice(0, 3).join(", ")}`;
+      if (claims.length > 3) activity += ` +${claims.length - 3} more`;
+    } else {
+      activity = "idle";
+    }
+    const noteSuffix = s.note ? ` (${s.note})` : "";
+    const remoteSuffix = s._origin ? ` [remote: ${s._origin}]` : "";
+    lines.push(`- ${s.harness}: ${activity}${noteSuffix}${remoteSuffix}`);
   }
 
   for (const c of conflicts) {
-    lines.push(`⚠️ CONFLICT: ${c.path} claimed by ${c.sessionIds.join(", ")}`);
+    const relPath = toRel(c.path);
+    lines.push(`⚠️ CONFLICT: ${relPath} — ${c.sessionIds.length} agents editing`);
   }
 
-  return lines.slice(0, 8).join("\n");
+  return lines.join("\n");
 }
 
 async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
@@ -130,14 +142,11 @@ async function resolveCrewLocks(ctx: ResolverContext): Promise<string> {
   if (claimers.length === 0) return "";
 
   if (claimers.length === 1) {
-    const s = claimers[0];
-    const claim = s.claimedFiles.find((c) => c.path === file)!;
-    const ago = formatTimeAgo(claim.claimedAt);
-    return `File ${file}: claimed by ${s.harness} (${s.id}) ${ago} ago`;
+    return `Another agent (${claimers[0].harness}) has this file claimed.`;
   }
 
-  const ids = claimers.map((s) => `${s.harness} (${s.id})`).join(", ");
-  return `⚠️ CONFLICT on ${file}: ${ids}`;
+  const harnesses = claimers.map((s) => s.harness);
+  return `⚠️ CONFLICT: ${claimers.length} agents are editing this file (${harnesses.join(", ")}).`;
 }
 
 async function resolveSessionValidate(_ctx: ResolverContext): Promise<string> {
@@ -200,7 +209,18 @@ async function resolveValidation(ctx: ResolverContext): Promise<string> {
         if (fs.statSync(file).mtimeMs > Number(storedMtime)) return "";
       } catch { /* file missing — serve the cache rather than go blank */ }
     }
-    return entry.data;
+    // Strip absolute path header lines (eslint/ruff emit the file path as a
+    // section header before the error lines). The path is already in the
+    // injection's section header — repeating it wastes tokens.
+    const cleaned = entry.data
+      .split("\n")
+      .filter(l => {
+        const trimmed = l.trim();
+        if (trimmed.match(/^\/[^\s]+\.(ts|tsx|js|jsx|mjs|cjs|py|go|lua|rs)$/i)) return false;
+        return true;
+      })
+      .join("\n");
+    return cleaned;
   }
   return "";
 }
@@ -525,6 +545,11 @@ function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
+function toRel(filePath: string): string {
+  const rel = path.relative(process.cwd(), filePath);
+  return rel && !rel.startsWith("..") ? rel : filePath;
+}
+
 function extractImportSpecifiers(line: string): string | null {
   const patterns = [
     /import\s+\{([^}]+)\}\s+from/,
@@ -619,24 +644,25 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       // surface the blast radius prominently. V10: import-graph is the #3
       // reward block (−23.6s); risk context adds signal density.
       if (confirmed.length >= 5) {
-        lines.push(`⚠️ Hub file — ${confirmed.length} dependents may be affected by this edit`);
+        lines.push(`${confirmed.length} files import this module (edits may break them):`);
+      } else {
+        lines.push(`${confirmed.length} file${confirmed.length > 1 ? "s" : ""} import${confirmed.length > 1 ? "" : "s"} this module:`);
       }
-      lines.push("Imported by:");
       // Sort by coupling (importers with more specifiers first)
       const annotated = confirmed.map((line) => {
         const specifiers = extractImportSpecifiers(line);
-        const consumerFile = line.split(":")[0];
+        const consumerFile = toRel(line.split(":")[0]);
         const coupling = specifiers ? specifiers.split(",").length : 1;
         return { consumerFile, specifiers, coupling };
       }).sort((a, b) => b.coupling - a.coupling);
       for (const { consumerFile, specifiers } of annotated.slice(0, 15)) {
         if (specifiers) {
-          lines.push(`  ${consumerFile} → ${specifiers}`);
+          lines.push(`- \`${consumerFile}\` → ${specifiers}`);
         } else {
-          lines.push(`  ${consumerFile}`);
+          lines.push(`- \`${consumerFile}\``);
         }
       }
-      if (confirmed.length > 15) lines.push(`  ... +${confirmed.length - 15} more`);
+      if (confirmed.length > 15) lines.push(`- ... +${confirmed.length - 15} more`);
     }
   } catch { /* no matches */ }
 
@@ -651,7 +677,7 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       return !/^[*/]/.test(content) && !/^\/\//.test(content);
     });
     if (imports.length > 0) {
-      lines.push("Imports:");
+      lines.push("This file imports:");
       const seen = new Map<string, string[]>();
       for (const line of imports) {
         const m = line.match(/from\s+['"]([^'"]+)['"]/);
@@ -673,9 +699,9 @@ async function resolveImportGraph(ctx: ResolverContext): Promise<string> {
       for (const [importPath, syms] of seen) {
         if (count >= 15) break;
         if (syms.length > 0) {
-          lines.push(`  ${importPath} → ${syms.join(", ")}`);
+          lines.push(`- \`${importPath}\` → ${syms.join(", ")}`);
         } else {
-          lines.push(`  ${importPath}`);
+          lines.push(`- \`${importPath}\``);
         }
         count++;
       }
@@ -744,7 +770,7 @@ async function resolveExports(ctx: ResolverContext): Promise<string> {
       }
     }
     if (exportLines.length > 0) {
-      lines.push("Exports:");
+      lines.push("");
       for (const sig of exportLines.slice(0, 20)) {
         lines.push(`  ${sig}`);
       }

@@ -450,12 +450,12 @@ async function afterHandler(input, output) {
     captureTodos(tool, output);
     const isEdit = isEditTool(tool);
 
-    if (WITH_INJECTION && lastInjection && typeof (output && output.output) === "string") {
-      output.output += "\n\n" + lastInjection.payload;
-      storePayload(lastInjection.trigger + "-inline", lastInjection.payload);
-      pushEvent(lastInjection.trigger + "-inline", tool, lastInjection.file || "", "injected-inline", lastInjection.bytes);
-      lastInjection = null;
-    }
+    // The before-edit payload was already delivered to the agent via the
+    // beforeHandler. Re-injecting it at after-edit causes the LLM to see the
+    // same context twice in one tool result — token waste and potential
+    // confusion. The after-edit handler should only deliver post-edit
+    // validation results (edit-feedback below), not re-deliver pre-edit context.
+    lastInjection = null;
 
     if (isEdit) {
       const args = (output && output.args) || (input && input.args) || {};

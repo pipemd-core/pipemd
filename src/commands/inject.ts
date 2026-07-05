@@ -15,6 +15,74 @@ import { log, errMsg } from "../core/logger.js";
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
 type InjectFormat = "plain" | "claude-hook" | "gemini-json";
 
+const SOURCE_LABELS: Record<string, string> = {
+  "import-graph": "Dependencies",
+  "file-errors": "Errors",
+  "syntax-check": "Type check",
+  "crew-locks": "Crew",
+  "crew-status": "Crew",
+  "git-context": "Git",
+  "edit-diff": "Recent changes",
+  "session-validate": "Session validation",
+  "file-content": "File",
+  "exports": "Exports",
+  "handoff": "Tasks",
+  "now": "Time",
+  "git-delta": "Git",
+  "git-staged": "Staged",
+  "git-diff-stat": "Changes",
+  "session-diff": "Session changes",
+  "test-failures": "Test failures",
+  "custom": "Custom",
+};
+
+const TRIGGER_LABELS: Record<string, string> = {
+  "before-read": "About",
+  "before-edit": "Context",
+  "after-edit": "After edit",
+  "on-idle": "Project state",
+  "on-start": "Project context",
+};
+
+function toRelative(filePath: string): string {
+  const rel = path.relative(process.cwd(), filePath);
+  return rel && !rel.startsWith("..") ? rel : filePath;
+}
+
+function assemblePayload(
+  payloads: Array<{ source: string; targetFile?: string; content: string }>,
+  trigger: string,
+): string {
+  const triggerLabel = TRIGGER_LABELS[trigger] || "Context";
+  const targetFilePayloads = payloads.filter((p) => p.targetFile);
+  const globalPayloads = payloads.filter((p) => !p.targetFile);
+  const sections: string[] = [];
+
+  if (targetFilePayloads.length > 0) {
+    const relFile = toRelative(targetFilePayloads[0].targetFile!);
+    const subParts: string[] = [`### ${triggerLabel}: ${relFile}`];
+    for (const p of targetFilePayloads) {
+      if (!p.content.trim()) continue;
+      const label = SOURCE_LABELS[p.source] || p.source;
+      subParts.push(`**${label}**\n${p.content}`);
+    }
+    if (subParts.length > 1) sections.push(subParts.join("\n\n"));
+  }
+
+  if (globalPayloads.length > 0) {
+    const label = targetFilePayloads.length > 0 ? "### " + triggerLabel : `### ${triggerLabel}`;
+    const subParts: string[] = [label];
+    for (const p of globalPayloads) {
+      if (!p.content.trim()) continue;
+      const sourceLabel = SOURCE_LABELS[p.source] || p.source;
+      subParts.push(`**${sourceLabel}**\n${p.content}`);
+    }
+    if (subParts.length > 1) sections.push(subParts.join("\n\n"));
+  }
+
+  return sections.join("\n\n") + "\n";
+}
+
 const inject = new Command("inject")
   .description("Resolve and output smart context injection payloads (called by harness hooks)")
   .configureHelp({ visibleCommands: () => [] })
@@ -141,17 +209,7 @@ const inject = new Command("inject")
 
     bumpInjectStats(PIPEMD_DIR, "delivered", { trigger, file: opts.file ?? "" });
 
-    const parts = payloads.map((p) => {
-      const header = p.targetFile
-        ? `[pmd:${p.source} \u2192 ${p.targetFile}]`
-        : `[pmd:${p.source}]`;
-      if (trigger === "before-edit" && p.targetFile) {
-        return `${header}\nFile: ${p.targetFile}\n${"---"}\n${p.content}`;
-      }
-      return `${header}\n${p.content}`;
-    });
-
-    const plain = parts.join("\n\n") + "\n";
+    const plain = assemblePayload(payloads, trigger);
 
     const logDir = path.join(PIPEMD_DIR, ".injection-log");
     try {

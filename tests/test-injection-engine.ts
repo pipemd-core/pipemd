@@ -108,9 +108,9 @@ describe("before-read", () => {
     writeCrewSession(makeSession({ id: "cr_beta", harness: "BetaAgent", pid: 88888 }))
     const payloads = await resolveInjections("before-read", undefined, "sess-2b")
     assert.equal(payloads.length, 1)
-    assert.ok(payloads[0].content.includes("2 session(s)"))
+    assert.ok(payloads[0].content.includes("2 agents active"))
     assert.ok(payloads[0].content.includes("AlphaAgent"))
-    assert.ok(payloads[0].content.includes("cr_alpha"))
+    assert.ok(payloads[0].content.includes("editing"))
   })
 
   it("with remote session shows crew status even with 1 local", async () => {
@@ -122,7 +122,7 @@ describe("before-read", () => {
     invalidateSessionListCache()
     const payloads = await resolveInjections("before-read", undefined, "sess-2c")
     assert.equal(payloads.length, 1)
-    assert.ok(payloads[0].content.includes("from other-host"))
+    assert.ok(payloads[0].content.includes("remote: other-host"))
     clearRemoteSessions()
     invalidateSessionListCache()
   })
@@ -156,9 +156,8 @@ describe("before-edit", () => {
     )
     const payloads = await resolveInjections("before-edit", "src/bar.ts", "sess-5")
     assert.equal(payloads.length, 1)
-    assert.ok(payloads[0].content.includes("claimed by"))
+    assert.ok(payloads[0].content.includes("has this file claimed"))
     assert.ok(payloads[0].content.includes("ClaimantAgent"))
-    assert.ok(payloads[0].content.includes("cr_claimant"))
   })
 
   it("with conflicting claims shows CONFLICT", async () => {
