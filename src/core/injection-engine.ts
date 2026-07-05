@@ -20,6 +20,7 @@ import { listSessions, findConflicts, resolveAgentIdentity, resolveActiveSession
 import { formatTimeAgo, buildSafeEnv } from "./json-utils.js";
 import { log, errMsg } from "./logger.js";
 import { getTasksForSession, formatTaskBlock } from "./tasks.js";
+import { topologyAllows } from "./topology-filter.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -815,6 +816,7 @@ export async function resolveInjections(
   const applicableRules = rules.filter((rule) => {
     if (rule.scope === "target-file" && !targetFile) return false;
     if (sourceFilter && !sourceFilter.has(rule.source)) return false;
+    if (!topologyAllows(rule.source, targetFile)) return false;
     return true;
   });
 

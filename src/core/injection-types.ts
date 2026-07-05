@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { log, errMsg } from "./logger.js";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-export type DeliveryMode = "passive" | "active" | "expert";
+export type DeliveryMode = "passive" | "active" | "expert" | "adaptive";
 
 export type InjectionTrigger = "before-read" | "before-edit" | "after-edit" | "on-idle" | "on-start";
 
@@ -55,7 +55,7 @@ export interface InjectionPayload {
   hash: string;
 }
 
-const VALID_DELIVERY_MODES: DeliveryMode[] = ["passive", "active", "expert"];
+const VALID_DELIVERY_MODES: DeliveryMode[] = ["passive", "active", "expert", "adaptive"];
 const VALID_TRIGGERS: InjectionTrigger[] = ["before-read", "before-edit", "after-edit", "on-idle", "on-start"];
 const VALID_SOURCES: ContextSource[] = [
   "crew-status",
@@ -218,8 +218,13 @@ export function parseInjectionConfig(raw: unknown): InjectionConfig {
     }
   }
 
-  if (delivery === "active" && Object.keys(rules).length === 0) {
-    return { ...DEFAULT_ACTIVE_RULES };
+  if ((delivery === "active" || delivery === "adaptive") && Object.keys(rules).length === 0) {
+    // Adaptive uses the same active rules as its base; the topology filter
+    // applies in both modes (it is wired in injection-engine.ts). The difference
+    // is semantic only on main — the adaptive boost (V15) lives on experimental.
+    return delivery === "adaptive"
+      ? { ...DEFAULT_ACTIVE_RULES, delivery: "adaptive" }
+      : { ...DEFAULT_ACTIVE_RULES };
   }
 
   const customCommandsAllowed = obj.customCommandsAllowed === true;
@@ -308,10 +313,11 @@ export function generateInjectionYml(config: InjectionConfig): string {
   const header = [
     "# PipeMD Injection Configuration",
     "#",
-    "# delivery: passive | active | expert",
-    "#   passive = render to file/pipe, no hooks",
-    "#   active  = hooks installed, sensible defaults",
-    "#   expert  = full customization of injection rules",
+    "# delivery: passive | active | expert | adaptive",
+    "#   passive  = render to file/pipe, no hooks",
+    "#   active   = hooks installed, sensible defaults (topology-filtered)",
+    "#   expert   = full customization of injection rules",
+    "#   adaptive = active rules + topology filter (experimental-lane boost is separate)",
     "#",
     "# triggers: before-read | before-edit | after-edit | on-idle | on-start",
     "# sources:  crew-status | crew-locks | file-errors",

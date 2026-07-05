@@ -333,6 +333,39 @@ describe("test-failures resolver", () => {
   })
 })
 
+describe("topology filter in active mode (V15 — the free token win)", () => {
+  it("skips syntax-check, import-graph, exports, file-errors for a .css file", async () => {
+    clearDedup()
+    fs.writeFileSync(
+      path.join(tmpDir, ".pipemd", "injection.yml"),
+      `delivery: active
+rules:
+  before-edit:
+    - source: crew-locks
+      scope: target-file
+    - source: import-graph
+      scope: target-file
+      max-lines: 25
+    - source: exports
+      scope: target-file
+      max-lines: 15
+    - source: syntax-check
+      scope: target-file
+      max-lines: 5
+    - source: file-errors
+      scope: target-file
+      max-lines: 15
+`,
+    )
+    const payloads = await resolveInjections("before-edit", "src/style.css", "topo-css-session")
+    const sources = payloads.map((p: any) => p.source)
+    assert.ok(!sources.includes("syntax-check"), "syntax-check must be topology-filtered for .css")
+    assert.ok(!sources.includes("import-graph"), "import-graph must be topology-filtered for .css")
+    assert.ok(!sources.includes("exports"), "exports must be topology-filtered for .css")
+    assert.ok(!sources.includes("file-errors"), "file-errors must be topology-filtered for .css")
+  })
+})
+
 after(() => {
   process.chdir(origDir)
   fs.rmSync(tmpDir, { recursive: true, force: true })
