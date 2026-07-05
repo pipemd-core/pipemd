@@ -17,8 +17,10 @@ import {
   renderCrewBlock,
   getStatusJson,
   isPipemdProject,
+  readSession,
   DEFAULT_STALE_MS,
   type CrewRole,
+  type CrewSession,
 } from "../core/crew.js";
 import { installHooks } from "../core/hooks.js";
 import { clearSessionRecords } from "../core/dedup.js";
@@ -120,12 +122,18 @@ crew
   .description("Mark files as being worked on by this agent")
   .argument("<files...>", "file paths to claim")
   .option("-n, --note <text>", "what you are doing with these files")
-  .action((files: string[], opts: { note?: string }) => {
+  .option("--session <id>", "target a specific crew session id")
+  .action((files: string[], opts: { note?: string; session?: string }) => {
     if (!requireProjectOrExit()) return;
-    const existingSession = resolveActiveSession();
-    const session = resolveOrJoin();
-    if (!existingSession) {
-      log.info(`Crew: auto-joined ${session.role} ${session.id} (${session.harness}) for claim`);
+    const existingSession = opts.session ? readSession(opts.session) : resolveActiveSession();
+    let session: CrewSession;
+    if (opts.session && existingSession) {
+      session = existingSession;
+    } else {
+      session = resolveOrJoin();
+      if (!existingSession) {
+        log.info(`Crew: auto-joined ${session.role} ${session.id} (${session.harness}) for claim`);
+      }
     }
     const now = new Date().toISOString();
     for (const f of files) {
@@ -148,9 +156,10 @@ crew
   .description("Release previously claimed files so others can work on them")
   .argument("[files...]", "file paths to release")
   .option("-a, --all", "release every claimed file")
-  .action((files: string[], opts: { all?: boolean }) => {
+  .option("--session <id>", "target a specific crew session id")
+  .action((files: string[], opts: { all?: boolean; session?: string }) => {
     if (!requireProjectOrExit()) return;
-    const session = resolveActiveSession();
+    const session = opts.session ? readSession(opts.session) : resolveActiveSession();
     if (!session) {
       console.log(chalk.yellow("⚠ No active crew session."));
       return;
@@ -170,9 +179,16 @@ crew
   .command("note")
   .description("Post a status message for this agent")
   .argument("<text...>", "status text")
-  .action((text: string[]) => {
+  .option("--session <id>", "target a specific crew session id")
+  .action((text: string[], opts: { session?: string }) => {
     if (!requireProjectOrExit()) return;
-    const session = resolveOrJoin();
+    let session: CrewSession;
+    const existing = opts.session ? readSession(opts.session) : resolveActiveSession();
+    if (opts.session && existing) {
+      session = existing;
+    } else {
+      session = resolveOrJoin();
+    }
     session.note = text.join(" ");
     session.lastHeartbeat = new Date().toISOString();
     writeSessionAtomic(session);
@@ -182,18 +198,20 @@ crew
 crew
   .command("heartbeat")
   .description("Refresh this agent's liveness timestamp")
-  .action(() => {
+  .option("--session <id>", "target a specific crew session id")
+  .action((opts: { session?: string }) => {
     if (!isPipemdProject()) return;
-    const session = resolveActiveSession();
+    const session = opts.session ? readSession(opts.session) : resolveActiveSession();
     if (session) touchHeartbeat(session);
   });
 
 crew
   .command("leave")
   .description("Deregister this agent from the crew")
-  .action(() => {
+  .option("--session <id>", "target a specific crew session id")
+  .action((opts: { session?: string }) => {
     if (!requireProjectOrExit()) return;
-    const session = resolveActiveSession();
+    const session = opts.session ? readSession(opts.session) : resolveActiveSession();
     if (!session) {
       console.log(chalk.yellow("⚠ No active crew session."));
       return;
