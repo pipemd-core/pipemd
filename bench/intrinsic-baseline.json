@@ -1,0 +1,2102 @@
+[
+  {
+    "fixture": "angular-project",
+    "script": "architecture/arch.sh",
+    "bytes": 749,
+    "tokens": 187,
+    "ms": 63
+  },
+  {
+    "fixture": "angular-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/deps.sh",
+    "bytes": 46,
+    "tokens": 12,
+    "ms": 24
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/exports.sh",
+    "bytes": 163,
+    "tokens": 41,
+    "ms": 9
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/repomap.mjs",
+    "bytes": 247,
+    "tokens": 62,
+    "ms": 26
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/repomap.sh",
+    "bytes": 247,
+    "tokens": 62,
+    "ms": 95
+  },
+  {
+    "fixture": "angular-project",
+    "script": "project/tree.sh",
+    "bytes": 196,
+    "tokens": 49,
+    "ms": 5
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 9
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 6
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 15
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "angular-project",
+    "script": "git/hotspots.sh",
+    "bytes": 174,
+    "tokens": 44,
+    "ms": 8
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 19
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 793
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 250,
+    "tokens": 63,
+    "ms": 247
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "angular-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1694
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "architecture/arch.sh",
+    "bytes": 204,
+    "tokens": 51,
+    "ms": 64
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/deps.sh",
+    "bytes": 46,
+    "tokens": 12,
+    "ms": 22
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/exports.sh",
+    "bytes": 31,
+    "tokens": 8,
+    "ms": 10
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/repomap.mjs",
+    "bytes": 101,
+    "tokens": 25,
+    "ms": 26
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/repomap.sh",
+    "bytes": 101,
+    "tokens": 25,
+    "ms": 65
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "project/tree.sh",
+    "bytes": 121,
+    "tokens": 30,
+    "ms": 6
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 154,
+    "tokens": 39,
+    "ms": 9
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/git-branch.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/git-context.sh",
+    "bytes": 1395,
+    "tokens": 349,
+    "ms": 19
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/git-log.sh",
+    "bytes": 969,
+    "tokens": 242,
+    "ms": 8
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/git-status.sh",
+    "bytes": 528,
+    "tokens": 132,
+    "ms": 10
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "git/hotspots.sh",
+    "bytes": 90,
+    "tokens": 23,
+    "ms": 18
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1092
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 174,
+    "tokens": 44,
+    "ms": 247
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "angular-standalone-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1581
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "architecture/arch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 65
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 2
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/exports.sh",
+    "bytes": 25,
+    "tokens": 6,
+    "ms": 5
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/repomap.mjs",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 27
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/repomap.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 34
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "project/tree.sh",
+    "bytes": 293,
+    "tokens": 73,
+    "ms": 6
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 154,
+    "tokens": 39,
+    "ms": 8
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/git-branch.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 8
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/git-context.sh",
+    "bytes": 1467,
+    "tokens": 367,
+    "ms": 19
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/git-log.sh",
+    "bytes": 969,
+    "tokens": 242,
+    "ms": 7
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/git-status.sh",
+    "bytes": 600,
+    "tokens": 150,
+    "ms": 11
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "git/hotspots.sh",
+    "bytes": 491,
+    "tokens": 123,
+    "ms": 18
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1030
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 416
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 7
+  },
+  {
+    "fixture": "cpp-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1696
+  },
+  {
+    "fixture": "devops-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 5
+  },
+  {
+    "fixture": "devops-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 2
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 3
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 9
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/repomap.mjs",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 20
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/repomap.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 27
+  },
+  {
+    "fixture": "devops-project",
+    "script": "project/tree.sh",
+    "bytes": 92,
+    "tokens": 23,
+    "ms": 6
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 154,
+    "tokens": 39,
+    "ms": 8
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/git-branch.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 8
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/git-context.sh",
+    "bytes": 1494,
+    "tokens": 374,
+    "ms": 20
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/git-log.sh",
+    "bytes": 969,
+    "tokens": 242,
+    "ms": 8
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/git-status.sh",
+    "bytes": 627,
+    "tokens": 157,
+    "ms": 11
+  },
+  {
+    "fixture": "devops-project",
+    "script": "git/hotspots.sh",
+    "bytes": 0,
+    "tokens": 0,
+    "ms": 17
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 19
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 919
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 227
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "devops-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 2018
+  },
+  {
+    "fixture": "django-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 7
+  },
+  {
+    "fixture": "django-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 4
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 6
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 5
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 13
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/repomap.mjs",
+    "bytes": 113,
+    "tokens": 28,
+    "ms": 33
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/repomap.sh",
+    "bytes": 121,
+    "tokens": 30,
+    "ms": 60
+  },
+  {
+    "fixture": "django-project",
+    "script": "project/tree.sh",
+    "bytes": 273,
+    "tokens": 68,
+    "ms": 6
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 13
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 9
+  },
+  {
+    "fixture": "django-project",
+    "script": "git/hotspots.sh",
+    "bytes": 292,
+    "tokens": 73,
+    "ms": 9
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 5
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 19
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1010
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 250
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "django-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1851
+  },
+  {
+    "fixture": "express-project",
+    "script": "architecture/arch.sh",
+    "bytes": 430,
+    "tokens": 108,
+    "ms": 70
+  },
+  {
+    "fixture": "express-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/deps.sh",
+    "bytes": 58,
+    "tokens": 15,
+    "ms": 22
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/exports.sh",
+    "bytes": 25,
+    "tokens": 6,
+    "ms": 5
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/repomap.mjs",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 26
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/repomap.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 67
+  },
+  {
+    "fixture": "express-project",
+    "script": "project/tree.sh",
+    "bytes": 213,
+    "tokens": 53,
+    "ms": 5
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 14
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "express-project",
+    "script": "git/hotspots.sh",
+    "bytes": 171,
+    "tokens": 43,
+    "ms": 9
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 823
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 126,
+    "tokens": 32,
+    "ms": 515
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 7
+  },
+  {
+    "fixture": "express-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1795
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 5
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 10
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/repomap.mjs",
+    "bytes": 372,
+    "tokens": 93,
+    "ms": 32
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/repomap.sh",
+    "bytes": 372,
+    "tokens": 93,
+    "ms": 54
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "project/tree.sh",
+    "bytes": 169,
+    "tokens": 42,
+    "ms": 6
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 8
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 15
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 9
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 11
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "git/hotspots.sh",
+    "bytes": 164,
+    "tokens": 41,
+    "ms": 18
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 8
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 23
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 885
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 224
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 4
+  },
+  {
+    "fixture": "fastapi-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1791
+  },
+  {
+    "fixture": "go-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 10
+  },
+  {
+    "fixture": "go-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 5
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 8
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 6
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 18
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/repomap.mjs",
+    "bytes": 325,
+    "tokens": 81,
+    "ms": 42
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/repomap.sh",
+    "bytes": 325,
+    "tokens": 81,
+    "ms": 51
+  },
+  {
+    "fixture": "go-project",
+    "script": "project/tree.sh",
+    "bytes": 145,
+    "tokens": 36,
+    "ms": 9
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 10
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 10
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 17
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 10
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 11
+  },
+  {
+    "fixture": "go-project",
+    "script": "git/hotspots.sh",
+    "bytes": 114,
+    "tokens": 29,
+    "ms": 15
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 8
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 23
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 867
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 231
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "go-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1561
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 5
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 2
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/deps.sh",
+    "bytes": 16,
+    "tokens": 4,
+    "ms": 22
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 3
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/repomap.mjs",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 21
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/repomap.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 26
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "project/tree.sh",
+    "bytes": 380,
+    "tokens": 95,
+    "ms": 6
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 154,
+    "tokens": 39,
+    "ms": 8
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/git-branch.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 8
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/git-context.sh",
+    "bytes": 1482,
+    "tokens": 371,
+    "ms": 20
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/git-log.sh",
+    "bytes": 969,
+    "tokens": 242,
+    "ms": 7
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/git-status.sh",
+    "bytes": 775,
+    "tokens": 194,
+    "ms": 11
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "git/hotspots.sh",
+    "bytes": 0,
+    "tokens": 0,
+    "ms": 18
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 881
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 126,
+    "tokens": 32,
+    "ms": 253
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "monorepo-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 2069
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "architecture/arch.sh",
+    "bytes": 417,
+    "tokens": 104,
+    "ms": 64
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/deps.sh",
+    "bytes": 81,
+    "tokens": 20,
+    "ms": 22
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/exports.sh",
+    "bytes": 143,
+    "tokens": 36,
+    "ms": 9
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 9
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/repomap.mjs",
+    "bytes": 231,
+    "tokens": 58,
+    "ms": 25
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/repomap.sh",
+    "bytes": 231,
+    "tokens": 58,
+    "ms": 63
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "project/tree.sh",
+    "bytes": 241,
+    "tokens": 60,
+    "ms": 6
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 14
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 6
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "git/hotspots.sh",
+    "bytes": 162,
+    "tokens": 41,
+    "ms": 13
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 17
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 794
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 260,
+    "tokens": 65,
+    "ms": 253
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "nestjs-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1575
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "architecture/arch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 64
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/deps.sh",
+    "bytes": 45,
+    "tokens": 11,
+    "ms": 22
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 5
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/repomap.mjs",
+    "bytes": 371,
+    "tokens": 93,
+    "ms": 26
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/repomap.sh",
+    "bytes": 379,
+    "tokens": 95,
+    "ms": 103
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "project/tree.sh",
+    "bytes": 359,
+    "tokens": 90,
+    "ms": 6
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 13
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 7
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "git/hotspots.sh",
+    "bytes": 328,
+    "tokens": 82,
+    "ms": 10
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 5
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 17
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1142
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 113,
+    "tokens": 28,
+    "ms": 370
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "nextjs-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1605
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 5
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 2
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/deps.sh",
+    "bytes": 38,
+    "tokens": 10,
+    "ms": 23
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 3
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/repomap.mjs",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 20
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/repomap.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 27
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "project/tree.sh",
+    "bytes": 98,
+    "tokens": 25,
+    "ms": 6
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 14
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 6
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "git/hotspots.sh",
+    "bytes": 0,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 5
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 819
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 162,
+    "tokens": 41,
+    "ms": 265
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 4
+  },
+  {
+    "fixture": "prisma-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1587
+  },
+  {
+    "fixture": "react-project",
+    "script": "architecture/arch.sh",
+    "bytes": 626,
+    "tokens": 157,
+    "ms": 63
+  },
+  {
+    "fixture": "react-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/deps.sh",
+    "bytes": 96,
+    "tokens": 24,
+    "ms": 22
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/exports.sh",
+    "bytes": 201,
+    "tokens": 50,
+    "ms": 10
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/repomap.mjs",
+    "bytes": 410,
+    "tokens": 103,
+    "ms": 26
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/repomap.sh",
+    "bytes": 417,
+    "tokens": 104,
+    "ms": 64
+  },
+  {
+    "fixture": "react-project",
+    "script": "project/tree.sh",
+    "bytes": 254,
+    "tokens": 64,
+    "ms": 6
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 14
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 6
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "react-project",
+    "script": "git/hotspots.sh",
+    "bytes": 231,
+    "tokens": 58,
+    "ms": 8
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 5
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 18
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 821
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 126,
+    "tokens": 32,
+    "ms": 269
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "react-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1672
+  },
+  {
+    "fixture": "rust-project",
+    "script": "architecture/arch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 62
+  },
+  {
+    "fixture": "rust-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 2
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/exports.sh",
+    "bytes": 25,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/repomap.mjs",
+    "bytes": 271,
+    "tokens": 68,
+    "ms": 25
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/repomap.sh",
+    "bytes": 271,
+    "tokens": 68,
+    "ms": 58
+  },
+  {
+    "fixture": "rust-project",
+    "script": "project/tree.sh",
+    "bytes": 174,
+    "tokens": 44,
+    "ms": 5
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 7
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 13
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "rust-project",
+    "script": "git/hotspots.sh",
+    "bytes": 123,
+    "tokens": 31,
+    "ms": 8
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 5
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 19
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 812
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 229
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 4
+  },
+  {
+    "fixture": "rust-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1697
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "architecture/arch.sh",
+    "bytes": 26,
+    "tokens": 7,
+    "ms": 5
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "architecture/normalize.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 3
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/deps.sh",
+    "bytes": 22,
+    "tokens": 6,
+    "ms": 3
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/exports.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 4
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/find-todos.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 7
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/repomap.mjs",
+    "bytes": 108,
+    "tokens": 27,
+    "ms": 24
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/repomap.sh",
+    "bytes": 108,
+    "tokens": 27,
+    "ms": 46
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "project/tree.sh",
+    "bytes": 69,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/diff-stat.sh",
+    "bytes": 1,
+    "tokens": 0,
+    "ms": 8
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/git-branch.sh",
+    "bytes": 17,
+    "tokens": 4,
+    "ms": 6
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/git-context.sh",
+    "bytes": 62,
+    "tokens": 16,
+    "ms": 14
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/git-log.sh",
+    "bytes": 24,
+    "tokens": 6,
+    "ms": 7
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/git-status.sh",
+    "bytes": 8,
+    "tokens": 2,
+    "ms": 8
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "git/hotspots.sh",
+    "bytes": 36,
+    "tokens": 9,
+    "ms": 14
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/dead-code.sh",
+    "bytes": 67,
+    "tokens": 17,
+    "ms": 6
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/format-knip.mjs",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 23
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/lint.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 915
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/run-knip.sh",
+    "bytes": 42,
+    "tokens": 11,
+    "ms": 241
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/test-summary.sh",
+    "bytes": 61,
+    "tokens": 15,
+    "ms": 5
+  },
+  {
+    "fixture": "sqlalchemy-project",
+    "script": "quality/type-check.sh",
+    "bytes": 15,
+    "tokens": 4,
+    "ms": 1636
+  }
+]
